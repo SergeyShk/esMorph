@@ -4,12 +4,12 @@ build-backend = "maturin"
 
 [project]
 name = "esmorph"
-version = "0.1.0.dev1"
+version = "0.1.0.dev2"
 description = "Fast Spanish morphological analyzer written in Rust with a Python API"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
-license-files = ["LICENSE.txt", "THIRD-PARTY-NOTICES.txt"]
+license = "MIT AND CC-BY-SA-4.0"
+license-files = ["LICENSE.txt", "LICENSE-DICTIONARY.txt", "THIRD-PARTY-NOTICES.txt"]
 authors = [{ name = "Sergey Shkarin", email = "kouki.sergey@gmail.com" }]
 maintainers = [{ name = "Sergey Shkarin", email = "kouki.sergey@gmail.com" }]
 keywords = [
@@ -18,6 +18,7 @@ keywords = [
     "lemmatization",
     "conjugation",
     "Universal Dependencies",
+    "Wiktionary",
     "NLP",
     "spanish",
 ]
@@ -49,6 +50,7 @@ Issues = "https://github.com/SergeyShk/esMorph/issues"
 manifest-path = "crates/esmorph-py/Cargo.toml"
 module-name = "esmorph._esmorph"
 python-source = "python"
+include = [{ path = "python/esmorph/data/es.dict", format = ["sdist", "wheel"] }]
 sdist-generator = "git"
 
 [tool.uv]

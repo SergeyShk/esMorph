@@ -12,6 +12,20 @@ readme = "README.md"
 keywords = ["morphology", "spanish", "lemmatization", "conjugation", "nlp"]
 categories = ["text-processing"]
 
+[features]
+default = ["bundled"]
+# The dictionary of esMorph from the crate esmorph-dict-es: Dictionary::bundled
+bundled = ["dep:esmorph-dict-es"]
+# Building dictionaries: Builder
+build = []
+
+[dependencies]
+bytemuck = "1.25.2"
+crc32fast = "1.5.3"
+esmorph-dict-es = { version = "=0.1.0-dev.2", path = "../esmorph-dict-es", optional = true }
+fst = "0.4.7"
+memmap2 = "0.9.11"
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

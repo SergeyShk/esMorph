@@ -66,6 +66,6 @@ repos:
         name: cargo test
         stages: [pre-push]
         language: system
-        entry: cargo test -p esmorph --all-features
+        entry: cargo test -p esmorph -p esmorph-dict-es --all-features
         pass_filenames: false
         always_run: true

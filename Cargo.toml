@@ -1,9 +1,9 @@
 [workspace]
-members = ["crates/esmorph", "crates/esmorph-py"]
+members = ["crates/esmorph", "crates/esmorph-build", "crates/esmorph-dict-es", "crates/esmorph-py"]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0-dev.1"
+version = "0.1.0-dev.2"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"

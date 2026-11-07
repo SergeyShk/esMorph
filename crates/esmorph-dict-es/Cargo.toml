@@ -1,0 +1,15 @@
+[package]
+name = "esmorph-dict-es"
+description = "Spanish dictionary for the esMorph morphological analyzer, built from Wiktionary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "CC-BY-SA-4.0"
+authors.workspace = true
+repository.workspace = true
+homepage = "https://sergeyshk.github.io/esMorph/"
+readme = "README.md"
+keywords = ["spanish", "dictionary", "morphology", "wiktionary", "nlp"]
+categories = ["text-processing"]
+# The dictionary file is not in git: CI puts it here before publishing
+include = ["build.rs", "src/**", "README.md", "LICENSE-DICTIONARY.txt", "es.dict"]

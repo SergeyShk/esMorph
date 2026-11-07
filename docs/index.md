@@ -1,9 +1,9 @@
 # esMorph
 
-**esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it will find the analyses in a dictionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and give the forms of a lexeme by their features: conjugation, gender and number.
+**esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it finds the analyses in a dictionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features ([Analyzer](analyzer.md)). The forms of a lexeme by their features - conjugation, gender and number - come next.
 
 !!! warning "Work in progress"
-    So far the package contains only the scaffolding; the analyzer comes in the next versions. Versions `0.1.0.devN` are published on TestPyPI.
+    The order of analyses, words with clitics, unknown words and inflection come in the next versions. Versions `0.1.0.devN` are published on TestPyPI.
 
 ## Installation
 

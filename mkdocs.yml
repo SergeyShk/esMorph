@@ -8,6 +8,7 @@ nav:
       - About: index.md
       - Installation: installation.md
       - Authors: authors.md
+    - Analyzer: analyzer.md
 
 theme:
   name: material
@@ -64,6 +65,7 @@ plugins:
             About: Acerca de
             Installation: Instalación
             Authors: Autores
+            Analyzer: Analizador
 
 extra:
   social:

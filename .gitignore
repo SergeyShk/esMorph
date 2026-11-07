@@ -9,6 +9,8 @@ build/
 target/
 python/esmorph/*.so
 python/esmorph/*.pyd
+python/esmorph/data/*.dict
+crates/esmorph-dict-es/es.dict
 
 # Environments
 .venv/
