@@ -27,6 +27,14 @@ def test_metadata():
     assert esmorph.__all__ == sorted(esmorph.__all__)
 
 
+def test_dictionary_licenses_match():
+    root, crate = (
+        ROOT / "LICENSE-DICTIONARY.txt",
+        ROOT / "crates/esmorph-dict-es/LICENSE-DICTIONARY.txt",
+    )
+    assert root.read_bytes() == crate.read_bytes()
+
+
 def test_version_matches_metadata():
     # The version comes from the extension module, without slow importlib.metadata on import
     assert esmorph.__version__ == importlib.metadata.version("esmorph")

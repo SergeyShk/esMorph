@@ -3,9 +3,15 @@ The dictionary bundled with esMorph (esmorph/data/es.dict) is built from:
 - the Spanish entries of the English Wiktionary (https://en.wiktionary.org), by the Wiktionary
   contributors, from the dump of 2026-10-01 as extracted by wiktextract (https://kaikki.org;
   snapshot: https://huggingface.co/datasets/SergeyShk/esmorph-wiktionary), licensed under the
-  Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0).
+  Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0);
+- the table of closed classes (data/closed-classes.tsv), reviewed after UD Spanish AnCora, and the
+  counts of analyses from its training part (https://github.com/UniversalDependencies/UD_Spanish-AnCora),
+  release 2.18, licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0);
+- the counts of parts of speech from the training part of UD Spanish GSD
+  (https://github.com/UniversalDependencies/UD_Spanish-GSD), release 2.18, licensed under the Creative
+  Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0).
 
-The esMorph dictionary is an adaptation of that data and is distributed under the Creative Commons
+The esMorph dictionary is an adaptation of these data and is distributed under the Creative Commons
 Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0):
 https://creativecommons.org/licenses/by-sa/4.0/
 

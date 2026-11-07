@@ -19,8 +19,8 @@ CLOSED_CLASSES = Path(__file__).resolve().parents[1] / "data" / "closed-classes.
 # another class is no such word, as `hace` is no preposition
 CLOSED = {"ADP", "CCONJ", "DET", "PART", "PRON", "SCONJ"}
 AUXILIARIES = {"deber", "estar", "haber", "poder", "querer", "saber", "ser", "soler"}
-NUMERAL = "Number=Plur|NumType=Card"
-ABSOLUTE = re.compile(r"ísim[oa]s?$")
+CARDINAL = {"Number": "Plur", "NumType": "Card"}
+ABSOLUTE = re.compile(r"ísim([oa])s?$")
 PARTICIPLE_ENDING = re.compile(r"(as|os|a)$")
 
 
@@ -129,7 +129,8 @@ def names_and_numerals(rows: set[Row]) -> set[Row]:
         if pos == "PROPN":
             feats = "_"
         elif pos == "NUM" and "NumType" not in feats:
-            feats = NUMERAL
+            gender = parse_features(feats).get("Gender")
+            feats = format_features(CARDINAL | ({"Gender": gender} if gender else {}))
         result.add((lemma, pos, form, feats))
     return result
 
@@ -146,9 +147,11 @@ def absolute_superlatives(rows: set[Row]) -> set[Row]:
     """
     result = set()
     for lemma, pos, form, feats in rows:
-        if pos == "ADJ" and ABSOLUTE.search(form):
+        ending = ABSOLUTE.search(form)
+        if pos == "ADJ" and ending:
             lemma = ABSOLUTE.sub("ísimo", form)
-            feats = format_features(parse_features(feats) | {"Degree": "Abs"})
+            gender = "Masc" if ending[1] == "o" else "Fem"
+            feats = format_features(parse_features(feats) | {"Degree": "Abs", "Gender": gender})
         result.add((lemma, pos, form, feats))
     return result
 

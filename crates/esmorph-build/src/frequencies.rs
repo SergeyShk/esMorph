@@ -41,6 +41,8 @@ pub struct Counts {
     suffixes: HashMap<(String, String), u32>,
     /// Part of speech and features
     tags: HashMap<(String, String), u32>,
+    /// Form: all treebanks
+    forms: HashMap<String, u32>,
 }
 
 fn number(line: &str, text: &str) -> Result<u32, Error> {
@@ -99,8 +101,14 @@ impl Counts {
                 .suffixes
                 .entry((suffix(form).to_owned(), pos.to_owned()))
                 .or_default() += count;
+            *counts.forms.entry(form.to_owned()).or_default() += count;
         }
         Ok(counts)
+    }
+
+    /// How many times the treebanks have a form
+    pub fn frequency(&self, form: &str) -> u32 {
+        self.forms.get(form).copied().unwrap_or(0)
     }
 
     fn part(&self, form: &str, pos: &str) -> f64 {
@@ -270,6 +278,12 @@ mod tests {
         assert_eq!(suffix("a"), "a");
         assert_eq!(suffix("año"), "año");
         assert_eq!(suffix("camión"), "ión");
+    }
+
+    #[test]
+    fn frequency_sums_the_parts_of_speech() {
+        assert_eq!(counts().frequency("que"), 200);
+        assert_eq!(counts().frequency("qzxw"), 0);
     }
 
     #[test]

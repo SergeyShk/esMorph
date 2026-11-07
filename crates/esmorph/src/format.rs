@@ -17,7 +17,7 @@ pub(crate) const MAX_LIST: usize = 255;
 pub(crate) const HAS_PROBABILITIES: u32 = 1 << 8;
 /// A probability is kept in millionths
 pub(crate) const PROBABILITY_SCALE: u32 = 1_000_000;
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
 const SECTIONS: usize = 11;
@@ -49,7 +49,8 @@ pub(crate) struct Sections {
     /// the list has them, `(table << 16) | form` of every analysis, then their probabilities
     pub records: Vec<u32>,
     /// Spellings of keys that do not fit the value of the automaton: the number of spellings, then
-    /// the accent places (two numbers) and the start of the list of analyses of each
+    /// the accent places (two numbers), the start of the list of analyses and the share among the
+    /// spellings, for a query that lost its accents, of each
     pub variants: Vec<u32>,
 }
 

@@ -19,6 +19,8 @@ pub struct Builder {
     meta: String,
     /// Forms of a lexeme: the form and its normalized features, and its place among the analyses
     lexemes: BTreeMap<(String, String), BTreeMap<(String, String), Place>>,
+    /// How often texts have a word form
+    frequencies: HashMap<String, u32>,
 }
 
 /// Place of an analysis in the list of its word form
@@ -105,7 +107,8 @@ impl Builder {
             probability: probability
                 .map(|value| {
                     if (0.0..=1.0).contains(&value) {
-                        Ok((value * f64::from(PROBABILITY_SCALE)).round() as u32)
+                        // An analysis that exists is never impossible
+                        Ok(((value * f64::from(PROBABILITY_SCALE)).round() as u32).max(1))
                     } else {
                         Err(Error::Build(format!(
                             "wrong probability {value} of form {form:?}"
@@ -115,6 +118,13 @@ impl Builder {
                 .transpose()?,
         };
         Ok(())
+    }
+
+    /// Sets how often texts have a word form. Spellings of one key share a query that lost its
+    /// accents by this number and the number of their analyses: without it every analysis of the
+    /// key has an equal share
+    pub fn set_frequency(&mut self, form: &str, frequency: u32) {
+        self.frequencies.insert(form.to_owned(), frequency);
     }
 
     /// Builds the dictionary in the binary format
@@ -184,7 +194,7 @@ impl Builder {
         // Equal lists of analyses of different word forms are kept once, spellings of one key together
         let mut records = Vec::new();
         let mut offsets: HashMap<Vec<u32>, u32> = HashMap::new();
-        let mut keys: BTreeMap<Vec<u8>, Vec<(u64, u32)>> = BTreeMap::new();
+        let mut keys: BTreeMap<Vec<u8>, Vec<(u64, u32, f64)>> = BTreeMap::new();
         for (word, analyses) in &mut words {
             if analyses.len() > MAX_LIST {
                 return Err(Error::Build(format!(
@@ -197,6 +207,8 @@ impl Builder {
                 ))
             })?;
             analyses.sort_by_key(|analysis| analysis.place.number);
+            let frequency = self.frequencies.get(*word).copied().unwrap_or(0);
+            let weight = f64::from(frequency) + analyses.len() as f64;
             let offset = *offsets.entry(list_of(analyses)).or_insert_with_key(|list| {
                 let offset = records.len() as u32;
                 records.extend_from_slice(list);
@@ -204,7 +216,7 @@ impl Builder {
             });
             keys.entry(key.bytes().to_vec())
                 .or_default()
-                .push((key.marks, offset));
+                .push((key.marks, offset, weight));
         }
 
         let mut variants = Vec::new();
@@ -218,7 +230,7 @@ impl Builder {
             }
             spellings.sort_by(|a, b| mark_order(a.0, b.0));
             let single = match spellings[..] {
-                [(marks, records)] => WordValue::Single { marks, records }.pack(),
+                [(marks, records, _)] => WordValue::Single { marks, records }.pack(),
                 _ => None,
             };
             let value = match single {
@@ -227,8 +239,10 @@ impl Builder {
                     let offset = u32::try_from(variants.len())
                         .map_err(|_| Error::Build("too many spellings".into()))?;
                     variants.push(spellings.len() as u32);
-                    for &(marks, records) in &spellings {
-                        variants.extend([marks as u32, (marks >> 32) as u32, records]);
+                    let total: f64 = spellings.iter().map(|&(.., weight)| weight).sum();
+                    for &(marks, records, weight) in &spellings {
+                        let share = (weight / total * f64::from(PROBABILITY_SCALE)).round() as u32;
+                        variants.extend([marks as u32, (marks >> 32) as u32, records, share]);
                     }
                     WordValue::Many(offset).pack().unwrap_or_default()
                 }

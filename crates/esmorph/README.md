@@ -3,12 +3,12 @@
 Fast Spanish morphological analyzer written in Rust, the core of the
 [esMorph](https://github.com/SergeyShk/esMorph) library for Python.
 
-- The analyses of a word form by a dictionary built from Wiktionary: the lemma, the part of speech and the
-  [Universal Dependencies](https://universaldependencies.org/) features.
+- The analyses of a word form by a dictionary built from Wiktionary, the most probable first: the lemma, the part of
+  speech and the [Universal Dependencies](https://universaldependencies.org/) features.
 - Case does not matter. A word absent as written is looked for without its accents and with a lost diaeresis.
 - The dictionary is mapped into memory or read from the data of the program without copies.
 
-Work in progress: the order of analyses, conventions, inflection and unknown words come in the next versions.
+Work in progress: words with clitics, unknown words and inflection come in the next versions.
 
 ## Installation
 

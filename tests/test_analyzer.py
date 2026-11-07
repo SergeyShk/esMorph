@@ -341,6 +341,8 @@ def test_verbs_have_no_clitic_in_the_lemma(morph, word, lemma):
         ("buena", "buen", "ADJ"),
         ("malos", "mal", "ADJ"),
         ("primer", "primero", "ADJ"),
+        ("peor", "peor", "ADV"),
+        ("pa", "para", "ADP"),
         ("cuando", "cuando", "SCONJ"),
     ],
 )
@@ -357,6 +359,11 @@ def test_lemmas_of_the_treebanks(morph, word, lemma, pos):
         ("no", "ADV", {"Polarity": "Neg"}),
         ("más", "ADV", {"Degree": "Cmp"}),
         ("dónde", "ADV", {"PronType": "Int"}),
+        ("cómo", "PRON", {"PronType": "Int"}),
+        ("alguno", "DET", {"PronType": "Ind"}),
+        ("ninguno", "DET", {"PronType": "Neg"}),
+        ("antepenúltimo", "ADJ", {"NumType": "Ord"}),
+        ("decimotercer", "ADJ", {"NumType": "Ord"}),
         ("mejores", "ADJ", {"Degree": "Cmp", "Number": "Plur"}),
         ("primera", "ADJ", {"NumType": "Ord", "Gender": "Fem"}),
         ("máximo", "ADJ", {"Degree": "Sup"}),
@@ -394,10 +401,50 @@ def test_participles_are_also_adjectives(morph):
     assert [a.feats.get("VerbForm") for a in adjectives] == ["Part"]
 
 
-def test_absolute_superlatives(morph):
-    adjective = next(a for a in morph.analyze("grandísimas") if a.pos == "ADJ")
+@pytest.mark.parametrize(
+    "word, gender, number",
+    [
+        ("grandísimo", "Masc", "Sing"),
+        ("grandísima", "Fem", "Sing"),
+        ("grandísimos", "Masc", "Plur"),
+        ("grandísimas", "Fem", "Plur"),
+    ],
+)
+def test_absolute_superlatives(morph, word, gender, number):
+    adjective = next(a for a in morph.analyze(word) if a.pos == "ADJ")
     assert adjective.lemma == "grandísimo"
-    assert adjective.feats["Degree"] == "Abs"
+    assert adjective.feats == {"Degree": "Abs", "Gender": gender, "Number": number}
+
+
+@pytest.mark.parametrize(
+    "query, word",
+    [
+        ("fotografia", "fotografía"),
+        ("autonoma", "autónoma"),
+        ("catolicos", "católicos"),
+        ("raices", "raíces"),
+    ],
+)
+def test_a_lost_accent_finds_the_common_spelling(morph, query, word):
+    analyses = morph.analyze(query)
+    assert analyses[0].word == word, query
+    assert {a.word for a in analyses} != {word}, query
+    probs = [a.prob for a in analyses]
+    assert probs == sorted(probs, reverse=True), query
+    assert sum(probs) == pytest.approx(1, abs=1e-3), query
+
+
+def test_no_analysis_is_impossible(morph):
+    assert all(a.prob > 0 for word in ["la", "sabe", "de", "que"] for a in morph.analyze(word))
+
+
+def test_numerals_keep_their_gender(morph):
+    assert any(a.feats.get("Gender") == "Fem" for a in morph.analyze("cincuentaiuna"))
+
+
+def test_abbreviations_of_usted(morph):
+    for word in ["ud", "uds", "vd", "vds"]:
+        assert "tú" in lemmas(morph, word), word
 
 
 def test_names_have_no_features(morph):
@@ -582,6 +629,8 @@ def test_analyzer_repr_and_path(morph, tmp_path):
 def test_dictionary_description(morph):
     meta = json.loads(morph._meta())
     assert meta["source"] == "Wiktionary"
+    assert meta["counts"]["release"] == "r2.18"
+    assert set(meta["counts"]["treebanks"]) == {"UD_Spanish-AnCora", "UD_Spanish-GSD"}
     assert meta["license"] == "CC BY-SA 4.0"
 
 

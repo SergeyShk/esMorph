@@ -19,7 +19,7 @@
 **esMorph** es un analizador morfológico del español: un núcleo en Rust con API para Python. Para una forma de palabra buscará los análisis en un diccionario - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) - y dará las formas de un lexema según sus rasgos: conjugación, género y número.
 
 > [!WARNING]
-> En desarrollo: los análisis de las formas de palabra ya funcionan, pero su orden, las palabras con clíticos, las desconocidas y la flexión llegarán en las próximas versiones. Las versiones `0.1.0.devN` se publican en TestPyPI, y el sitio de la documentación aparecerá con el primer lanzamiento.
+> En desarrollo: los análisis de las formas de palabra ya funcionan, pero las palabras con clíticos, las desconocidas y la flexión llegarán en las próximas versiones. Las versiones `0.1.0.devN` se publican en TestPyPI, y el sitio de la documentación aparecerá con el primer lanzamiento.
 
 ## Instalación
 
@@ -90,4 +90,4 @@ Los informes de errores, las ideas y los pull requests son bienvenidos, en ingl�
 
 ## Licencia
 
-El código se distribuye bajo la licencia [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt). El diccionario se crea a partir de [Wiktionary](https://en.wiktionary.org) y se distribuye bajo la licencia [CC BY-SA 4.0](https://github.com/SergeyShk/esMorph/blob/master/LICENSE-DICTIONARY.txt).
+El código se distribuye bajo la licencia [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt). El diccionario se crea a partir de [Wiktionary](https://en.wiktionary.org) y de los treebanks [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora) y [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD), y se distribuye bajo la licencia [CC BY-SA 4.0](https://github.com/SergeyShk/esMorph/blob/master/LICENSE-DICTIONARY.txt).
