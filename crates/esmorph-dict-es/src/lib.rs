@@ -1,5 +1,6 @@
 //! Spanish dictionary for the esMorph morphological analyzer: the Spanish entries of the English
-//! Wiktionary in the format of esMorph, licensed under CC BY-SA 4.0
+//! Wiktionary and the treebanks UD Spanish AnCora and GSD in the format of esMorph, licensed under
+//! CC BY-SA 4.0
 //!
 //! The crate `esmorph` loads the dictionary: `esmorph::Dictionary::bundled()`
 

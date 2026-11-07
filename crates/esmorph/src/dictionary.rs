@@ -7,7 +7,10 @@ use fst::Map;
 
 use crate::Error;
 use crate::alphabet::{Alphabet, Key};
-use crate::format::{self, Layout, MAX_LIST, MAX_SPELLINGS, Slice, Storage, Strings, WordValue};
+use crate::format::{
+    self, HAS_PROBABILITIES, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice, Storage,
+    Strings, WordValue,
+};
 use crate::ud::{UdTag, UdTags};
 
 /// Where an analysis comes from
@@ -37,7 +40,7 @@ pub struct Entry {
 }
 
 /// Analysis of a word form
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct Analysis {
     /// The word form as the dictionary spells it: with its accents
@@ -46,6 +49,9 @@ pub struct Analysis {
     pub lemma: String,
     /// Number of the UD tag for `Dictionary::ud_tag`
     pub ud: u16,
+    /// Share of the analysis among the analyses of the word: by the counts of treebanks, equal for
+    /// a word they did not see
+    pub prob: f64,
     /// Where the analysis comes from
     pub source: Source,
     /// The form of the inflection table
@@ -81,34 +87,35 @@ impl std::fmt::Debug for Dictionary {
     }
 }
 
-/// Spellings of one key: places of the accents and the start of the list of analyses
+/// Spellings of one key: places of the accents, the start of the list of analyses and the weight
+/// among the spellings
 enum Spellings<'a> {
     Single { marks: u64, records: u32 },
-    Many(&'a [[u32; 3]]),
+    Many(&'a [[u32; 4]]),
 }
 
 impl Spellings<'_> {
-    fn iter(&self) -> impl Iterator<Item = (u64, u32)> {
+    fn iter(&self) -> impl Iterator<Item = (u64, u32, u32)> {
         let (single, many) = match self {
-            Spellings::Single { marks, records } => (Some((*marks, *records)), &[][..]),
+            Spellings::Single { marks, records } => (Some((*marks, *records, 1)), &[][..]),
             Spellings::Many(variants) => (None, *variants),
         };
         single
             .into_iter()
-            .chain(many.iter().map(|&triple| unpack(triple)))
+            .chain(many.iter().map(|&spelling| unpack(spelling)))
     }
 
     /// The spelling of a query: the exact one and, if there is none, all spellings of the key.
     /// Spanish spells its accents: an exact word is not looked for under other accents, as
     /// `publico` is not `público`, while a word absent as written may have lost or moved one
-    fn matching(&self, marks: u64) -> impl Iterator<Item = (u64, u32)> {
-        let exact = self.iter().any(|(own, _)| own == marks);
-        self.iter().filter(move |&(own, _)| !exact || own == marks)
+    fn matching(&self, marks: u64) -> impl Iterator<Item = (u64, u32, u32)> {
+        let exact = self.iter().any(|(own, ..)| own == marks);
+        self.iter().filter(move |&(own, ..)| !exact || own == marks)
     }
 }
 
-fn unpack([low, high, offset]: [u32; 3]) -> (u64, u32) {
-    (u64::from(low) | u64::from(high) << 32, offset)
+fn unpack([low, high, offset, weight]: [u32; 4]) -> (u64, u32, u32) {
+    (u64::from(low) | u64::from(high) << 32, offset, weight)
 }
 
 impl Dictionary {
@@ -208,26 +215,45 @@ impl Dictionary {
         self.ud.iter()
     }
 
-    /// Analyses of a word form. Case does not matter. A word spelled as in the dictionary gives the
-    /// analyses of that spelling; a word absent as written is looked for without its accents and
-    /// with a lost diaeresis. An unknown word has no analyses
+    /// Analyses of a word form, the most probable first. Case does not matter. A word spelled as in
+    /// the dictionary gives the analyses of that spelling; a word absent as written is looked for
+    /// without its accents and with a lost diaeresis. An unknown word has no analyses
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
         let Some((key, spellings)) = self.lookup(&word) else {
             return Vec::new();
         };
+        let (count, total) = spellings
+            .matching(key.marks)
+            .fold((0, 0.0), |(count, total), (.., weight)| {
+                (count + 1, total + f64::from(weight))
+            });
         let mut analyses = Vec::new();
-        for (marks, records) in spellings.matching(key.marks) {
+        for (marks, records, weight) in spellings.matching(key.marks) {
             let spelling = self.alphabet.spelling(&key, marks);
-            for &record in self.records_at(records).unwrap_or_default() {
+            // The exact spelling takes the whole query, as `weight / total` is one
+            let weight = f64::from(weight);
+            let (records, probabilities) = analyses_at(self.records(), records).unwrap_or_default();
+            for (at, &record) in records.iter().enumerate() {
                 let entry = Entry {
                     table: (record >> 16) as u16,
                     form: record as u16,
                 };
-                if let Some(analysis) = self.analysis(&spelling, entry) {
+                // Without counts, every analysis of the key has exactly the same share: the sort
+                // below then keeps the order of the spellings
+                let share = match probabilities.get(at) {
+                    Some(&millionths) => {
+                        f64::from(millionths) / f64::from(PROBABILITY_SCALE) * weight / total
+                    }
+                    None => weight / records.len() as f64 / total,
+                };
+                if let Some(analysis) = self.analysis(&spelling, entry, share) {
                     analyses.push(analysis);
                 }
             }
+        }
+        if count > 1 {
+            analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
         }
         analyses
     }
@@ -257,14 +283,14 @@ impl Dictionary {
             WordValue::Single { marks, records } => Spellings::Single { marks, records },
             WordValue::Many(offset) => {
                 let lists = self.variants().get(offset as usize..)?;
-                Spellings::Many(triples(lists)?.0)
+                Spellings::Many(spelling_list(lists)?.0)
             }
         })
     }
 
     /// Analysis of a spelling by a form of a table: the stem of the spelling and the suffix of the
     /// lemma form
-    fn analysis(&self, spelling: &str, entry: Entry) -> Option<Analysis> {
+    fn analysis(&self, spelling: &str, entry: Entry, prob: f64) -> Option<Analysis> {
         let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
         let tables = self.tables();
         let paradigm = self.paradigm(*tables.get(start)?)?;
@@ -283,6 +309,7 @@ impl Dictionary {
             word: spelling.to_owned(),
             lemma,
             ud: cell as u16,
+            prob,
             source: Source::Dictionary,
             entry: Some(entry),
         })
@@ -293,10 +320,6 @@ impl Dictionary {
         let at = number as usize;
         let (start, end) = (*offsets.get(at)? as usize, *offsets.get(at + 1)? as usize);
         self.paradigms().get(start..end)
-    }
-
-    fn records_at(&self, offset: u32) -> Option<&[u32]> {
-        list(self.records(), offset)
     }
 
     fn numbers<T: bytemuck::Pod>(&self, range: &Range<usize>) -> &[T] {
@@ -376,8 +399,8 @@ impl Dictionary {
         Ok(starts)
     }
 
-    /// Lists of analyses exactly cover their section, are not longer than `MAX_LIST`, and their
-    /// tables and forms exist
+    /// Lists of analyses exactly cover their section, are not longer than `MAX_LIST`, their tables
+    /// and forms exist and their probabilities are no more than one
     fn check_records(&self) -> Result<(), Error> {
         let (tables, offsets) = (self.tables(), self.paradigm_offsets());
         // Number of forms of every table: tables and paradigms are checked already
@@ -393,14 +416,26 @@ impl Dictionary {
         let invalid = |msg: &str| Err(Error::Format(msg.into()));
         let mut start = 0;
         while start < lists.len() {
-            let count = lists[start] as usize;
+            let head = lists[start];
+            let count = (head & !HAS_PROBABILITIES) as usize;
             if count > MAX_LIST {
                 return invalid("a list is longer than 255 items");
             }
-            let end = start + 1 + count;
-            let Some(items) = lists.get(start + 1..end) else {
+            let items_end = start + 1 + count;
+            let end = items_end
+                + if head & HAS_PROBABILITIES != 0 {
+                    count
+                } else {
+                    0
+                };
+            let (Some(items), Some(probabilities)) =
+                (lists.get(start + 1..items_end), lists.get(items_end..end))
+            else {
                 return invalid("a list is truncated");
             };
+            if probabilities.iter().any(|&value| value > PROBABILITY_SCALE) {
+                return invalid("a probability is greater than one");
+            }
             let exists = |&record: &u32| {
                 form_counts
                     .get((record >> 16) as usize)
@@ -415,21 +450,21 @@ impl Dictionary {
     }
 
     /// Number of word forms over the keys of the automaton: the keys with several spellings in the
-    /// section `variants`; lengths and references to the lists of analyses are checked
+    /// section `variants`; lengths, references to the lists of analyses and weights are checked
     fn check_variants(&self) -> Result<usize, Error> {
         let invalid = |msg: &str| Err(Error::Format(msg.into()));
         let records = self.records().len();
         let mut extra = 0;
         let mut rest = self.variants();
         while !rest.is_empty() {
-            let Some((variants, after)) = triples(rest) else {
+            let Some((variants, after)) = spelling_list(rest) else {
                 return invalid("a list of spellings is truncated");
             };
             if variants.is_empty()
                 || variants.len() > MAX_SPELLINGS
                 || variants
                     .iter()
-                    .any(|&[_, _, offset]| offset as usize >= records)
+                    .any(|&[_, _, offset, weight]| offset as usize >= records || weight == 0)
             {
                 return invalid("a wrong list of spellings");
             }
@@ -440,24 +475,32 @@ impl Dictionary {
     }
 }
 
-/// List "length, items" from the place `offset` of the section `lists`
-fn list(lists: &[u32], offset: u32) -> Option<&[u32]> {
+/// List of analyses from the place `offset` of the section: the analyses and their probabilities,
+/// empty if the list has none
+fn analyses_at(lists: &[u32], offset: u32) -> Option<(&[u32], &[u32])> {
     let start = offset as usize + 1;
-    let count = *lists.get(start - 1)? as usize;
+    let head = *lists.get(start - 1)?;
+    let count = (head & !HAS_PROBABILITIES) as usize;
     if count > MAX_LIST {
         return None;
     }
-    lists.get(start..start + count)
+    let (records, rest) = lists.get(start..)?.split_at_checked(count)?;
+    let probabilities = if head & HAS_PROBABILITIES != 0 {
+        rest.get(..count)?
+    } else {
+        &[]
+    };
+    Some((records, probabilities))
 }
 
-/// List "length, triples of numbers" at the start of `lists` and the rest after it
-fn triples(lists: &[u32]) -> Option<(&[[u32; 3]], &[u32])> {
+/// List of spellings "length, four numbers of each" at the start of `lists` and the rest after it
+fn spelling_list(lists: &[u32]) -> Option<(&[[u32; 4]], &[u32])> {
     let (&count, rest) = lists.split_first()?;
     let count = usize::try_from(count)
         .ok()
         .filter(|&count| count <= MAX_LIST)?;
-    let (list, rest) = rest.split_at_checked(3 * count)?;
-    Some((list.as_chunks::<3>().0, rest))
+    let (list, rest) = rest.split_at_checked(4 * count)?;
+    Some((list.as_chunks::<4>().0, rest))
 }
 
 /// Automaton of a section of a dictionary. A damaged automaton loads without errors but panics when
@@ -589,6 +632,142 @@ pub(crate) mod tests {
         ("yo", "PRON", "me", "Person=1"),
         ("guión", "NOUN", "guiones", "Number=Plur"),
     ];
+
+    fn ranked_dictionary() -> Dictionary {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        for &(lemma, pos, form, feats) in FORMS {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        builder
+            .add_form("medicar", "VERB", "medicó", "Tense=Past")
+            .unwrap();
+        builder
+            .add_form("médico", "NOUN", "médico", "Number=Sing")
+            .unwrap();
+        let casas = "Mood=Ind|Number=Sing|Person=2|Tense=Pres|VerbForm=Fin";
+        builder
+            .place("casar", "VERB", "casas", casas, 0, Some(0.75))
+            .unwrap();
+        let plural = "Gender=Fem|Number=Plur";
+        builder
+            .place("casa", "NOUN", "casas", plural, 1, Some(0.25))
+            .unwrap();
+        Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn places_order_the_analyses_and_keep_probabilities() {
+        let analyses = ranked_dictionary().analyze("casas");
+        let summary: Vec<_> = analyses
+            .iter()
+            .map(|a| (a.lemma.as_str(), a.prob))
+            .collect();
+        assert_eq!(summary, [("casar", 0.75), ("casa", 0.25)]);
+    }
+
+    #[test]
+    fn a_list_without_probabilities_has_equal_shares() {
+        let analyses = dictionary().analyze("casas");
+        assert_eq!(analyses.len(), 2);
+        assert!(analyses.iter().all(|analysis| analysis.prob == 0.5));
+        assert_eq!(dictionary().analyze("camión")[0].prob, 1.0);
+    }
+
+    #[test]
+    fn several_spellings_share_the_probability() {
+        let analyses = ranked_dictionary().analyze("medico");
+        let summary: Vec<_> = analyses.iter().map(|a| (a.word.as_str(), a.prob)).collect();
+        assert_eq!(summary.len(), 2);
+        assert!(summary.iter().all(|&(_, prob)| prob == 0.5));
+    }
+
+    #[test]
+    fn frequencies_decide_between_spellings() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        builder
+            .add_form("fotografía", "NOUN", "fotografía", "")
+            .unwrap();
+        builder
+            .add_form("fotografía", "X", "fotografía", "")
+            .unwrap();
+        builder
+            .add_form("fotografiar", "VERB", "fotografiá", "")
+            .unwrap();
+        builder.set_frequency("fotografía", 6);
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let analyses = dictionary.analyze("fotografia");
+        assert_eq!(analyses[0].word, "fotografía");
+        assert_eq!(analyses.last().unwrap().word, "fotografiá");
+        let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+        assert!((total - 1.0).abs() < 1e-5, "{total}");
+        // The exact spelling keeps the whole query
+        assert_eq!(dictionary.analyze("fotografiá")[0].prob, 1.0);
+    }
+
+    #[test]
+    fn spellings_without_frequencies_stay_in_their_order() {
+        // Whichever spelling has more analyses, the order of accent places decides
+        for (one, two) in [("autonóma", "autónoma"), ("autónoma", "autonóma")] {
+            let mut builder = Builder::new();
+            builder.meta("{}");
+            builder.add_form("a", "NOUN", one, "").unwrap();
+            builder.add_form("b", "NOUN", two, "").unwrap();
+            builder.add_form("c", "NOUN", two, "").unwrap();
+            let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+            let analyses = dictionary.analyze("autonoma");
+            assert_eq!(analyses.len(), 3);
+            assert!(
+                analyses
+                    .iter()
+                    .all(|analysis| analysis.prob == analyses[0].prob)
+            );
+            assert_eq!(analyses[0].word, "autónoma");
+        }
+    }
+
+    #[test]
+    fn a_zero_weight_of_a_spelling_is_an_error() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        builder.add_form("a", "NOUN", "ána", "").unwrap();
+        builder.add_form("b", "NOUN", "aná", "").unwrap();
+        builder.set_frequency("ána", 123_456_789);
+        let bytes = builder.build().unwrap();
+        let at = bytes
+            .windows(4)
+            .position(|window| window == 123_456_790u32.to_le_bytes())
+            .unwrap();
+        let mut damaged = bytes.clone();
+        damaged[at..at + 4].copy_from_slice(&0u32.to_le_bytes());
+        let error = Dictionary::from_bytes(&with_checksum(damaged)).unwrap_err();
+        assert!(error.to_string().contains("spellings"), "{error}");
+    }
+
+    #[test]
+    fn a_wrong_probability_is_an_error() {
+        let bytes = {
+            let mut builder = Builder::new();
+            builder.meta("{}");
+            builder.add_form("a", "X", "a", "").unwrap();
+            builder.add_form("a", "Y", "a", "").unwrap();
+            builder.place("a", "X", "a", "", 0, Some(1.0)).unwrap();
+            builder.place("a", "Y", "a", "", 1, Some(0.0)).unwrap();
+            builder.build().unwrap()
+        };
+        assert!(Dictionary::from_bytes(&bytes).is_ok());
+        // The list "2 | flag, two analyses, 1 000 000, 0": a probability over one is refused
+        let million = PROBABILITY_SCALE.to_le_bytes();
+        let at = bytes
+            .windows(4)
+            .position(|window| window == million)
+            .unwrap();
+        let mut damaged = bytes.clone();
+        damaged[at..at + 4].copy_from_slice(&(PROBABILITY_SCALE + 1).to_le_bytes());
+        let error = Dictionary::from_bytes(&with_checksum(damaged)).unwrap_err();
+        assert!(error.to_string().contains("probability"), "{error}");
+    }
 
     pub(crate) fn bytes() -> Vec<u8> {
         let mut builder = Builder::new();

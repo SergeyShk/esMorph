@@ -15,7 +15,7 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps                   # create the environment, install all dependencies and build the Rust module
-make dictionary             # build the dictionary from the snapshot of Wiktionary
+make dictionary             # build the dictionary from the snapshot of Wiktionary and the counts of treebanks
 uv run pre-commit install   # hooks: linters on commit, tests on push
 ```
 
@@ -55,7 +55,7 @@ The pull request description answers two questions: what was done and why. If it
 - `python/esmorph/` - the Python package.
 - `tests/` - tests of the Python package; `tests/test_docs.py` keeps the two documentation languages in sync.
 - `docs/` - MkDocs (Material) documentation, `mkdocs.yml` - navigation and its Spanish translation.
-- `scripts/` - `wiktionary_snapshot.py` makes the snapshot of Wiktionary, `export_wiktionary.py` turns it into the table of the builder, `smoke.py` checks the installed package before publishing, `notices.py` writes the licenses of the crates.
+- `scripts/` - `wiktionary_snapshot.py` makes the snapshot of Wiktionary, `export_wiktionary.py` turns it into the table of the builder, `conventions.py` brings it to the conventions of the treebanks with `data/closed-classes.tsv`, `export_ud.py` counts analyses in the treebanks, `smoke.py` checks the installed package before publishing, `notices.py` writes the licenses of the crates.
 - `.github/workflows/` - CI (`ci.yml`), publishing (`publish.yml`), documentation (`docs.yml`).
 
 The sdist is made of the files tracked by git (`sdist-generator = "git"`), so that `maturin build --locked` works on it with all the members of the workspace in place. It can only be made inside a git checkout: `uv build` and `python -m build` fail on an unpacked source archive, while `pip install` and `maturin build` of the sdist work anywhere.

@@ -1,6 +1,6 @@
 [package]
 name = "esmorph-dict-es"
-description = "Spanish dictionary for the esMorph morphological analyzer, built from Wiktionary"
+description = "Spanish dictionary for the esMorph morphological analyzer, built from Wiktionary and treebanks"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

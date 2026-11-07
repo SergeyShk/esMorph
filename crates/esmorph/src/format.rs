@@ -13,7 +13,11 @@ pub(crate) const MAX_SPELLINGS: usize = 8;
 /// The longest list of analyses: the dictionary has lists of a dozen, while a damaged length would
 /// make the analysis of a word quadratic
 pub(crate) const MAX_LIST: usize = 255;
-const VERSION: u32 = 1;
+/// The bit of the length of a list of analyses: the list has probabilities
+pub(crate) const HAS_PROBABILITIES: u32 = 1 << 8;
+/// A probability is kept in millionths
+pub(crate) const PROBABILITY_SCALE: u32 = 1_000_000;
+const VERSION: u32 = 2;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
 const SECTIONS: usize = 11;
@@ -41,10 +45,12 @@ pub(crate) struct Sections {
     pub tables: Vec<u32>,
     /// Automaton "word form with plain vowels - `WordValue`"
     pub words: Vec<u8>,
-    /// Lists of analyses: the length, then `(table << 16) | form` of every analysis
+    /// Lists of analyses in the order of their probability: the length with `HAS_PROBABILITIES` if
+    /// the list has them, `(table << 16) | form` of every analysis, then their probabilities
     pub records: Vec<u32>,
     /// Spellings of keys that do not fit the value of the automaton: the number of spellings, then
-    /// the accent places (two numbers) and the start of the list of analyses of each
+    /// the accent places (two numbers), the start of the list of analyses and the weight among the
+    /// spellings, for a query that lost its accents, of each
     pub variants: Vec<u32>,
 }
 

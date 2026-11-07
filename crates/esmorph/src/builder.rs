@@ -4,7 +4,9 @@ use fst::MapBuilder;
 
 use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
-use crate::format::{self, MAX_LIST, MAX_SPELLINGS, Sections, WordValue};
+use crate::format::{
+    self, HAS_PROBABILITIES, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Sections, WordValue,
+};
 
 /// Builder of a dictionary from the forms of lexemes
 ///
@@ -15,15 +17,31 @@ use crate::format::{self, MAX_LIST, MAX_SPELLINGS, Sections, WordValue};
 #[derive(Default)]
 pub struct Builder {
     meta: String,
-    /// Forms of a lexeme: the form and its normalized features
-    lexemes: BTreeMap<(String, String), BTreeSet<(String, String)>>,
+    /// Forms of a lexeme: the form and its normalized features, and its place among the analyses
+    lexemes: BTreeMap<(String, String), BTreeMap<(String, String), Place>>,
+    /// How often texts have a word form
+    frequencies: HashMap<String, u32>,
+}
+
+/// Place of an analysis in the list of its word form
+#[derive(Clone, Copy, Default)]
+struct Place {
+    number: u32,
+    probability: Option<u32>,
 }
 
 /// A form of a lexeme in its table: its word, its UD tag and whether it is only the lemma
 struct Row<'a> {
     word: &'a str,
     ud: u16,
+    place: Place,
     lemma_only: bool,
+}
+
+/// An analysis of a word form: `(table << 16) | form` and its place
+struct Listed {
+    record: u32,
+    place: Place,
 }
 
 impl Builder {
@@ -61,8 +79,52 @@ impl Builder {
         self.lexemes
             .entry((lemma.to_owned(), pos.to_owned()))
             .or_default()
-            .insert((form.to_owned(), feats));
+            .entry((form.to_owned(), feats))
+            .or_default();
         Ok(())
+    }
+
+    /// Sets the place of an added form among the analyses of its word: lower places go first, and
+    /// equal places stay in the order of lexemes. A list with a probability keeps them for all its
+    /// analyses; the others have zero
+    pub fn place(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: &str,
+        number: u32,
+        probability: Option<f64>,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        let place = self
+            .lexemes
+            .get_mut(&(lemma.to_owned(), pos.to_owned()))
+            .and_then(|forms| forms.get_mut(&(form.to_owned(), feats)))
+            .ok_or_else(|| Error::Build(format!("no form {form:?} of lexeme {lemma:?} {pos}")))?;
+        *place = Place {
+            number,
+            probability: probability
+                .map(|value| {
+                    if (0.0..=1.0).contains(&value) {
+                        // An analysis that exists is never impossible
+                        Ok(((value * f64::from(PROBABILITY_SCALE)).round() as u32).max(1))
+                    } else {
+                        Err(Error::Build(format!(
+                            "wrong probability {value} of form {form:?}"
+                        )))
+                    }
+                })
+                .transpose()?,
+        };
+        Ok(())
+    }
+
+    /// Sets how often texts have a word form. Spellings of one key share a query that lost its
+    /// accents by this number and the number of their analyses: without it every analysis of the
+    /// key has an equal share
+    pub fn set_frequency(&mut self, form: &str, frequency: u32) {
+        self.frequencies.insert(form.to_owned(), frequency);
     }
 
     /// Builds the dictionary in the binary format
@@ -71,13 +133,14 @@ impl Builder {
         let mut suffixes = Interned::default();
         let mut paradigms: Interned<Vec<u32>> = Interned::default();
         let mut tables: Interned<(u32, Vec<u32>)> = Interned::default();
-        let mut words: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
+        let mut words: BTreeMap<&str, Vec<Listed>> = BTreeMap::new();
         for ((lemma, pos), forms) in &self.lexemes {
             let mut rows = Vec::with_capacity(forms.len() + 1);
-            for (form, feats) in forms {
+            for ((form, feats), &place) in forms {
                 rows.push(Row {
                     word: form,
                     ud: tags.number((pos.clone(), feats.clone()), "UD tags", u16::MAX)? as u16,
+                    place,
                     lemma_only: false,
                 });
             }
@@ -88,6 +151,7 @@ impl Builder {
                     rows.push(Row {
                         word: lemma,
                         ud: tags.number((pos.clone(), String::new()), "UD tags", u16::MAX)? as u16,
+                        place: Place::default(),
                         lemma_only: true,
                     });
                     rows.len() - 1
@@ -113,10 +177,10 @@ impl Builder {
             let table = tables.number((paradigm, cells), "inflection tables", u16::MAX)?;
             for (form, row) in rows.iter().enumerate() {
                 if !row.lemma_only {
-                    words
-                        .entry(row.word)
-                        .or_default()
-                        .push(table << 16 | form as u32);
+                    words.entry(row.word).or_default().push(Listed {
+                        record: table << 16 | form as u32,
+                        place: row.place,
+                    });
                 }
             }
         }
@@ -129,9 +193,9 @@ impl Builder {
 
         // Equal lists of analyses of different word forms are kept once, spellings of one key together
         let mut records = Vec::new();
-        let mut offsets: HashMap<&[u32], u32> = HashMap::new();
-        let mut keys: BTreeMap<Vec<u8>, Vec<(u64, u32)>> = BTreeMap::new();
-        for (word, analyses) in &words {
+        let mut offsets: HashMap<Vec<u32>, u32> = HashMap::new();
+        let mut keys: BTreeMap<Vec<u8>, Vec<(u64, u32, u32)>> = BTreeMap::new();
+        for (word, analyses) in &mut words {
             if analyses.len() > MAX_LIST {
                 return Err(Error::Build(format!(
                     "word form {word:?} has more than {MAX_LIST} analyses"
@@ -142,15 +206,17 @@ impl Builder {
                     "word form {word:?} is longer than {MAX_KEY} letters"
                 ))
             })?;
-            let offset = *offsets.entry(analyses).or_insert_with(|| {
+            analyses.sort_by_key(|analysis| analysis.place.number);
+            let frequency = self.frequencies.get(*word).copied().unwrap_or(0);
+            let weight = frequency.saturating_add(analyses.len() as u32);
+            let offset = *offsets.entry(list_of(analyses)).or_insert_with_key(|list| {
                 let offset = records.len() as u32;
-                records.push(analyses.len() as u32);
-                records.extend_from_slice(analyses);
+                records.extend_from_slice(list);
                 offset
             });
             keys.entry(key.bytes().to_vec())
                 .or_default()
-                .push((key.marks, offset));
+                .push((key.marks, offset, weight));
         }
 
         let mut variants = Vec::new();
@@ -164,7 +230,7 @@ impl Builder {
             }
             spellings.sort_by(|a, b| mark_order(a.0, b.0));
             let single = match spellings[..] {
-                [(marks, records)] => WordValue::Single { marks, records }.pack(),
+                [(marks, records, _)] => WordValue::Single { marks, records }.pack(),
                 _ => None,
             };
             let value = match single {
@@ -173,8 +239,8 @@ impl Builder {
                     let offset = u32::try_from(variants.len())
                         .map_err(|_| Error::Build("too many spellings".into()))?;
                     variants.push(spellings.len() as u32);
-                    for &(marks, records) in &spellings {
-                        variants.extend([marks as u32, (marks >> 32) as u32, records]);
+                    for &(marks, records, weight) in &spellings {
+                        variants.extend([marks as u32, (marks >> 32) as u32, records, weight]);
                     }
                     WordValue::Many(offset).pack().unwrap_or_default()
                 }
@@ -208,6 +274,25 @@ impl Builder {
             variants,
         }))
     }
+}
+
+/// List of analyses as the section `records` keeps it
+fn list_of(analyses: &[Listed]) -> Vec<u32> {
+    let weighted = analyses
+        .iter()
+        .any(|analysis| analysis.place.probability.is_some());
+    let flag = if weighted { HAS_PROBABILITIES } else { 0 };
+    let mut list = Vec::with_capacity(1 + analyses.len() * if weighted { 2 } else { 1 });
+    list.push(analyses.len() as u32 | flag);
+    list.extend(analyses.iter().map(|analysis| analysis.record));
+    if weighted {
+        list.extend(
+            analyses
+                .iter()
+                .map(|analysis| analysis.place.probability.unwrap_or(0)),
+        );
+    }
+    list
 }
 
 /// Numbers of values in the order of their first appearance
@@ -372,6 +457,18 @@ mod tests {
                 "{feats}"
             );
         }
+    }
+
+    #[test]
+    fn places_are_checked() {
+        let mut builder = Builder::new();
+        builder.add_form("a", "X", "a", "").unwrap();
+        assert!(builder.place("a", "X", "b", "", 0, None).is_err());
+        assert!(builder.place("b", "X", "a", "", 0, None).is_err());
+        assert!(builder.place("a", "X", "a", "", 0, Some(1.5)).is_err());
+        assert!(builder.place("a", "X", "a", "", 0, Some(-0.5)).is_err());
+        assert!(builder.place("a", "X", "a", "", 0, Some(f64::NAN)).is_err());
+        assert!(builder.place("a", "X", "a", "", 0, Some(1.0)).is_ok());
     }
 
     #[test]
