@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Rust and the extension module
+target/
+python/esmorph/*.so
+python/esmorph/*.pyd
+
+# Environments
+.venv/
+venv/
+.env
+
+# Tools
+.coverage
+coverage.xml
+.mypy_cache
+.pytest_cache
+.ruff_cache
+*.log
+
+# Documentation
+site/
+
+# Editors and OS
+.vscode
+.idea
+.DS_Store

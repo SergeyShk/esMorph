@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use esMorph in research or software, please cite it."
+title: "esMorph, a fast morphological analyzer for Spanish"
+type: software
+authors:
+  - family-names: Shkarin
+    given-names: Sergey
+    email: kouki.sergey@gmail.com
+repository-code: "https://github.com/SergeyShk/esMorph"
+url: "https://sergeyshk.github.io/esMorph/"
+license: MIT
+keywords:
+  - spanish
+  - nlp
+  - morphology
+  - morphological analysis
+  - lemmatization
+  - inflection
+  - conjugation
+  - universal dependencies
+  - wiktionary
+  - rust
+abstract: "esMorph is a morphological analyzer of Spanish with a Rust core and a Python API: for a word form it finds the analyses in a dictionary - the lemma, the part of speech and the Universal Dependencies features - and gives the forms of a lexeme by their features. Work in progress."

@@ -1,0 +1,15 @@
+[workspace]
+members = ["crates/esmorph", "crates/esmorph-py"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0-dev.1"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+authors = ["Sergey Shkarin <kouki.sergey@gmail.com>"]
+repository = "https://github.com/SergeyShk/esMorph"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1

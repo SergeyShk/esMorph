@@ -1,0 +1,392 @@
+name: publish
+
+# A tag: wheels and sources are built once, checked on every platform and published on TestPyPI;
+# a version without .devN then goes to PyPI - the same files - and the crate to crates.io.
+# A pull request that changes publishing or the build runs the same chain without publishing
+
+on:
+  push:
+    tags:
+      - "*"
+  pull_request:
+    paths:
+      - ".github/workflows/publish.yml"
+      - "scripts/smoke.py"
+      - "pyproject.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/*/Cargo.toml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: false
+      - name: Check version matches tag
+        if: github.event_name == 'push'
+        run: |
+          version="$(uv version --short)"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Version in pyproject.toml ($version) does not match the tag ($GITHUB_REF_NAME)"
+            exit 1
+          fi
+          # The crate publishes the version of Cargo.toml: 0.2.0-dev.5 is the semver of the tag 0.2.0.dev5
+          crate="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [ "${crate/-dev./.dev}" != "$GITHUB_REF_NAME" ]; then
+            echo "Version in Cargo.toml ($crate) does not match the tag ($GITHUB_REF_NAME)"
+            exit 1
+          fi
+
+  # Every job builds an abi3 wheel for Python 3.11+ and a wheel for the free-threaded Python 3.14t,
+  # which abi3 does not cover
+  wheels:
+    name: wheels (${{ matrix.platform }})
+    needs: check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: manylinux x86_64
+            os: ubuntu-latest
+            target: x86_64
+            manylinux: auto
+          - platform: manylinux aarch64
+            os: ubuntu-latest
+            target: aarch64
+            manylinux: auto
+          - platform: musllinux x86_64
+            os: ubuntu-latest
+            target: x86_64
+            manylinux: musllinux_1_2
+          - platform: musllinux aarch64
+            os: ubuntu-latest
+            target: aarch64
+            manylinux: musllinux_1_2
+          # Both macOS wheels are built by one job: arm64 runners are often short
+          - platform: macos
+            os: macos-latest
+            target: x86_64 aarch64
+          - platform: windows x64
+            os: windows-latest
+            target: x64
+            architecture: x64
+          - platform: windows arm64
+            os: windows-11-arm
+            target: aarch64
+            architecture: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # On Linux the build image has the interpreters, macOS builds for an explicit target by the
+      # built-in settings of maturin, and Windows needs installed interpreters
+      - name: Setup Python 3.11 (Windows)
+        id: python-abi3
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+          architecture: ${{ matrix.architecture }}
+      - name: Setup Python 3.14t (Windows)
+        id: python-free-threaded
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14t"
+          architecture: ${{ matrix.architecture }}
+      - name: Setup Rust (Windows arm64)
+        if: matrix.os == 'windows-11-arm'
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - name: Build wheels
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.15.0
+          target: ${{ matrix.target }}
+          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t
+          manylinux: ${{ matrix.manylinux }}
+      - name: Build wheels (Windows)
+        if: runner.os == 'Windows'
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.15.0
+          target: ${{ matrix.target }}
+          args: >-
+            --release --locked --compatibility pypi --out dist
+            -i ${{ steps.python-abi3.outputs.python-path }} ${{ steps.python-free-threaded.outputs.python-path }}
+      - name: Build wheels (macOS x86_64)
+        if: runner.os == 'macOS'
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.15.0
+          target: x86_64
+          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t
+      - name: Build wheels (macOS aarch64)
+        if: runner.os == 'macOS'
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.15.0
+          target: aarch64
+          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t
+      - name: Upload wheels
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels-${{ strategy.job-index }}
+          path: dist
+          if-no-files-found: error
+
+  sdist:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build sdist
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v1.15.0
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sdist
+          path: dist
+          if-no-files-found: error
+
+  smoke:
+    name: smoke (${{ matrix.os }}, ${{ matrix.python-version }})
+    needs: wheels
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest, windows-11-arm]
+        python-version: ["3.11", "3.14", "3.14t"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download wheels
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Setup uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: false
+          python-version: ${{ matrix.python-version }}
+      - name: Smoke test
+        run: >-
+          uv run --isolated --no-project --no-index --no-build --find-links dist --with esmorph
+          python scripts/smoke.py ${{ github.event_name == 'push' && github.ref_name || '' }}
+        shell: bash
+
+  # The crate is built from its package on every run; only versions without .devN are published
+  crates-check:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - name: Package crate
+        run: cargo package --locked --allow-dirty --all-features -p esmorph
+
+  # The musllinux wheels are checked in the musllinux image: it has Python 3.11 and 3.14t
+  smoke-musl:
+    name: smoke (musllinux, ${{ matrix.arch }})
+    needs: wheels
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download wheels
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Smoke test
+        env:
+          IMAGE: quay.io/pypa/musllinux_1_2_${{ matrix.arch }}:2026.10.10-1
+          VERSION: ${{ github.event_name == 'push' && github.ref_name || '' }}
+        run: |
+          docker run --rm -v "$PWD:/w" -w /w -e VERSION "$IMAGE" sh -ec '
+            for python in python3.11 python3.14t; do
+              "$python" -m venv "/tmp/$python"
+              "/tmp/$python/bin/pip" install --quiet --no-index --find-links dist esmorph
+              "/tmp/$python/bin/python" scripts/smoke.py $VERSION
+            done'
+
+  smoke-sdist:
+    needs: sdist
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download sdist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sdist
+          path: dist
+      - name: Setup uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: false
+          python-version: "3.13"
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      # This is how conda-forge and distributions build from source: with the Cargo.lock of the archive
+      - name: Build wheel from sdist
+        run: |
+          mkdir build
+          tar xzf dist/*.tar.gz -C build
+          cd build/*/
+          uvx maturin@1.15.0 build --release --locked --out ../../wheel
+      - name: Smoke test
+        run: >-
+          uv run --isolated --no-project --no-index --no-build --find-links wheel --with esmorph
+          python scripts/smoke.py ${{ github.event_name == 'push' && github.ref_name || '' }}
+
+  # Checked apart from the jobs that may publish
+  check-distribution:
+    needs: [smoke, smoke-musl, smoke-sdist, crates-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download distribution
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "{wheels-*,sdist}"
+          path: dist
+          merge-multiple: true
+      - name: Setup uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: false
+          python-version: "3.13"
+      - name: Check distribution
+        run: |
+          uvx twine@7.0.0 check --strict dist/*
+          ls -l dist
+          sha256sum dist/*
+
+  testpypi:
+    if: github.event_name == 'push'
+    needs: check-distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distribution
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "{wheels-*,sdist}"
+          path: dist
+          merge-multiple: true
+      - name: Setup uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: false
+      - name: Publish distribution
+        run: uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always dist/*
+
+  pypi:
+    # Versions 0.1.0.devN go only to TestPyPI
+    if: github.event_name == 'push' && !contains(github.ref_name, '.dev')
+    needs: testpypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: pypi
+      url: https://pypi.org/project/esmorph/${{ github.ref_name }}/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distribution
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "{wheels-*,sdist}"
+          path: dist
+          merge-multiple: true
+      - name: Setup uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: false
+      - name: Publish distribution
+        run: uv publish --trusted-publishing always dist/*
+
+  crates:
+    if: github.event_name == 'push' && !contains(github.ref_name, '.dev')
+    needs: [crates-check, pypi]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/esmorph/${{ github.ref_name }}
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - name: Authenticate
+        id: auth
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      # A published version is skipped, so a rerun of the job after a failure does not stop on it
+      - name: Publish crate
+        run: |
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "esmorph") | .version')"
+          if curl -sf "https://index.crates.io/es/mo/esmorph" | grep -qF "\"vers\":\"$version\""; then
+            echo "esmorph $version is already on crates.io"
+            exit 0
+          fi
+          cargo publish --locked --allow-dirty -p esmorph
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
