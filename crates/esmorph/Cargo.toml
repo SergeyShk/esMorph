@@ -1,0 +1,17 @@
+[package]
+name = "esmorph"
+description = "Fast Spanish morphological analyzer: lemmas, Universal Dependencies features and inflection"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage = "https://sergeyshk.github.io/esMorph/"
+readme = "README.md"
+keywords = ["morphology", "spanish", "lemmatization", "conjugation", "nlp"]
+categories = ["text-processing"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

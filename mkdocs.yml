@@ -1,0 +1,92 @@
+site_name: esMorph
+site_url: https://sergeyshk.github.io/esMorph/
+site_description: "Fast Spanish morphological analyzer written in Rust with a Python API"
+repo_url: https://github.com/SergeyShk/esMorph
+
+nav:
+    - Home:
+      - About: index.md
+      - Installation: installation.md
+      - Authors: authors.md
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: Dark theme
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: Light theme
+  font:
+    text: Source Sans Pro
+    code: Source Code Pro
+  features:
+    - navigation.tabs
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+    - search.suggest
+
+validation:
+  anchors: warn
+
+plugins:
+  - search:
+      lang:
+        - en
+        - es
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          name: English
+          default: true
+          build: true
+        - locale: es
+          name: Español
+          build: true
+          site_description: "Analizador morfológico rápido del español escrito en Rust, con API para Python"
+          nav_translations:
+            Home: Inicio
+            About: Acerca de
+            Installation: Instalación
+            Authors: Autores
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/SergeyShk
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/kouki91/
+
+extra_css:
+  - css/extra.css
+
+markdown_extensions:
+  - toc:
+      permalink: True
+  - attr_list
+  - md_in_html
+  - tables
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

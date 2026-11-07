@@ -1,0 +1,34 @@
+name: Bug report
+description: Wrong analysis, exception or crash
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happens
+      description: What you expected and what you got
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The word forms or minimal code that trigger the bug and the full traceback, if any
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: esMorph version
+      description: "`python -c \"import esmorph; print(esmorph.__version__)\"`"
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Python and OS
+      placeholder: "Python 3.12, macOS 15"
+    validations:
+      required: true
