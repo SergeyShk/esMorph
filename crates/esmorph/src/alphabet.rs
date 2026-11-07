@@ -3,6 +3,7 @@
 //! of the accents are kept apart as a mask. The diaeresis is no accent: `ü` is a letter of its own,
 //! because `ambigúes` and `paragüas` leave no way to tell it from `ú` by the neighbours
 
+#[cfg(any(test, feature = "build"))]
 use std::cmp::Ordering;
 
 use crate::Error;
@@ -110,6 +111,7 @@ impl Alphabet {
     }
 
     /// Key of a word form as the dictionary spells it: the case does not change
+    #[cfg(any(test, feature = "build"))]
     pub fn spelling_key(&self, spelling: &str) -> Option<Key> {
         let mut key = Key::new();
         for letter in spelling.chars() {
@@ -214,6 +216,7 @@ impl Key {
 
 /// Order of the spellings of one key by the places of the accents from left to right: first
 /// without accents, then with an accent on the leftmost place and so on
+#[cfg(any(test, feature = "build"))]
 pub(crate) fn mark_order(a: u64, b: u64) -> Ordering {
     let (mut a, mut b) = (a, b);
     loop {

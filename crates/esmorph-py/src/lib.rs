@@ -396,8 +396,12 @@ fn load_error(path: &Path, err: esmorph::Error) -> PyErr {
     };
     let message = match err.kind() {
         ErrorKind::NotFound => "No dictionary file".to_owned(),
-        ErrorKind::PermissionDenied => "No access to the dictionary file".to_owned(),
+        // Windows reports a directory as a lack of access
         ErrorKind::IsADirectory => "The path to the dictionary is a directory".to_owned(),
+        ErrorKind::PermissionDenied if path.is_dir() => {
+            "The path to the dictionary is a directory".to_owned()
+        }
+        ErrorKind::PermissionDenied => "No access to the dictionary file".to_owned(),
         _ => err.to_string(),
     };
     let filename = path.display().to_string();

@@ -16,11 +16,13 @@ import hashlib
 import http.client
 import json
 import lzma
+import re
 import time
 import unicodedata
 import urllib.error
 import urllib.request
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
+from itertools import product
 from pathlib import Path
 
 LICENSE = "CC BY-SA 4.0"
@@ -52,6 +54,8 @@ NOMINAL = {"ADJ", "DET", "NOUN", "NUM", "PRON", "PROPN"}
 # The lemma of these is singular unless its tags say otherwise
 SINGULAR_BASE = {"ADJ", "DET", "NOUN"}
 PERSONS = {"first-person": "1", "second-person": "2", "third-person": "3"}
+TENSES = {"present": "Pres", "preterite": "Past", "imperfect": "Imp", "future": "Fut"}
+GENDERS = {"feminine", "masculine"}
 NON_FINITE = {"infinitive", "gerund", "participle"}
 # Tags of a form of a noun or an adjective: other rows of their tables are other words with entries
 # of their own (`caserón` of `casa`, `grandísimo` of `grande`, `pié` of `pie`)
@@ -77,6 +81,13 @@ OTHER_VERB_FORM = {
     "rare",
     "uncommon",
 }
+# Verbs without a table of their own have bare senses for finite forms: only an infinitive is a lemma
+INFINITIVE = re.compile(r"[aeiíoó]r(se)?$")
+# The finite rows of a pronominal table are `me destoso`
+TABLE_CLITIC = re.compile(r"^(me|te|se|nos|os) ")
+CLITIC_ENDING = re.compile(r"(me|te|se|nos|os|lo|la|le|los|las|les)$")
+NON_FINITE_ROWS = {"infinitive", "gerund"}
+FORMS_WITH_CLITICS = NON_FINITE_ROWS | {"imperative"}
 # A sense "diminutive of" names another word: the treebanks keep such a word as its own lemma
 DERIVED = {"augmentative", "diminutive", "superlative"}
 MASCULINE_PARTICIPLE = "Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part"
@@ -141,7 +152,7 @@ def download(url: str, path: Path, digest: str) -> Path:
     raise ValueError(f"{url}: {', '.join(errors)}")
 
 
-def verb_features(tags: set[str]) -> dict[str, str]:
+def verb_features(tags: set[str]) -> list[dict[str, str]]:
     """
     Universal Dependencies features of a verb form
 
@@ -149,42 +160,39 @@ def verb_features(tags: set[str]) -> dict[str, str]:
         tags (set[str]): Tags of the form in wiktextract
 
     Returns:
-        dict[str, str]: The features
+        list[dict[str, str]]: The features; a sense can name several persons or tenses at once
     """
     if "infinitive" in tags:
-        return {"VerbForm": "Inf"}
+        return [{"VerbForm": "Inf"}]
     if "gerund" in tags:
-        return {"VerbForm": "Ger"}
+        return [{"VerbForm": "Ger"}]
     if "participle" in tags:
-        return {
-            "VerbForm": "Part",
-            "Tense": "Past",
-            "Gender": "Fem" if "feminine" in tags else "Masc",
-            "Number": "Plur" if "plural" in tags else "Sing",
-        }
+        return [
+            {
+                "VerbForm": "Part",
+                "Tense": "Past",
+                "Gender": "Fem" if "feminine" in tags else "Masc",
+                "Number": "Plur" if "plural" in tags else "Sing",
+            }
+        ]
     feats = {"VerbForm": "Fin"}
-    for tag, person in PERSONS.items():
-        if tag in tags:
-            feats["Person"] = person
     if "singular" in tags:
         feats["Number"] = "Sing"
     if "plural" in tags:
         feats["Number"] = "Plur"
+    tenses: list[str | None] = [None]
     if "imperative" in tags:
         feats["Mood"] = "Imp"
     elif "conditional" in tags:
         feats["Mood"] = "Cnd"
     else:
         feats["Mood"] = "Sub" if "subjunctive" in tags else "Ind"
-        for tag, tense in (
-            ("present", "Pres"),
-            ("preterite", "Past"),
-            ("imperfect", "Imp"),
-            ("future", "Fut"),
-        ):
-            if tag in tags:
-                feats["Tense"] = tense
-    return feats
+        tenses = [tense for tag, tense in TENSES.items() if tag in tags] or [None]
+    persons = [person for tag, person in PERSONS.items() if tag in tags] or [None]
+    return [
+        feats | ({"Person": person} if person else {}) | ({"Tense": tense} if tense else {})
+        for person, tense in product(persons, tenses)
+    ]
 
 
 def nominal_features(tags: set[str], singular_base: bool) -> dict[str, str]:
@@ -209,7 +217,7 @@ def nominal_features(tags: set[str], singular_base: bool) -> dict[str, str]:
     return feats
 
 
-def features(pos: str, tags: set[str]) -> dict[str, str]:
+def features(pos: str, tags: set[str]) -> list[dict[str, str]]:
     """
     Features of a form of a part of speech
 
@@ -218,13 +226,18 @@ def features(pos: str, tags: set[str]) -> dict[str, str]:
         tags (set[str]): Tags of the form in wiktextract
 
     Returns:
-        dict[str, str]: The features
+        list[dict[str, str]]: The features; a noun of both genders has a row for each
     """
     if pos == "VERB":
         return verb_features(tags)
+    if pos == "NOUN" and tags >= GENDERS:
+        return [
+            nominal_features(tags - GENDERS | {gender}, singular_base=True)
+            for gender in sorted(GENDERS)
+        ]
     if pos in NOMINAL:
-        return nominal_features(tags, pos in SINGULAR_BASE)
-    return {}
+        return [nominal_features(tags, pos in SINGULAR_BASE)]
+    return [{}]
 
 
 def clean(word: str) -> str | None:
@@ -258,41 +271,197 @@ def is_verb_form(tags: set[str]) -> bool:
 
     Returns:
         bool: Whether the form is non-finite or has a person, belongs to the standard paradigm and
-        has no clitics: `hazlo` has the tags `object-*`, `mirándose` has the tag `reflexive`
+        has no clitics: `hazlo` has the tags `object-*`, `mirándose` has the tag `reflexive`,
+        `abatirme` is an infinitive with a person
     """
     return (
         bool(tags & (NON_FINITE | set(PERSONS)))
         and not tags & OTHER_VERB_FORM
         and "reflexive" not in tags
         and not any(tag.startswith("object-") for tag in tags)
+        and not (tags & NON_FINITE_ROWS and tags & set(PERSONS))
     )
 
 
-def entry_rows(entry: dict) -> Iterator[tuple[str, str, str, dict[str, str]]]:
+def is_entry(word: str, entries: set[str]) -> bool:
+    """
+    Whether a word a sense refers to is an entry itself
+
+    Arguments:
+        word (str): The word: comments and phrases also stand in the place of a reference
+        entries (set[str]): Headwords of the snapshot
+
+    Returns:
+        bool: Whether it is a headword of one word
+    """
+    return " " not in word and word in entries
+
+
+def verb_rows(word: str, forms: list[tuple[str, set[str]]]) -> Iterator[tuple[str, set[str]]]:
+    """
+    Rows of a conjugation table that are forms without clitics
+
+    Description:
+        A table with rows like `abatirme` has a second block for the reflexive verb: `abatirse`,
+        `abatiéndose`, `abátete`. Only the first row of a set of tags stays there. The gerund and
+        the imperative of a `-se` lemma carry its clitic
+
+    Arguments:
+        word (str): Headword
+        forms (list[tuple[str, set[str]]]): Rows of the table
+
+    Returns:
+        Iterator[tuple[str, set[str]]]: The form and its tags
+    """
+    pronominal = any(tags & NON_FINITE_ROWS and tags & set(PERSONS) for _, tags in forms)
+    seen = set()
+    for form, tags in forms:
+        if not is_verb_form(tags):
+            continue
+        if tags & FORMS_WITH_CLITICS:
+            if word.endswith("se") and tags & {"gerund", "imperative"}:
+                continue
+            if pronominal:
+                key = frozenset(tags)
+                if key in seen:
+                    continue
+                seen.add(key)
+        yield TABLE_CLITIC.sub("", form), tags
+
+
+def is_other_gender(tags: set[str], gender: set[str]) -> bool:
+    """
+    Whether a row of a noun table names a word of another gender as a form of the headword
+
+    Arguments:
+        tags (set[str]): Tags of the row
+        gender (set[str]): Genders of the headword
+
+    Returns:
+        bool: Whether it is: `madre` and `niñe` list `padre` and `niño`, while `niño` keeps `niña`,
+        which the treebanks and inflection expect of it
+    """
+    return "canonical" not in tags and (
+        ("masculine" in tags and "masculine" not in gender) or ("feminine" in tags and not gender)
+    )
+
+
+def form_of_rows(
+    word: str, pos: str, tags: set[str], targets: list[str]
+) -> Iterator[tuple[str, str, str, dict[str, str]]]:
+    """
+    Rows of a sense with `form_of`
+
+    Description:
+        A derived word is a lemma of its own. The lemma of a singular feminine noun is both the
+        word itself and its masculine form: treebanks use both
+
+    Arguments:
+        word (str): Headword
+        pos (str): Part of speech
+        tags (set[str]): Tags of the sense
+        targets (list[str]): The words the sense refers to
+
+    Returns:
+        Iterator[tuple[str, str, str, dict[str, str]]]: Lemma, part of speech, form, features
+    """
+    target = targets[0]
+    if pos == "VERB":
+        if not is_verb_form(tags) or " combined with " in target:
+            return
+        # The gerund and the imperative of a reflexive verb carry a clitic: `levántate`
+        if (
+            target.endswith("se")
+            and tags & {"gerund", "imperative"}
+            and CLITIC_ENDING.search(word)
+        ):
+            return
+    lemmas = [] if tags & DERIVED else target.split(" and ")
+    if tags & DERIVED or (pos == "NOUN" and "feminine" in tags and "plural" not in tags):
+        lemmas.append(word)
+    for lemma in lemmas:
+        for feats in features(pos, tags):
+            yield lemma, pos, word, feats
+
+
+def lemma_rows(
+    word: str, pos: str, tags: set[str], targets: list[str], entries: set[str]
+) -> Iterator[tuple[str, str, str, dict[str, str]]]:
+    """
+    Rows of a sense that makes the word a lemma; a word that only spells another one is a form of both
+
+    Arguments:
+        word (str): Headword
+        pos (str): Part of speech
+        tags (set[str]): Tags of the sense with the genders of the headword
+        targets (list[str]): The words the sense names as other spellings
+        entries (set[str]): Headwords of the snapshot
+
+    Returns:
+        Iterator[tuple[str, str, str, dict[str, str]]]: Lemma, part of speech, form, features
+    """
+    for feats in features(pos, {"infinitive"} if pos == "VERB" else tags):
+        yield word, pos, word, feats
+        for target in targets:
+            if is_entry(target, entries):
+                yield target, pos, word, feats
+
+
+def nominal_rows(
+    word: str, pos: str, forms: list[tuple[str, set[str]]], gender: set[str]
+) -> Iterator[tuple[str, str, str, dict[str, str]]]:
+    """
+    Rows of the table of a noun, an adjective, a pronoun or a determiner
+
+    Arguments:
+        word (str): Headword
+        pos (str): Part of speech
+        forms (list[tuple[str, set[str]]]): Rows of the table
+        gender (set[str]): Genders of the headword
+
+    Returns:
+        Iterator[tuple[str, str, str, dict[str, str]]]: Lemma, part of speech, form, features
+    """
+    for form, tags in forms:
+        if not tags or not tags <= NOMINAL_FORM:
+            continue
+        if "canonical" in tags and form.lower() != word.lower():
+            continue
+        if pos == "NOUN" and is_other_gender(tags, gender):
+            continue
+        row_tags = tags if tags & GENDERS else tags | gender
+        for feats in features(pos, row_tags):
+            yield word, pos, form.removeprefix("before a noun "), feats
+
+
+def entry_rows(
+    entry: dict, entries: set[str], lower_entries: set[str]
+) -> Iterator[tuple[str, str, str, dict[str, str]]]:
     """
     Rows of one entry
 
     Description:
         A sense with `form_of` gives the word as a form of that lemma, any other sense gives the
-        word as a lemma. A derived word is a lemma of its own. The lemma of a feminine noun is both
-        the word itself and its masculine form: treebanks use both. A word that only spells another
-        one is a form of both. The forms of the table belong to an entry that has a sense of its
-        own. An adjective with a feminine form is masculine in its base form
+        word as a lemma, for a verb only if it looks like an infinitive. The forms of the table
+        belong to an entry that has a sense of its own. An adjective with a feminine form is
+        masculine in its base form. An acronym with the spelling of a word in lower case is left
+        out, as `SE` for `se`: the analyzer does not see case
 
     Arguments:
         entry (dict): Entry of the snapshot
+        entries (set[str]): Headwords of the snapshot
+        lower_entries (set[str]): Headwords of the snapshot in lower case
 
     Returns:
         Iterator[tuple[str, str, str, dict[str, str]]]: Lemma, part of speech, form, features
     """
     word, pos = entry["word"], PARTS_OF_SPEECH.get(entry["pos"])
-    if pos is None:
+    if pos is None or (word == word.upper() != word.lower() and word.lower() in lower_entries):
         return
     forms = [(form, set(tags)) for form, tags in entry["forms"]]
     own = False
-    base_tags = {"feminine", "masculine"}
     gender = {tag for sense in entry["senses"] if not sense["form_of"] for tag in sense["tags"]}
-    gender &= base_tags
+    gender &= GENDERS
     if pos == "ADJ" and any("feminine" in tags and "plural" not in tags for _, tags in forms):
         gender = gender or {"masculine"}
     for sense in entry["senses"]:
@@ -301,57 +470,68 @@ def entry_rows(entry: dict) -> Iterator[tuple[str, str, str, dict[str, str]]]:
         if "misspelling" in tags or ("Internet" in tags and sense["alt_of"]):
             continue
         if sense["form_of"]:
-            if pos == "VERB" and not is_verb_form(tags):
-                continue
-            if not tags & DERIVED:
-                yield sense["form_of"][0].split()[0], pos, word, features(pos, tags)
-            if tags & DERIVED or (pos == "NOUN" and "feminine" in tags and "plural" not in tags):
-                yield word, pos, word, features(pos, tags)
-            continue
-        own = True
-        for target in sense["alt_of"]:
-            yield target.split()[0], pos, word, features(pos, tags | gender)
-        if pos == "VERB":
-            yield word, pos, word, {"VerbForm": "Inf"}
-        else:
-            yield word, pos, word, features(pos, tags | gender)
-    if not own:
-        return
-    for form, tags in forms:
-        if pos == "VERB":
-            if is_verb_form(tags):
-                yield word, pos, form, verb_features(tags)
-        elif tags and tags <= NOMINAL_FORM:
-            value = form.removeprefix("before a noun ")
-            if not tags & base_tags:
-                tags = tags | gender
-            yield word, pos, value, features(pos, tags)
+            yield from form_of_rows(word, pos, tags, sense["form_of"])
+        elif pos != "VERB" or INFINITIVE.search(word):
+            own = True
+            yield from lemma_rows(word, pos, tags | gender, sense["alt_of"], entries)
+    if own and pos == "VERB":
+        for form, tags in verb_rows(word, forms):
+            for feats in verb_features(tags):
+                yield word, pos, form, feats
+    elif own:
+        yield from nominal_rows(word, pos, forms, gender)
 
 
-def rows(entries: Iterable[dict]) -> set[tuple[str, str, str, str]]:
+def snapshot_entries(path: Path) -> Iterator[dict]:
+    """
+    Entries of the snapshot
+
+    Arguments:
+        path (Path): File of the snapshot
+
+    Returns:
+        Iterator[dict]: The entries
+    """
+    with lzma.open(path, "rt", encoding="utf-8") as lines:
+        for line in lines:
+            yield json.loads(line)
+
+
+def rows(path: Path) -> set[tuple[str, str, str, str]]:
     """
     Rows of the table
 
     Arguments:
-        entries (Iterable[dict]): Entries of the snapshot
+        path (Path): File of the snapshot
 
     Returns:
         set[tuple[str, str, str, str]]: Lemma, part of speech, form, features in CoNLL-U notation
     """
+    entries = {entry["word"] for entry in snapshot_entries(path)}
+    lower_entries = {word for word in entries if word == word.lower()}
     table = set()
     # A participle may refer to its masculine form, as `hablada` to `hablado`: its verb is `hablar`
     participles = {}
-    for entry in entries:
-        for lemma, pos, form, feats in entry_rows(entry):
+    for entry in snapshot_entries(path):
+        for lemma, pos, form, feats in entry_rows(entry, entries, lower_entries):
             lemma, form = clean(lemma), clean(form)
             if lemma and form:
                 text = "|".join(f"{name}={feats[name]}" for name in sorted(feats, key=str.lower))
                 table.add((lemma, pos, form, text or "_"))
                 if pos == "VERB" and text == MASCULINE_PARTICIPLE and lemma != form:
                     participles.setdefault(form, lemma)
-    return {
+    table = {
         (participles.get(lemma, lemma) if pos == "VERB" else lemma, pos, form, text)
         for lemma, pos, form, text in table
+    }
+    # An entry of a plural form may not name a gender that the table of its noun names
+    gendered = {
+        (lemma, form, text.partition("|")[2])
+        for lemma, pos, form, text in table
+        if pos == "NOUN" and text.startswith("Gender=")
+    }
+    return {
+        row for row in table if not (row[1] == "NOUN" and (row[0], row[2], row[3]) in gendered)
     }
 
 
@@ -366,9 +546,7 @@ def export(output: Path) -> int:
         int: Number of rows
     """
     name, url, digest = SNAPSHOT
-    snapshot = download(url, output / "raw" / name, digest)
-    with lzma.open(snapshot, "rt", encoding="utf-8") as lines:
-        table = rows(json.loads(line) for line in lines)
+    table = rows(download(url, output / "raw" / name, digest))
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines("\t".join(row) + "\n" for row in sorted(table))
     meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}

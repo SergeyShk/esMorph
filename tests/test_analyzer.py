@@ -19,6 +19,10 @@ def lemmas(morph, word):
     return sorted({analysis.lemma for analysis in morph.analyze(word)})
 
 
+def lemmas_set(morph, word):
+    return set(lemmas(morph, word))
+
+
 def test_analysis_fields(morph):
     analysis = morph.analyze("camión")[0]
     assert isinstance(analysis, Analysis)
@@ -126,9 +130,25 @@ def test_normalized_queries(morph):
     assert lemmas(morph, "﻿camión​") == ["camión"]
 
 
-def test_forms_with_clitics_are_not_word_forms(morph):
-    for word in ["hazlo", "mirándose", "dámelo", "hablarlo"]:
-        assert morph.analyze(word) == [], word
+@pytest.mark.parametrize(
+    "word",
+    [
+        "hazlo",
+        "mirándose",
+        "dámelo",
+        "hablarlo",
+        "hablarme",
+        "lávate",
+        "levántate",
+        "dígame",
+        "quítatela",
+        "comprársela",
+        "dándoselo",
+        "abatiéndome",
+    ],
+)
+def test_forms_with_clitics_are_not_word_forms(morph, word):
+    assert [a for a in morph.analyze(word) if a.pos == "VERB"] == []
 
 
 def test_participles_have_their_verb_as_the_lemma(morph):
@@ -144,6 +164,88 @@ def test_misspellings_are_not_analyses(morph):
 
 def test_plural_is_no_lemma(morph):
     assert "casas" not in {a.lemma for a in morph.analyze("casas") if a.pos == "NOUN"}
+
+
+@pytest.mark.parametrize(
+    "word, lemma, other",
+    [
+        ("padres", "padre", "madre"),
+        ("hijos", "hijo", "hija"),
+        ("niños", "niño", "niña"),
+        ("niños", "niño", "niñe"),
+        ("caballo", "caballo", "yegua"),
+    ],
+)
+def test_masculine_nouns_have_no_lemma_of_another_gender(morph, word, lemma, other):
+    nouns = {a.lemma for a in morph.analyze(word) if a.pos == "NOUN"}
+    assert lemma in nouns
+    assert other not in nouns
+
+
+def test_feminine_noun_has_both_lemmas(morph):
+    nouns = {a.lemma for a in morph.analyze("niña") if a.pos == "NOUN"}
+    assert {"niña", "niño"} <= nouns
+
+
+def test_nouns_of_both_genders(morph):
+    for word in ["presidente", "fin", "personaje", "presidentes"]:
+        genders = {a.feats.get("Gender") for a in morph.analyze(word) if a.pos == "NOUN"}
+        assert genders == {"Fem", "Masc"}, word
+
+
+def test_acronyms_do_not_answer_for_words(morph):
+    for word, acronym in [
+        ("se", "sudeste"),
+        ("ha", "ácido"),
+        ("me", "muerte"),
+        ("una", "universidad"),
+    ]:
+        assert acronym not in lemmas(morph, word), word
+    assert morph.is_known("fbi")
+
+
+def test_references_that_are_no_entries_are_no_lemmas(morph):
+    for word in ["fué", "guión", "iraq", "ó", "mi", "tu", "una", "nada", "hacer", "eu", "eso"]:
+        assert not {
+            "deprecated",
+            "my",
+            "your",
+            "universidad",
+            "de",
+            "hacerse",
+            "tren",
+            "estados",
+        } & set(lemmas(morph, word)), word
+
+
+def test_pronoun_references_are_split(morph):
+    assert "él" in lemmas(morph, "lo")
+    assert "tú" in lemmas(morph, "te")
+
+
+def test_only_infinitives_are_verb_lemmas(morph):
+    assert "VERB" not in {a.pos for a in morph.analyze("persona") if a.lemma == "persona"}
+    assert "había" not in lemmas(morph, "había")
+    bare = [a for a in morph.analyze("accelerar") if a.pos == "VERB"]
+    assert all(a.feats == {"VerbForm": "Inf"} for a in bare)
+    assert {"ser", "ir"} <= lemmas_set(morph, "fué")
+
+
+def test_one_sense_with_several_persons_and_tenses(morph):
+    persons = {a.feats.get("Person") for a in morph.analyze("adestraba")}
+    assert {"1", "3"} <= persons
+    tenses = {a.feats.get("Tense") for a in morph.analyze("ababillamos")}
+    assert {"Pres", "Past"} <= tenses
+
+
+def test_finite_rows_of_pronominal_tables(morph):
+    assert morph.is_known("destoso")
+    assert "resentirse" in lemmas(morph, "resiente") or "resentir" in lemmas(morph, "resiente")
+
+
+def test_canonical_rows_are_the_word_itself(morph):
+    assert morph.analyze("www.rae.es") == []
+    assert morph.analyze("tdhle") == []
 
 
 @pytest.mark.parametrize("word", ["", " ", "qzxw", "­", "123", "a b", "\x00", "\ud83d"])
@@ -278,7 +380,8 @@ def test_load_errors(morph, tmp_path):
         Analyzer(tmp_path / "none.dict")
     assert error.value.errno == errno.ENOENT
     assert error.value.filename == str(tmp_path / "none.dict")
-    with pytest.raises(OSError, match="directory"):
+    # Opening a directory is `IsADirectoryError` on POSIX and `PermissionError` on Windows
+    with pytest.raises((IsADirectoryError, PermissionError), match="is a directory"):
         Analyzer(tmp_path)
     not_dictionary = tmp_path / "text.dict"
     not_dictionary.write_text("not a dictionary, long enough to have a header")

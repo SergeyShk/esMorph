@@ -60,6 +60,7 @@ pub(crate) enum WordValue {
 /// One spelling fits the value if the list of analyses starts below 2²⁴ and the accents stand
 /// among the first 39 letters
 const RECORDS_BITS: u32 = 24;
+#[cfg(any(test, feature = "build"))]
 const MARKS_BITS: u32 = 39;
 const MANY: u64 = 1 << 63;
 

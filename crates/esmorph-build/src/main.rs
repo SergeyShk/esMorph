@@ -30,7 +30,10 @@ fn build(export: &Path, output: &Path) -> Result<usize, Error> {
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(output, &bytes)?;
+    // The file of an open dictionary must not change in place: a mapping keeps its old file
+    let temporary = output.with_extension("tmp");
+    fs::write(&temporary, &bytes)?;
+    fs::rename(&temporary, output)?;
     Ok(bytes.len())
 }
 

@@ -69,6 +69,7 @@ else
 	cargo fmt --all
 endif
 	cargo clippy --workspace --all-targets -- -D warnings
+	cargo clippy -p $(PACKAGE) --no-default-features -- -D warnings
 
 test: deps dictionary ## Run the tests
 	uv run pytest

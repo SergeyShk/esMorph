@@ -44,7 +44,10 @@ jobs:
       - name: Rustfmt
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: |
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          # The workspace turns on the feature build: the module builds the core without it
+          cargo clippy -p esmorph --no-default-features --locked -- -D warnings
 
   test:
     name: test (${{ matrix.python-version }}${{ matrix.os != 'ubuntu-latest' && format(', {0}', matrix.os) || '' }})
