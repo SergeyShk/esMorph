@@ -20,6 +20,6 @@ pip install 'maturin>=1.9.4,<2'
 pip install --no-build-isolation --index-url https://test.pypi.org/simple/ esmorph
 ```
 
-The build requirement is installed first and from PyPI, because TestPyPI has no suitable version of maturin; the package itself must come only from TestPyPI.
+The build requirement is installed first and from PyPI, because TestPyPI has no suitable version of maturin; the package itself must come only from TestPyPI. Run both commands in an activated virtual environment: with `--no-build-isolation` the build looks for the `maturin` command on `PATH`.
 
 The development environment is described in [CONTRIBUTING.md](https://github.com/SergeyShk/esMorph/blob/master/CONTRIBUTING.md).

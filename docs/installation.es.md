@@ -20,6 +20,6 @@ pip install 'maturin>=1.9.4,<2'
 pip install --no-build-isolation --index-url https://test.pypi.org/simple/ esmorph
 ```
 
-La dependencia de compilación se instala primero y desde PyPI, porque TestPyPI no tiene una versión adecuada de maturin; el paquete en sí debe venir solo de TestPyPI.
+La dependencia de compilación se instala primero y desde PyPI, porque TestPyPI no tiene una versión adecuada de maturin; el paquete en sí debe venir solo de TestPyPI. Ejecute ambos comandos en un entorno virtual activado: con `--no-build-isolation`, la compilación busca el comando `maturin` en el `PATH`.
 
 El entorno de desarrollo se describe en [CONTRIBUTING.md](https://github.com/SergeyShk/esMorph/blob/master/CONTRIBUTING.md).
