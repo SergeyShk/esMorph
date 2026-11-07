@@ -343,6 +343,7 @@ def test_verbs_have_no_clitic_in_the_lemma(morph, word, lemma):
         ("primer", "primero", "ADJ"),
         ("peor", "peor", "ADV"),
         ("pa", "para", "ADP"),
+        ("pa'", "para", "ADP"),
         ("cuando", "cuando", "SCONJ"),
     ],
 )
@@ -432,6 +433,19 @@ def test_a_lost_accent_finds_the_common_spelling(morph, query, word):
     probs = [a.prob for a in analyses]
     assert probs == sorted(probs, reverse=True), query
     assert sum(probs) == pytest.approx(1, abs=1e-3), query
+
+
+@pytest.mark.parametrize(
+    "query, word",
+    [
+        ("pokemon", "pokémon"),
+        ("habitues", "habitúes"),
+    ],
+)
+def test_spellings_without_counts_keep_their_order(morph, query, word):
+    analyses = morph.analyze(query)
+    assert analyses[0].word == word, query
+    assert len({a.prob for a in analyses}) == 1, query
 
 
 def test_no_analysis_is_impossible(morph):

@@ -194,7 +194,7 @@ impl Builder {
         // Equal lists of analyses of different word forms are kept once, spellings of one key together
         let mut records = Vec::new();
         let mut offsets: HashMap<Vec<u32>, u32> = HashMap::new();
-        let mut keys: BTreeMap<Vec<u8>, Vec<(u64, u32, f64)>> = BTreeMap::new();
+        let mut keys: BTreeMap<Vec<u8>, Vec<(u64, u32, u32)>> = BTreeMap::new();
         for (word, analyses) in &mut words {
             if analyses.len() > MAX_LIST {
                 return Err(Error::Build(format!(
@@ -208,7 +208,7 @@ impl Builder {
             })?;
             analyses.sort_by_key(|analysis| analysis.place.number);
             let frequency = self.frequencies.get(*word).copied().unwrap_or(0);
-            let weight = f64::from(frequency) + analyses.len() as f64;
+            let weight = frequency.saturating_add(analyses.len() as u32);
             let offset = *offsets.entry(list_of(analyses)).or_insert_with_key(|list| {
                 let offset = records.len() as u32;
                 records.extend_from_slice(list);
@@ -239,10 +239,8 @@ impl Builder {
                     let offset = u32::try_from(variants.len())
                         .map_err(|_| Error::Build("too many spellings".into()))?;
                     variants.push(spellings.len() as u32);
-                    let total: f64 = spellings.iter().map(|&(.., weight)| weight).sum();
                     for &(marks, records, weight) in &spellings {
-                        let share = (weight / total * f64::from(PROBABILITY_SCALE)).round() as u32;
-                        variants.extend([marks as u32, (marks >> 32) as u32, records, share]);
+                        variants.extend([marks as u32, (marks >> 32) as u32, records, weight]);
                     }
                     WordValue::Many(offset).pack().unwrap_or_default()
                 }

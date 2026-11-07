@@ -49,7 +49,7 @@ pub(crate) struct Sections {
     /// the list has them, `(table << 16) | form` of every analysis, then their probabilities
     pub records: Vec<u32>,
     /// Spellings of keys that do not fit the value of the automaton: the number of spellings, then
-    /// the accent places (two numbers), the start of the list of analyses and the share among the
+    /// the accent places (two numbers), the start of the list of analyses and the weight among the
     /// spellings, for a query that lost its accents, of each
     pub variants: Vec<u32>,
 }
