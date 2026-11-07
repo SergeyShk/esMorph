@@ -19,7 +19,7 @@
 **esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it will find the analyses in a dictionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and give the forms of a lexeme by their features: conjugation, gender and number.
 
 > [!WARNING]
-> Work in progress: so far the package contains only the scaffolding; the analyzer comes in the next versions. Versions `0.1.0.devN` are published on TestPyPI, and the documentation site appears with the first release.
+> Work in progress: the analyses of word forms already work, but their order, words with clitics, unknown words and inflection come in the next versions. Versions `0.1.0.devN` are published on TestPyPI, and the documentation site appears with the first release.
 
 ## Installation
 
@@ -31,6 +31,18 @@ pip install --index-url https://test.pypi.org/simple/ esmorph
 
 Wheels are built for Linux (Alpine included), macOS and Windows and for the free-threaded Python 3.14t; on other platforms building from source requires [Rust](https://www.rust-lang.org/tools/install) 1.88 or newer. See the [Installation](https://github.com/SergeyShk/esMorph/blob/master/docs/installation.md) page.
 
+## Usage
+
+```python
+>>> from esmorph import Analyzer
+>>> morph = Analyzer()
+>>> analysis = morph.analyze("camiones")[0]
+>>> analysis.lemma, analysis.pos, analysis.feats
+('camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
+>>> morph.is_known("hablamos")
+True
+```
+
 ## Development
 
 The project uses [uv](https://docs.astral.sh/uv/) to manage dependencies, [maturin](https://www.maturin.rs/) to build the Rust module and [ruff](https://docs.astral.sh/ruff/) for linting and formatting. Python 3.11 or newer and Rust 1.88 or newer are required.
@@ -40,6 +52,7 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps        # create the environment, install the dependencies and build the Rust module
+make dictionary  # build the dictionary from the snapshot of Wiktionary
 make test        # run the Python tests, the docstring examples (doctest) and the Rust tests
 make lint        # ruff, mypy, rustfmt and clippy
 ```
@@ -62,6 +75,8 @@ Bug reports, ideas and pull requests are welcome, in English or Spanish - the [i
 <br>
 
 *   **crates/esmorph** - the analyzer core in Rust
+*   **crates/esmorph-build** - the builder of the dictionary
+*   **crates/esmorph-dict-es** - the dictionary as a crate
 *   **crates/esmorph-py** - the Python module `esmorph._esmorph` built with PyO3
 *   **python/esmorph** - the Python package
 *   **docs** - MkDocs documentation in English and Spanish
@@ -75,4 +90,4 @@ Bug reports, ideas and pull requests are welcome, in English or Spanish - the [i
 
 ## License
 
-The code is distributed under the [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt) license.
+The code is distributed under the [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt) license. The dictionary is built from [Wiktionary](https://en.wiktionary.org) and is distributed under the [CC BY-SA 4.0](https://github.com/SergeyShk/esMorph/blob/master/LICENSE-DICTIONARY.txt) license.

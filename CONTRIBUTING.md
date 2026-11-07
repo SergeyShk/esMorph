@@ -15,10 +15,11 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps                   # create the environment, install all dependencies and build the Rust module
+make dictionary             # build the dictionary from the snapshot of Wiktionary
 uv run pre-commit install   # hooks: linters on commit, tests on push
 ```
 
-The Rust module is built when the package is installed into the environment; `uv run` rebuilds it when the files of `crates/` or `Cargo.toml` change. The full list of commands is in `make help`.
+The Rust module is built when the package is installed into the environment; `uv run` rebuilds it when the files of `crates/` or `Cargo.toml` change. The dictionary `python/esmorph/data/es.dict` is not in git: `make dictionary` downloads the snapshot of the Spanish entries of Wiktionary (a dataset on Hugging Face, checked by SHA-256), turns it into a table with `scripts/export_wiktionary.py` and builds the file with `crates/esmorph-build`. The full list of commands is in `make help`.
 
 ## Checks
 
@@ -39,7 +40,7 @@ CI runs the same on Python 3.11-3.14 and the free-threaded 3.14t (Linux) and on 
 - **One topic per pull request.** Unrelated changes go separately.
 - **Tests.** New code is covered by tests: Rust code by the tests in `crates/`, the Python API by the tests in `tests/`, Python coverage stays at 90% or higher.
 - **Documentation.** The documentation is bilingual - the English page `docs/*.md` and the Spanish page `docs/*.es.md` next to it, and `tests/test_docs.py` checks that their sections, anchors and links match. Examples in docstrings and the documentation show the actual output.
-- **Compatibility.** Changes to the Python API, the analyses or the dictionary format come with an explanation in the pull request description: it goes into the release notes.
+- **Compatibility.** Changes to the Python API, the analyses or the dictionary format come with an explanation in the pull request description: it goes into the release notes. A change of the dictionary format raises its version in `crates/esmorph/src/format.rs`.
 - **Style.** Python code is formatted with ruff and its types are checked with mypy; Rust code is formatted with rustfmt and passes clippy without warnings (`make format`, `make lint`). Docstrings are in English in the project format (`Description`, `Arguments`, `Returns`, `Raises`, `Example`). Comments do not repeat what the code says.
 - **Commits.** Messages in English, imperative mood: "Add ...", "Fix ...", "Remove ...".
 
@@ -47,12 +48,14 @@ The pull request description answers two questions: what was done and why. If it
 
 ## Repository layout
 
-- `crates/esmorph/` - the analyzer core in Rust, published on crates.io.
+- `crates/esmorph/` - the analyzer core in Rust: the dictionary format, the builder (feature `build`) and the analysis; published on crates.io.
+- `crates/esmorph-dict-es/` - the crate with the dictionary for `esmorph` (feature `bundled`): the file is not in git, `build.rs` takes `python/esmorph/data/es.dict`, and without it builds an empty dictionary only with `ESMORPH_EMPTY_DICTIONARY=1` from `.cargo/config.toml`; published on crates.io.
+- `crates/esmorph-build/` - the builder of the dictionary from the table of the export, not published.
 - `crates/esmorph-py/` - the Python module `esmorph._esmorph` built with PyO3, not published separately.
 - `python/esmorph/` - the Python package.
 - `tests/` - tests of the Python package; `tests/test_docs.py` keeps the two documentation languages in sync.
 - `docs/` - MkDocs (Material) documentation, `mkdocs.yml` - navigation and its Spanish translation.
-- `scripts/` - `smoke.py` checks the installed package before publishing, `notices.py` writes the licenses of the crates.
+- `scripts/` - `wiktionary_snapshot.py` makes the snapshot of Wiktionary, `export_wiktionary.py` turns it into the table of the builder, `smoke.py` checks the installed package before publishing, `notices.py` writes the licenses of the crates.
 - `.github/workflows/` - CI (`ci.yml`), publishing (`publish.yml`), documentation (`docs.yml`).
 
 The sdist is made of the files tracked by git (`sdist-generator = "git"`), so that `maturin build --locked` works on it with all the members of the workspace in place. It can only be made inside a git checkout: `uv build` and `python -m build` fail on an unpacked source archive, while `pip install` and `maturin build` of the sdist work anywhere.

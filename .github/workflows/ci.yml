@@ -78,10 +78,33 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Install dependencies
         run: uv sync --locked --no-default-groups --group test
+      - name: Cache Wiktionary
+        # The snapshot of Wiktionary from Hugging Face is downloaded once per version of the script
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/wiktionary/raw
+          key: wiktionary-${{ hashFiles('scripts/export_wiktionary.py') }}
+          # On Windows the hash of a script with CRLF differs: any earlier cache fits, the download checks SHA-256
+          restore-keys: wiktionary-
+          enableCrossOsArchive: true
+      - name: Build dictionary
+        shell: bash
+        run: |
+          uv run --no-sync python scripts/export_wiktionary.py build/wiktionary
+          cargo run --release --locked -p esmorph-build -- build/wiktionary python/esmorph/data/es.dict
+          uv run --no-sync python -c "import hashlib; print(hashlib.sha256(open('python/esmorph/data/es.dict', 'rb').read()).hexdigest())"
+      - name: Check dictionary size
+        # The dictionary goes to crates.io in the archive of the crate esmorph-dict-es, whose limit is
+        # 10 MiB: a pull request changing only the scripts of the dictionary sees it here, not on a release tag
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          size="$(gzip -9 -c python/esmorph/data/es.dict | wc -c)"
+          echo "es.dict compressed: $size bytes"
+          [ "$size" -lt 10420224 ] || { echo "The compressed dictionary does not fit the crates.io limit of 10 MiB"; exit 1; }
       - name: Run tests
         run: uv run --no-sync pytest --cov esmorph
       - name: Run Rust tests
-        run: cargo test -p esmorph --all-features --locked
+        run: cargo test -p esmorph -p esmorph-dict-es --all-features --locked
 
   msrv:
     runs-on: ubuntu-latest

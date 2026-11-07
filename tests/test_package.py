@@ -38,6 +38,10 @@ def test_crate_version():
     with (ROOT / "pyproject.toml").open("rb") as file:
         package = tomllib.load(file)["project"]["version"]
     assert crate == re.sub(r"\.dev(\d+)$", r"-dev.\1", package)
+    # The dictionary format changes with the core: esmorph requires the dictionary of its version
+    with (ROOT / "crates" / "esmorph" / "Cargo.toml").open("rb") as file:
+        dictionary = tomllib.load(file)["dependencies"]["esmorph-dict-es"]["version"]
+    assert dictionary == f"={crate}"
 
 
 def test_extension():
@@ -46,7 +50,9 @@ def test_extension():
 
 
 def test_package_data():
-    assert (Path(esmorph.__file__).parent / "py.typed").is_file()
+    package = Path(esmorph.__file__).parent
+    assert (package / "py.typed").is_file()
+    assert (package / "data" / "es.dict").is_file()
 
 
 @pytest.mark.skipif(shutil.which("uv") is None, reason="uv builds the wheel")
@@ -69,14 +75,14 @@ def test_wheel_contents(tmp_path):
     assert ("-abi3-" in wheel.name) != bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
-    assert "esmorph/py.typed" in names
+    assert {"esmorph/py.typed", "esmorph/data/es.dict"} <= names
     modules = [
         name for name in names if re.fullmatch(r"esmorph/_esmorph(\.[\w-]+)?\.(so|pyd)", name)
     ]
     assert len(modules) == 1
     assert all(name.startswith(("esmorph/", "esmorph-")) for name in names)
     licenses = {name.rsplit("/", 1)[1] for name in names if "/licenses/" in name}
-    assert licenses == {"LICENSE.txt", "THIRD-PARTY-NOTICES.txt"}
+    assert licenses == {"LICENSE.txt", "LICENSE-DICTIONARY.txt", "THIRD-PARTY-NOTICES.txt"}
 
 
 @pytest.mark.skipif(shutil.which("cargo") is None, reason="cargo reads the crates")

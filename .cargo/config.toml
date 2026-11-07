@@ -1,0 +1,4 @@
+# Code that needs no dictionary is checked without `make dictionary`; a dependency from git does not
+# read this file
+[env]
+ESMORPH_EMPTY_DICTIONARY = "1"

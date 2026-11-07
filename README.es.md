@@ -19,7 +19,7 @@
 **esMorph** es un analizador morfológico del español: un núcleo en Rust con API para Python. Para una forma de palabra buscará los análisis en un diccionario - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) - y dará las formas de un lexema según sus rasgos: conjugación, género y número.
 
 > [!WARNING]
-> En desarrollo: por ahora el paquete solo contiene la estructura básica; el analizador llegará en las próximas versiones. Las versiones `0.1.0.devN` se publican en TestPyPI, y el sitio de la documentación aparecerá con el primer lanzamiento.
+> En desarrollo: los análisis de las formas de palabra ya funcionan, pero su orden, las palabras con clíticos, las desconocidas y la flexión llegarán en las próximas versiones. Las versiones `0.1.0.devN` se publican en TestPyPI, y el sitio de la documentación aparecerá con el primer lanzamiento.
 
 ## Instalación
 
@@ -31,6 +31,18 @@ pip install --index-url https://test.pypi.org/simple/ esmorph
 
 Hay paquetes precompilados para Linux (también Alpine), macOS y Windows y para Python 3.14t sin GIL; en otras plataformas la compilación desde el código fuente requiere [Rust](https://www.rust-lang.org/tools/install) 1.88 o superior. Más detalles en la página de [instalación](https://github.com/SergeyShk/esMorph/blob/master/docs/installation.es.md).
 
+## Uso
+
+```python
+>>> from esmorph import Analyzer
+>>> morph = Analyzer()
+>>> analysis = morph.analyze("camiones")[0]
+>>> analysis.lemma, analysis.pos, analysis.feats
+('camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
+>>> morph.is_known("hablamos")
+True
+```
+
 ## Desarrollo
 
 El proyecto usa [uv](https://docs.astral.sh/uv/) para gestionar las dependencias, [maturin](https://www.maturin.rs/) para compilar el módulo de Rust y [ruff](https://docs.astral.sh/ruff/) para el análisis y el formato del código. Se requieren Python 3.11 o superior y Rust 1.88 o superior.
@@ -40,6 +52,7 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps        # crear el entorno, instalar las dependencias y compilar el módulo de Rust
+make dictionary  # crear el diccionario a partir de la instantánea de Wiktionary
 make test        # ejecutar las pruebas de Python, los ejemplos de los docstrings (doctest) y las pruebas de Rust
 make lint        # ruff, mypy, rustfmt y clippy
 ```
@@ -62,6 +75,8 @@ Los informes de errores, las ideas y los pull requests son bienvenidos, en ingl�
 <br>
 
 *   **crates/esmorph** - el núcleo del analizador en Rust
+*   **crates/esmorph-build** - el constructor del diccionario
+*   **crates/esmorph-dict-es** - el diccionario como crate
 *   **crates/esmorph-py** - el módulo de Python `esmorph._esmorph`, compilado con PyO3
 *   **python/esmorph** - el paquete de Python
 *   **docs** - la documentación de MkDocs en inglés y en español
@@ -75,4 +90,4 @@ Los informes de errores, las ideas y los pull requests son bienvenidos, en ingl�
 
 ## Licencia
 
-El código se distribuye bajo la licencia [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt).
+El código se distribuye bajo la licencia [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt). El diccionario se crea a partir de [Wiktionary](https://en.wiktionary.org) y se distribuye bajo la licencia [CC BY-SA 4.0](https://github.com/SergeyShk/esMorph/blob/master/LICENSE-DICTIONARY.txt).

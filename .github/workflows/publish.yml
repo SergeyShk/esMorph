@@ -1,7 +1,8 @@
 name: publish
 
-# A tag: wheels and sources are built once, checked on every platform and published on TestPyPI;
-# a version without .devN then goes to PyPI - the same files - and the crate to crates.io.
+# A tag: the dictionary, wheels and sources are built once, checked on every platform and published on
+# TestPyPI; a version without .devN then goes to PyPI - the same files - and the crates esmorph-dict-es
+# and esmorph to crates.io.
 # A pull request that changes publishing or the build runs the same chain without publishing
 
 on:
@@ -16,6 +17,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/*/Cargo.toml"
+      - "crates/esmorph-dict-es/**"
 
 permissions:
   contents: read
@@ -44,18 +46,58 @@ jobs:
             echo "Version in pyproject.toml ($version) does not match the tag ($GITHUB_REF_NAME)"
             exit 1
           fi
-          # The crate publishes the version of Cargo.toml: 0.2.0-dev.5 is the semver of the tag 0.2.0.dev5
+          # The crates publish the version of Cargo.toml: 0.2.0-dev.5 is the semver of the tag 0.2.0.dev5
           crate="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
           if [ "${crate/-dev./.dev}" != "$GITHUB_REF_NAME" ]; then
             echo "Version in Cargo.toml ($crate) does not match the tag ($GITHUB_REF_NAME)"
             exit 1
           fi
 
+  dictionary:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: false
+          python-version: "3.13"
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - name: Install dependencies
+        run: uv sync --locked --no-default-groups --no-install-project
+      - name: Cache Wiktionary
+        # The snapshot of Wiktionary from Hugging Face is downloaded once per version of the script
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/wiktionary/raw
+          key: wiktionary-${{ hashFiles('scripts/export_wiktionary.py') }}
+          # On Windows the hash of a script with CRLF differs: any earlier cache fits, the download checks SHA-256
+          restore-keys: wiktionary-
+          enableCrossOsArchive: true
+      - name: Build dictionary
+        run: |
+          uv run --no-sync python scripts/export_wiktionary.py build/wiktionary
+          cargo run --release --locked -p esmorph-build -- build/wiktionary python/esmorph/data/es.dict
+          sha256sum python/esmorph/data/es.dict
+      - name: Upload dictionary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dictionary
+          path: python/esmorph/data/es.dict
+          if-no-files-found: error
+
   # Every job builds an abi3 wheel for Python 3.11+ and a wheel for the free-threaded Python 3.14t,
   # which abi3 does not cover
   wheels:
     name: wheels (${{ matrix.platform }})
-    needs: check
+    needs: dictionary
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -93,6 +135,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download dictionary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dictionary
+          path: python/esmorph/data
       # On Linux the build image has the interpreters, macOS builds for an explicit target by the
       # built-in settings of maturin, and Windows needs installed interpreters
       - name: Setup Python 3.11 (Windows)
@@ -153,12 +200,17 @@ jobs:
           if-no-files-found: error
 
   sdist:
-    needs: check
+    needs: dictionary
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download dictionary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dictionary
+          path: python/esmorph/data
       - name: Build sdist
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -203,20 +255,31 @@ jobs:
           python scripts/smoke.py ${{ github.event_name == 'push' && github.ref_name || '' }}
         shell: bash
 
-  # The crate is built from its package on every run; only versions without .devN are published
+  # The crates are built from their packages on every run; only versions without .devN are published
   crates-check:
-    needs: check
+    needs: dictionary
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download dictionary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dictionary
+          path: crates/esmorph-dict-es
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
-      - name: Package crate
-        run: cargo package --locked --allow-dirty --all-features -p esmorph
+      # esmorph is checked with the dictionary of the just built package esmorph-dict-es
+      - name: Package crates
+        run: |
+          cargo package --locked --allow-dirty --all-features -p esmorph-dict-es -p esmorph
+          cargo package --list --locked --allow-dirty -p esmorph-dict-es | grep -qx es.dict || { echo "No dictionary in esmorph-dict-es"; exit 1; }
+          size="$(stat -c %s target/package/esmorph-dict-es-*.crate)"
+          echo "esmorph-dict-es: $size bytes"
+          [ "$size" -lt 10485760 ] || { echo "esmorph-dict-es exceeds the crates.io limit of 10 MiB"; exit 1; }
 
   # The musllinux wheels are checked in the musllinux image: it has Python 3.11 and 3.14t
   smoke-musl:
@@ -308,6 +371,8 @@ jobs:
       - name: Check distribution
         run: |
           uvx twine@7.0.0 check --strict dist/*
+          for file in dist/*.whl; do unzip -l "$file" esmorph/data/es.dict > /dev/null || { echo "No dictionary in $file"; exit 1; }; done
+          tar tzf dist/*.tar.gz | grep -q '/python/esmorph/data/es.dict$' || { echo "No dictionary in the sdist"; exit 1; }
           ls -l dist
           sha256sum dist/*
 
@@ -372,6 +437,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download dictionary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dictionary
+          path: crates/esmorph-dict-es
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
@@ -379,14 +449,17 @@ jobs:
       - name: Authenticate
         id: auth
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
-      # A published version is skipped, so a rerun of the job after a failure does not stop on it
-      - name: Publish crate
+      # The crates are published one by one and a published version is skipped: a rerun of the job after
+      # a failure between the crates publishes the rest
+      - name: Publish crates
         run: |
           version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "esmorph") | .version')"
-          if curl -sf "https://index.crates.io/es/mo/esmorph" | grep -qF "\"vers\":\"$version\""; then
-            echo "esmorph $version is already on crates.io"
-            exit 0
-          fi
-          cargo publish --locked --allow-dirty -p esmorph
+          for crate in esmorph-dict-es esmorph; do
+            if curl -sf "https://index.crates.io/es/mo/$crate" | grep -qF "\"vers\":\"$version\""; then
+              echo "$crate $version is already on crates.io"
+              continue
+            fi
+            cargo publish --locked --allow-dirty -p "$crate"
+          done
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

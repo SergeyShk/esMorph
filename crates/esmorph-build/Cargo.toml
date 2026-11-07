@@ -1,0 +1,13 @@
+[package]
+name = "esmorph-build"
+description = "Builder of the dictionary of esMorph from the export of Wiktionary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+esmorph = { path = "../esmorph", default-features = false, features = ["build"] }

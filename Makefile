@@ -1,9 +1,12 @@
-.PHONY: help uv deps lock lint ruff format mypy rust-lint test test-cov clean clean-build clean-pyc clean-test clean-rust build docs-build docs-serve docs-deploy
+.PHONY: help uv deps dictionary lock lint ruff format mypy rust-lint test test-cov clean clean-build clean-pyc clean-test clean-rust build docs-build docs-serve docs-deploy
 .DEFAULT_GOAL := help
 SRC_PATH := python
 TESTS_PATH := tests
 SCRIPTS_PATH := scripts
 PACKAGE := esmorph
+DICTIONARY := $(SRC_PATH)/$(PACKAGE)/data/es.dict
+EXPORT_PATH := target/wiktionary
+EXPORT_STAMP := $(EXPORT_PATH)/.exported
 
 help: ## Show the list of commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
@@ -24,6 +27,15 @@ ifeq ($(MODE), ci)
 else
 	uv sync --all-groups
 endif
+
+dictionary: $(DICTIONARY) ## Build the dictionary from the snapshot of Wiktionary
+
+$(EXPORT_STAMP): $(SCRIPTS_PATH)/export_wiktionary.py | deps
+	uv run python $(SCRIPTS_PATH)/export_wiktionary.py $(EXPORT_PATH)
+	touch $@
+
+$(DICTIONARY): $(EXPORT_STAMP) $(wildcard crates/esmorph/src/*.rs crates/esmorph-build/src/*.rs)
+	cargo run --release --locked -p esmorph-build -- $(EXPORT_PATH) $(DICTIONARY)
 
 lock: uv ## Update the lock files to the latest versions of the dependencies
 	uv lock --upgrade
@@ -58,13 +70,13 @@ else
 endif
 	cargo clippy --workspace --all-targets -- -D warnings
 
-test: deps ## Run the tests
+test: deps dictionary ## Run the tests
 	uv run pytest
-	cargo test -p $(PACKAGE) --all-features
+	cargo test -p $(PACKAGE) -p esmorph-dict-es --all-features
 
-test-cov: deps ## Run the tests with the coverage check
+test-cov: deps dictionary ## Run the tests with the coverage check
 	uv run pytest --cov $(PACKAGE)
-	cargo test -p $(PACKAGE) --all-features
+	cargo test -p $(PACKAGE) -p esmorph-dict-es --all-features
 
 clean: clean-build clean-pyc clean-test ## Remove all artifacts except the Rust build
 	rm -f .coverage coverage.xml
@@ -84,7 +96,7 @@ clean-test: ## Remove the artifacts of tests and linters
 clean-rust: ## Remove the Rust build
 	cargo clean
 
-build: clean uv ## Build the distribution for the current platform
+build: clean uv dictionary ## Build the distribution for the current platform
 	uv build
 	ls -l dist
 
