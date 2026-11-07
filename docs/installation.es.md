@@ -3,7 +3,7 @@
 Se requiere Python 3.11 o superior. Las versiones preliminares `0.1.0.devN` se publican solo en TestPyPI:
 
 ``` bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
+pip install --index-url https://test.pypi.org/simple/ esmorph
 ```
 
 ## Paquetes precompilados
@@ -16,7 +16,10 @@ En otras plataformas y en las compilaciones sin GIL posteriores a la 3.14, pip c
 
 ``` bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
+pip install 'maturin>=1.9.4,<2'
+pip install --no-build-isolation --index-url https://test.pypi.org/simple/ esmorph
 ```
+
+La dependencia de compilación se instala primero y desde PyPI, porque TestPyPI no tiene una versión adecuada de maturin; el paquete en sí debe venir solo de TestPyPI.
 
 El entorno de desarrollo se describe en [CONTRIBUTING.md](https://github.com/SergeyShk/esMorph/blob/master/CONTRIBUTING.md).

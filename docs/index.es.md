@@ -10,7 +10,7 @@
 Se requiere Python 3.11 o superior. Las versiones preliminares se publican solo en TestPyPI:
 
 ``` bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
+pip install --index-url https://test.pypi.org/simple/ esmorph
 ```
 
 Los paquetes precompilados y la compilación desde el código fuente se describen en la página de [instalación](installation.md).

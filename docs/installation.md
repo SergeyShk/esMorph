@@ -3,7 +3,7 @@
 Python 3.11 or newer is required. Pre-release versions `0.1.0.devN` are published only on TestPyPI:
 
 ``` bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
+pip install --index-url https://test.pypi.org/simple/ esmorph
 ```
 
 ## Prebuilt wheels
@@ -16,7 +16,10 @@ On other platforms and on free-threaded builds newer than 3.14 pip builds the pa
 
 ``` bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
+pip install 'maturin>=1.9.4,<2'
+pip install --no-build-isolation --index-url https://test.pypi.org/simple/ esmorph
 ```
+
+The build requirement is installed first and from PyPI, because TestPyPI has no suitable version of maturin; the package itself must come only from TestPyPI.
 
 The development environment is described in [CONTRIBUTING.md](https://github.com/SergeyShk/esMorph/blob/master/CONTRIBUTING.md).

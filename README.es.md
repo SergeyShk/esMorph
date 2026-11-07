@@ -26,7 +26,7 @@
 Se requiere Python 3.11 o superior. Las versiones preliminares se publican solo en TestPyPI:
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
+pip install --index-url https://test.pypi.org/simple/ esmorph
 ```
 
 Hay paquetes precompilados para Linux (también Alpine), macOS y Windows y para Python 3.14t sin GIL; en otras plataformas la compilación desde el código fuente requiere [Rust](https://www.rust-lang.org/tools/install) 1.88 o superior. Más detalles en la página de [instalación](https://github.com/SergeyShk/esMorph/blob/master/docs/installation.es.md).
