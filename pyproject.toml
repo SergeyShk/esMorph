@@ -43,7 +43,6 @@ dependencies = []
 [project.urls]
 Homepage = "https://github.com/SergeyShk/esMorph"
 Repository = "https://github.com/SergeyShk/esMorph"
-Documentation = "https://sergeyshk.github.io/esMorph/"
 Issues = "https://github.com/SergeyShk/esMorph/issues"
 
 [tool.maturin]
@@ -100,12 +99,7 @@ select = [
     "UP",   # pyupgrade
     "W",    # pycodestyle warnings
 ]
-ignore = [
-    "E501",
-    "RUF001",
-    "RUF002",
-    "RUF003",
-]
+ignore = ["E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 18

@@ -1,5 +1,1 @@
 blank_issues_enabled: true
-contact_links:
-  - name: Documentation
-    url: https://sergeyshk.github.io/esMorph/
-    about: Description of the analyzer with examples

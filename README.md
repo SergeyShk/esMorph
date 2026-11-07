@@ -26,7 +26,7 @@
 Python 3.11 or newer is required. Pre-release versions are published only on TestPyPI:
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ esmorph
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
 ```
 
 Wheels are built for Linux (Alpine included), macOS and Windows and for the free-threaded Python 3.14t; on other platforms building from source requires [Rust](https://www.rust-lang.org/tools/install) 1.88 or newer. See the [Installation](https://github.com/SergeyShk/esMorph/blob/master/docs/installation.md) page.

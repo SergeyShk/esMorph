@@ -35,13 +35,16 @@ ruff: deps ## Check and format the Python code with ruff
 ifeq ($(MODE), ci)
 	uv run ruff check $(SRC_PATH) $(SCRIPTS_PATH) $(TESTS_PATH)
 	uv run ruff format $(SRC_PATH) $(SCRIPTS_PATH) $(TESTS_PATH) --check
+	git ls-files -z '*.md' | xargs -0 uv run ruff format --check
 else
 	uv run ruff check $(SRC_PATH) $(SCRIPTS_PATH) $(TESTS_PATH) --fix
 	uv run ruff format $(SRC_PATH) $(SCRIPTS_PATH) $(TESTS_PATH)
+	git ls-files -z '*.md' | xargs -0 uv run ruff format
 endif
 
 format: deps ## Format the code
 	uv run ruff format $(SRC_PATH) $(SCRIPTS_PATH) $(TESTS_PATH)
+	git ls-files -z '*.md' | xargs -0 uv run ruff format
 	cargo fmt --all
 
 mypy: deps ## Check the types with mypy

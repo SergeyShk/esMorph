@@ -10,7 +10,7 @@
 Python 3.11 or newer is required. Pre-release versions are published only on TestPyPI:
 
 ``` bash
-pip install --index-url https://test.pypi.org/simple/ esmorph
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ esmorph
 ```
 
 Prebuilt wheels and building from source are described on the [Installation](installation.md) page.

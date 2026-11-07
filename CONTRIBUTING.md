@@ -25,7 +25,7 @@ The Rust module is built when the package is installed into the environment; `uv
 Before submitting a pull request, these must pass:
 
 ```bash
-make lint        # ruff check --fix, ruff format, mypy, cargo fmt, cargo clippy
+make lint        # ruff check --fix, ruff format (code and Python in Markdown), mypy, cargo fmt, cargo clippy
 make test-cov    # pytest with docstring examples (doctest) and the coverage threshold, cargo test
 make docs-build  # mkdocs build --strict, if the documentation changed
 ```
@@ -54,5 +54,7 @@ The pull request description answers two questions: what was done and why. If it
 - `docs/` - MkDocs (Material) documentation, `mkdocs.yml` - navigation and its Spanish translation.
 - `scripts/` - `smoke.py` checks the installed package before publishing, `notices.py` writes the licenses of the crates.
 - `.github/workflows/` - CI (`ci.yml`), publishing (`publish.yml`), documentation (`docs.yml`).
+
+The sdist is made of the files tracked by git (`sdist-generator = "git"`), so that `maturin build --locked` works on it with all the members of the workspace in place. It can only be made inside a git checkout: `uv build` and `python -m build` fail on an unpacked source archive, while `pip install` and `maturin build` of the sdist work anywhere.
 
 The version lives in `pyproject.toml` and `Cargo.toml`, changed together; `tests/test_package.py` checks that they match. Releases are made through GitHub Releases, changes are described in the release notes, there is no separate CHANGELOG file.

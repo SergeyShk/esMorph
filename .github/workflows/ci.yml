@@ -79,7 +79,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --no-default-groups --group test
       - name: Run tests
-        run: uv run --no-sync pytest --cov esmorph ${{ matrix.python-version == '3.14t' && '--cov-fail-under=0' || '' }}
+        run: uv run --no-sync pytest --cov esmorph
       - name: Run Rust tests
         run: cargo test -p esmorph --all-features --locked
 
