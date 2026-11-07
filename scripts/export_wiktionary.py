@@ -303,8 +303,9 @@ def verb_rows(word: str, forms: list[tuple[str, set[str]]]) -> Iterator[tuple[st
 
     Description:
         A table with rows like `abatirme` has a second block for the reflexive verb: `abatirse`,
-        `abatiéndose`, `abátete`. Only the first row of a set of tags stays there. The gerund and
-        the imperative of a `-se` lemma carry its clitic
+        `abatiéndose`, `abátete`. Only the first row of a set of tags stays there. A table of a
+        `-se` lemma, or one with no infinitive of its headword (`ufanar` lists `ufanarse`), holds the
+        reflexive verb alone: its imperative is left out and its gerund loses the clitic
 
     Arguments:
         word (str): Headword
@@ -314,13 +315,16 @@ def verb_rows(word: str, forms: list[tuple[str, set[str]]]) -> Iterator[tuple[st
         Iterator[tuple[str, set[str]]]: The form and its tags
     """
     pronominal = any(tags & NON_FINITE_ROWS and tags & set(PERSONS) for _, tags in forms)
+    reflexive = word.endswith("se") or (word, {"infinitive"}) not in forms
     seen = set()
     for form, tags in forms:
         if not is_verb_form(tags):
             continue
         if tags & FORMS_WITH_CLITICS:
-            if word.endswith("se") and tags & {"gerund", "imperative"}:
+            if reflexive and ("imperative" in tags or (form != word and form.endswith("rse"))):
                 continue
+            if reflexive and "gerund" in tags:
+                form = unicodedata.normalize("NFD", form.removesuffix("se")).replace("\u0301", "")
             if pronominal:
                 key = frozenset(tags)
                 if key in seen:
@@ -353,8 +357,8 @@ def form_of_rows(
     Rows of a sense with `form_of`
 
     Description:
-        A derived word is a lemma of its own. The lemma of a singular feminine noun is both the
-        word itself and its masculine form: treebanks use both
+        A derived word and a word that refers to a phrase are lemmas of their own. The lemma of a
+        singular feminine noun is both the word itself and its masculine form: treebanks use both
 
     Arguments:
         word (str): Headword
@@ -371,13 +375,15 @@ def form_of_rows(
             return
         # The gerund and the imperative of a reflexive verb carry a clitic: `levántate`
         if (
-            target.endswith("se")
+            CLITIC_ENDING.search(target)
             and tags & {"gerund", "imperative"}
             and CLITIC_ENDING.search(word)
         ):
             return
-    lemmas = [] if tags & DERIVED else target.split(" and ")
-    if tags & DERIVED or (pos == "NOUN" and "feminine" in tags and "plural" not in tags):
+    lemmas = target.split(" and ")
+    if tags & DERIVED or (pos != "VERB" and not all(map(clean, lemmas))):
+        lemmas = [word]
+    elif pos == "NOUN" and "feminine" in tags and "plural" not in tags:
         lemmas.append(word)
     for lemma in lemmas:
         for feats in features(pos, tags):
@@ -394,7 +400,7 @@ def lemma_rows(
         word (str): Headword
         pos (str): Part of speech
         tags (set[str]): Tags of the sense with the genders of the headword
-        targets (list[str]): The words the sense names as other spellings
+        targets (list[str]): The word the sense names as another spelling
         entries (set[str]): Headwords of the snapshot
 
     Returns:
@@ -427,11 +433,16 @@ def nominal_rows(
             continue
         if "canonical" in tags and form.lower() != word.lower():
             continue
+        lemma: str | None = word
+        # Some nouns of the other gender have no entry of their own: `exaltador` of `exaltadora`
         if pos == "NOUN" and is_other_gender(tags, gender):
-            continue
+            other = "masculine" if "masculine" in tags else "feminine"
+            lemma = next((name for name, row in forms if row == {other}), None)
+            if lemma is None:
+                continue
         row_tags = tags if tags & GENDERS else tags | gender
         for feats in features(pos, row_tags):
-            yield word, pos, form.removeprefix("before a noun "), feats
+            yield lemma, pos, form.removeprefix("before a noun "), feats
 
 
 def entry_rows(
@@ -469,11 +480,13 @@ def entry_rows(
         # Misspellings and spellings of the Internet: `hay` as `ahí`
         if "misspelling" in tags or ("Internet" in tags and sense["alt_of"]):
             continue
+        # Further targets are glosses as often as spellings: `jevi` refers to `heavy` and `cool`
+        targets = sense["alt_of"][:1]
         if sense["form_of"]:
             yield from form_of_rows(word, pos, tags, sense["form_of"])
-        elif pos != "VERB" or INFINITIVE.search(word):
+        elif pos != "VERB" or all(INFINITIVE.search(name) for name in [word, *targets]):
             own = True
-            yield from lemma_rows(word, pos, tags | gender, sense["alt_of"], entries)
+            yield from lemma_rows(word, pos, tags | gender, targets, entries)
     if own and pos == "VERB":
         for form, tags in verb_rows(word, forms):
             for feats in verb_features(tags):

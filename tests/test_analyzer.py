@@ -145,10 +145,32 @@ def test_normalized_queries(morph):
         "comprársela",
         "dándoselo",
         "abatiéndome",
+        "ufánate",
+        "ufanándose",
+        "ufanarse",
+        "antojándose",
+        "abóyate",
+        "pícatela",
+        "dénsela",
+        "hételas",
     ],
 )
 def test_forms_with_clitics_are_not_word_forms(morph, word):
     assert [a for a in morph.analyze(word) if a.pos == "VERB"] == []
+
+
+@pytest.mark.parametrize(
+    "word, lemma",
+    [
+        ("resintiendo", "resentirse"),
+        ("inmiscuyendo", "inmiscuirse"),
+        ("ufanando", "ufanar"),
+        ("antojando", "antojar"),
+    ],
+)
+def test_plain_gerunds_of_reflexive_verbs(morph, word, lemma):
+    verbs = [a for a in morph.analyze(word) if a.pos == "VERB"]
+    assert [(a.lemma, a.feats) for a in verbs] == [(lemma, {"VerbForm": "Ger"})]
 
 
 def test_participles_have_their_verb_as_the_lemma(morph):
@@ -180,6 +202,20 @@ def test_masculine_nouns_have_no_lemma_of_another_gender(morph, word, lemma, oth
     nouns = {a.lemma for a in morph.analyze(word) if a.pos == "NOUN"}
     assert lemma in nouns
     assert other not in nouns
+
+
+@pytest.mark.parametrize(
+    "word, lemma",
+    [
+        ("exaltador", "exaltador"),
+        ("exaltadores", "exaltador"),
+        ("psicooncólogo", "psicooncólogo"),
+    ],
+)
+def test_masculine_nouns_known_only_from_the_feminine_table(morph, word, lemma):
+    nouns = [a for a in morph.analyze(word) if a.pos == "NOUN"]
+    assert [a.lemma for a in nouns] == [lemma]
+    assert nouns[0].feats["Gender"] == "Masc"
 
 
 def test_feminine_noun_has_both_lemmas(morph):
@@ -218,6 +254,30 @@ def test_references_that_are_no_entries_are_no_lemmas(morph):
         } & set(lemmas(morph, word)), word
 
 
+def test_only_the_first_reference_is_a_lemma(morph):
+    for word, gloss in [
+        ("jevi", "cool"),
+        ("zijo", "son"),
+        ("dcho", "right"),
+        ("pisha", "dude"),
+    ]:
+        assert gloss not in lemmas(morph, word), word
+    assert "hijo" in lemmas(morph, "zijo")
+
+
+@pytest.mark.parametrize(
+    "word, pos",
+    [
+        ("treintaiuno", "NUM"),
+        ("cuarentaicinco", "NUM"),
+        ("denada", "INTJ"),
+        ("noramala", "ADV"),
+    ],
+)
+def test_word_that_refers_to_a_phrase_is_a_lemma(morph, word, pos):
+    assert (word, pos) in [(a.lemma, a.pos) for a in morph.analyze(word)]
+
+
 def test_pronoun_references_are_split(morph):
     assert "él" in lemmas(morph, "lo")
     assert "tú" in lemmas(morph, "te")
@@ -229,6 +289,8 @@ def test_only_infinitives_are_verb_lemmas(morph):
     bare = [a for a in morph.analyze("accelerar") if a.pos == "VERB"]
     assert all(a.feats == {"VerbForm": "Inf"} for a in bare)
     assert {"ser", "ir"} <= lemmas_set(morph, "fué")
+    for word in ["fuer", "quier"]:
+        assert "VERB" not in {a.pos for a in morph.analyze(word)}, word
 
 
 def test_one_sense_with_several_persons_and_tenses(morph):
