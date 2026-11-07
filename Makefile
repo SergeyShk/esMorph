@@ -7,6 +7,8 @@ PACKAGE := esmorph
 DICTIONARY := $(SRC_PATH)/$(PACKAGE)/data/es.dict
 EXPORT_PATH := target/wiktionary
 EXPORT_STAMP := $(EXPORT_PATH)/.exported
+UD_PATH := target/ud
+UD_STAMP := $(UD_PATH)/.exported
 
 help: ## Show the list of commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
@@ -28,14 +30,18 @@ else
 	uv sync --all-groups
 endif
 
-dictionary: $(DICTIONARY) ## Build the dictionary from the snapshot of Wiktionary
+dictionary: $(DICTIONARY) ## Build the dictionary from the snapshot of Wiktionary and the counts of treebanks
 
-$(EXPORT_STAMP): $(SCRIPTS_PATH)/export_wiktionary.py | deps
+$(EXPORT_STAMP): $(SCRIPTS_PATH)/export_wiktionary.py $(SCRIPTS_PATH)/conventions.py data/closed-classes.tsv | deps
 	uv run python $(SCRIPTS_PATH)/export_wiktionary.py $(EXPORT_PATH)
 	touch $@
 
-$(DICTIONARY): $(EXPORT_STAMP) $(wildcard crates/esmorph/src/*.rs crates/esmorph-build/src/*.rs)
-	cargo run --release --locked -p esmorph-build -- $(EXPORT_PATH) $(DICTIONARY)
+$(UD_STAMP): $(SCRIPTS_PATH)/export_ud.py | deps
+	uv run python $(SCRIPTS_PATH)/export_ud.py $(UD_PATH)
+	touch $@
+
+$(DICTIONARY): $(EXPORT_STAMP) $(UD_STAMP) $(wildcard crates/esmorph/src/*.rs crates/esmorph-build/src/*.rs)
+	cargo run --release --locked -p esmorph-build -- $(EXPORT_PATH) $(UD_PATH) $(DICTIONARY)
 
 lock: uv ## Update the lock files to the latest versions of the dependencies
 	uv lock --upgrade
@@ -73,11 +79,11 @@ endif
 
 test: deps dictionary ## Run the tests
 	uv run pytest
-	cargo test -p $(PACKAGE) -p esmorph-dict-es --all-features
+	cargo test -p $(PACKAGE) -p esmorph-dict-es -p esmorph-build --all-features
 
 test-cov: deps dictionary ## Run the tests with the coverage check
 	uv run pytest --cov $(PACKAGE)
-	cargo test -p $(PACKAGE) -p esmorph-dict-es --all-features
+	cargo test -p $(PACKAGE) -p esmorph-dict-es -p esmorph-build --all-features
 
 clean: clean-build clean-pyc clean-test ## Remove all artifacts except the Rust build
 	rm -f .coverage coverage.xml

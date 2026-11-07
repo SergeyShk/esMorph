@@ -18,6 +18,24 @@
     ('camiones', 'camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
     ```
 
+## Order of analyses { #order }
+
+Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features.
+
+=== "Code"
+
+    ``` python
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("casa")][:2]
+    ```
+
+=== "Result"
+
+    ```
+    [('casa', 'NOUN', 0.99), ('casar', 'VERB', 0.01)]
+    ```
+
+Lemmas and features follow the conventions of these treebanks: `la` is a form of `el`, `se` of `él`, `muy` of `mucho`, and verbs have no `-se` in the lemma. An auxiliary verb has both `AUX` and `VERB` analyses, and a participle is also an adjective.
+
 ## Spelling { #spelling }
 
 Case does not matter. A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary.
@@ -44,7 +62,7 @@ Case does not matter. A word spelled as in the dictionary gives the analyses of 
 | `lemmatize(words)` | The lemma of the first analysis of every word; an unknown word in lower case, without the GIL |
 | `is_known(word)` | Whether `analyze` finds the word in the dictionary |
 
-`Analysis` has the fields `word`, `lemma`, `pos`, `feats` and `source`. It is immutable and hashable, and an analyzer and an analysis can be pickled.
+`Analysis` has the fields `word`, `lemma`, `pos`, `feats`, `prob` and `source`. It is immutable and hashable, and an analyzer and an analysis can be pickled.
 
 !!! note "Work in progress"
-    Analyses do not have a meaningful order yet, words with clitics and unknown words have no analyses, and the lemmas of closed classes do not follow the conventions of treebanks: this comes in the next versions.
+    Words with clitics and unknown words have no analyses yet: they come in later versions.

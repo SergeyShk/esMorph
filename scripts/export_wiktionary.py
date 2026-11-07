@@ -25,6 +25,8 @@ from collections.abc import Iterator
 from itertools import product
 from pathlib import Path
 
+import conventions
+
 LICENSE = "CC BY-SA 4.0"
 # The dump of en.wiktionary.org of 2026-10-01, extracted by wiktextract on 2026-10-30 (kaikki.org)
 SNAPSHOT = (
@@ -559,7 +561,9 @@ def export(output: Path) -> int:
         int: Number of rows
     """
     name, url, digest = SNAPSHOT
-    table = rows(download(url, output / "raw" / name, digest))
+    table = conventions.apply(
+        rows(download(url, output / "raw" / name, digest)), conventions.closed_classes()
+    )
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines("\t".join(row) + "\n" for row in sorted(table))
     meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}

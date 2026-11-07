@@ -7,7 +7,10 @@ use fst::Map;
 
 use crate::Error;
 use crate::alphabet::{Alphabet, Key};
-use crate::format::{self, Layout, MAX_LIST, MAX_SPELLINGS, Slice, Storage, Strings, WordValue};
+use crate::format::{
+    self, HAS_PROBABILITIES, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice, Storage,
+    Strings, WordValue,
+};
 use crate::ud::{UdTag, UdTags};
 
 /// Where an analysis comes from
@@ -37,7 +40,7 @@ pub struct Entry {
 }
 
 /// Analysis of a word form
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct Analysis {
     /// The word form as the dictionary spells it: with its accents
@@ -46,6 +49,9 @@ pub struct Analysis {
     pub lemma: String,
     /// Number of the UD tag for `Dictionary::ud_tag`
     pub ud: u16,
+    /// Share of the analysis among the analyses of the word: by the counts of treebanks, equal for
+    /// a word they did not see
+    pub prob: f64,
     /// Where the analysis comes from
     pub source: Source,
     /// The form of the inflection table
@@ -208,26 +214,35 @@ impl Dictionary {
         self.ud.iter()
     }
 
-    /// Analyses of a word form. Case does not matter. A word spelled as in the dictionary gives the
-    /// analyses of that spelling; a word absent as written is looked for without its accents and
-    /// with a lost diaeresis. An unknown word has no analyses
+    /// Analyses of a word form, the most probable first. Case does not matter. A word spelled as in
+    /// the dictionary gives the analyses of that spelling; a word absent as written is looked for
+    /// without its accents and with a lost diaeresis. An unknown word has no analyses
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
         let Some((key, spellings)) = self.lookup(&word) else {
             return Vec::new();
         };
+        let count = spellings.matching(key.marks).count();
         let mut analyses = Vec::new();
         for (marks, records) in spellings.matching(key.marks) {
             let spelling = self.alphabet.spelling(&key, marks);
-            for &record in self.records_at(records).unwrap_or_default() {
+            let (records, probabilities) = analyses_at(self.records(), records).unwrap_or_default();
+            for (at, &record) in records.iter().enumerate() {
                 let entry = Entry {
                     table: (record >> 16) as u16,
                     form: record as u16,
                 };
-                if let Some(analysis) = self.analysis(&spelling, entry) {
+                let share = match probabilities.get(at) {
+                    Some(&millionths) => f64::from(millionths) / f64::from(PROBABILITY_SCALE),
+                    None => 1.0 / records.len() as f64,
+                };
+                if let Some(analysis) = self.analysis(&spelling, entry, share / count as f64) {
                     analyses.push(analysis);
                 }
             }
+        }
+        if count > 1 {
+            analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
         }
         analyses
     }
@@ -264,7 +279,7 @@ impl Dictionary {
 
     /// Analysis of a spelling by a form of a table: the stem of the spelling and the suffix of the
     /// lemma form
-    fn analysis(&self, spelling: &str, entry: Entry) -> Option<Analysis> {
+    fn analysis(&self, spelling: &str, entry: Entry, prob: f64) -> Option<Analysis> {
         let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
         let tables = self.tables();
         let paradigm = self.paradigm(*tables.get(start)?)?;
@@ -283,6 +298,7 @@ impl Dictionary {
             word: spelling.to_owned(),
             lemma,
             ud: cell as u16,
+            prob,
             source: Source::Dictionary,
             entry: Some(entry),
         })
@@ -293,10 +309,6 @@ impl Dictionary {
         let at = number as usize;
         let (start, end) = (*offsets.get(at)? as usize, *offsets.get(at + 1)? as usize);
         self.paradigms().get(start..end)
-    }
-
-    fn records_at(&self, offset: u32) -> Option<&[u32]> {
-        list(self.records(), offset)
     }
 
     fn numbers<T: bytemuck::Pod>(&self, range: &Range<usize>) -> &[T] {
@@ -376,8 +388,8 @@ impl Dictionary {
         Ok(starts)
     }
 
-    /// Lists of analyses exactly cover their section, are not longer than `MAX_LIST`, and their
-    /// tables and forms exist
+    /// Lists of analyses exactly cover their section, are not longer than `MAX_LIST`, their tables
+    /// and forms exist and their probabilities are no more than one
     fn check_records(&self) -> Result<(), Error> {
         let (tables, offsets) = (self.tables(), self.paradigm_offsets());
         // Number of forms of every table: tables and paradigms are checked already
@@ -393,14 +405,26 @@ impl Dictionary {
         let invalid = |msg: &str| Err(Error::Format(msg.into()));
         let mut start = 0;
         while start < lists.len() {
-            let count = lists[start] as usize;
+            let head = lists[start];
+            let count = (head & !HAS_PROBABILITIES) as usize;
             if count > MAX_LIST {
                 return invalid("a list is longer than 255 items");
             }
-            let end = start + 1 + count;
-            let Some(items) = lists.get(start + 1..end) else {
+            let items_end = start + 1 + count;
+            let end = items_end
+                + if head & HAS_PROBABILITIES != 0 {
+                    count
+                } else {
+                    0
+                };
+            let (Some(items), Some(probabilities)) =
+                (lists.get(start + 1..items_end), lists.get(items_end..end))
+            else {
                 return invalid("a list is truncated");
             };
+            if probabilities.iter().any(|&value| value > PROBABILITY_SCALE) {
+                return invalid("a probability is greater than one");
+            }
             let exists = |&record: &u32| {
                 form_counts
                     .get((record >> 16) as usize)
@@ -440,14 +464,22 @@ impl Dictionary {
     }
 }
 
-/// List "length, items" from the place `offset` of the section `lists`
-fn list(lists: &[u32], offset: u32) -> Option<&[u32]> {
+/// List of analyses from the place `offset` of the section: the analyses and their probabilities,
+/// empty if the list has none
+fn analyses_at(lists: &[u32], offset: u32) -> Option<(&[u32], &[u32])> {
     let start = offset as usize + 1;
-    let count = *lists.get(start - 1)? as usize;
+    let head = *lists.get(start - 1)?;
+    let count = (head & !HAS_PROBABILITIES) as usize;
     if count > MAX_LIST {
         return None;
     }
-    lists.get(start..start + count)
+    let (records, rest) = lists.get(start..)?.split_at_checked(count)?;
+    let probabilities = if head & HAS_PROBABILITIES != 0 {
+        rest.get(..count)?
+    } else {
+        &[]
+    };
+    Some((records, probabilities))
 }
 
 /// List "length, triples of numbers" at the start of `lists` and the rest after it
@@ -589,6 +621,79 @@ pub(crate) mod tests {
         ("yo", "PRON", "me", "Person=1"),
         ("guión", "NOUN", "guiones", "Number=Plur"),
     ];
+
+    fn ranked_dictionary() -> Dictionary {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        for &(lemma, pos, form, feats) in FORMS {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        builder
+            .add_form("medicar", "VERB", "medicó", "Tense=Past")
+            .unwrap();
+        builder
+            .add_form("médico", "NOUN", "médico", "Number=Sing")
+            .unwrap();
+        let casas = "Mood=Ind|Number=Sing|Person=2|Tense=Pres|VerbForm=Fin";
+        builder
+            .place("casar", "VERB", "casas", casas, 0, Some(0.75))
+            .unwrap();
+        let plural = "Gender=Fem|Number=Plur";
+        builder
+            .place("casa", "NOUN", "casas", plural, 1, Some(0.25))
+            .unwrap();
+        Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn places_order_the_analyses_and_keep_probabilities() {
+        let analyses = ranked_dictionary().analyze("casas");
+        let summary: Vec<_> = analyses
+            .iter()
+            .map(|a| (a.lemma.as_str(), a.prob))
+            .collect();
+        assert_eq!(summary, [("casar", 0.75), ("casa", 0.25)]);
+    }
+
+    #[test]
+    fn a_list_without_probabilities_has_equal_shares() {
+        let analyses = dictionary().analyze("casas");
+        assert_eq!(analyses.len(), 2);
+        assert!(analyses.iter().all(|analysis| analysis.prob == 0.5));
+        assert_eq!(dictionary().analyze("camión")[0].prob, 1.0);
+    }
+
+    #[test]
+    fn several_spellings_share_the_probability() {
+        let analyses = ranked_dictionary().analyze("medico");
+        let summary: Vec<_> = analyses.iter().map(|a| (a.word.as_str(), a.prob)).collect();
+        assert_eq!(summary.len(), 2);
+        assert!(summary.iter().all(|&(_, prob)| prob == 0.5));
+    }
+
+    #[test]
+    fn a_wrong_probability_is_an_error() {
+        let bytes = {
+            let mut builder = Builder::new();
+            builder.meta("{}");
+            builder.add_form("a", "X", "a", "").unwrap();
+            builder.add_form("a", "Y", "a", "").unwrap();
+            builder.place("a", "X", "a", "", 0, Some(1.0)).unwrap();
+            builder.place("a", "Y", "a", "", 1, Some(0.0)).unwrap();
+            builder.build().unwrap()
+        };
+        assert!(Dictionary::from_bytes(&bytes).is_ok());
+        // The list "2 | flag, two analyses, 1 000 000, 0": a probability over one is refused
+        let million = PROBABILITY_SCALE.to_le_bytes();
+        let at = bytes
+            .windows(4)
+            .position(|window| window == million)
+            .unwrap();
+        let mut damaged = bytes.clone();
+        damaged[at..at + 4].copy_from_slice(&(PROBABILITY_SCALE + 1).to_le_bytes());
+        let error = Dictionary::from_bytes(&with_checksum(damaged)).unwrap_err();
+        assert!(error.to_string().contains("probability"), "{error}");
+    }
 
     pub(crate) fn bytes() -> Vec<u8> {
         let mut builder = Builder::new();

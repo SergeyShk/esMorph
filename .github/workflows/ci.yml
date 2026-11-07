@@ -90,11 +90,21 @@ jobs:
           # On Windows the hash of a script with CRLF differs: any earlier cache fits, the download checks SHA-256
           restore-keys: wiktionary-
           enableCrossOsArchive: true
+      - name: Cache treebanks
+        # The training parts of the treebanks from GitHub are downloaded once per version of the script
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/ud/raw
+          key: ud-${{ hashFiles('scripts/export_ud.py') }}
+          # On Windows the hash of a script with CRLF differs: any earlier cache fits, the download checks SHA-256
+          restore-keys: ud-
+          enableCrossOsArchive: true
       - name: Build dictionary
         shell: bash
         run: |
           uv run --no-sync python scripts/export_wiktionary.py build/wiktionary
-          cargo run --release --locked -p esmorph-build -- build/wiktionary python/esmorph/data/es.dict
+          uv run --no-sync python scripts/export_ud.py build/ud
+          cargo run --release --locked -p esmorph-build -- build/wiktionary build/ud python/esmorph/data/es.dict
           uv run --no-sync python -c "import hashlib; print(hashlib.sha256(open('python/esmorph/data/es.dict', 'rb').read()).hexdigest())"
       - name: Check dictionary size
         # The dictionary goes to crates.io in the archive of the crate esmorph-dict-es, whose limit is
@@ -107,7 +117,7 @@ jobs:
       - name: Run tests
         run: uv run --no-sync pytest --cov esmorph
       - name: Run Rust tests
-        run: cargo test -p esmorph -p esmorph-dict-es --all-features --locked
+        run: cargo test -p esmorph -p esmorph-dict-es -p esmorph-build --all-features --locked
 
   msrv:
     runs-on: ubuntu-latest

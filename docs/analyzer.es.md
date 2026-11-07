@@ -18,6 +18,24 @@
     ('camiones', 'camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
     ```
 
+## Orden de los análisis { #order }
+
+Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes.
+
+=== "Código"
+
+    ``` python
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("casa")][:2]
+    ```
+
+=== "Resultado"
+
+    ```
+    [('casa', 'NOUN', 0.99), ('casar', 'VERB', 0.01)]
+    ```
+
+Los lemas y los rasgos siguen las convenciones de estos treebanks: `la` es una forma de `el`, `se` de `él`, `muy` de `mucho`, y los verbos no llevan `-se` en el lema. Un verbo auxiliar tiene análisis `AUX` y `VERB`, y un participio también es un adjetivo.
+
 ## Ortografía { #spelling }
 
 Las mayúsculas no importan. Una palabra escrita como en el diccionario da los análisis de esa grafía: `publico` no es `público`. Una palabra que no está tal como se escribe se busca sin sus tildes y con la diéresis perdida, y `word` muestra la grafía del diccionario.
@@ -44,7 +62,7 @@ Las mayúsculas no importan. Una palabra escrita como en el diccionario da los a
 | `lemmatize(words)` | El lema del primer análisis de cada palabra; una palabra desconocida en minúsculas, sin el GIL |
 | `is_known(word)` | Si `analyze` encuentra la palabra en el diccionario |
 
-`Analysis` tiene los campos `word`, `lemma`, `pos`, `feats` y `source`. Es inmutable y se puede usar como clave, y tanto el analizador como el análisis se pueden serializar con pickle.
+`Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob` y `source`. Es inmutable y se puede usar como clave, y tanto el analizador como el análisis se pueden serializar con pickle.
 
 !!! note "En desarrollo"
-    Los análisis aún no tienen un orden significativo, las palabras con clíticos y las desconocidas no tienen análisis, y los lemas de las clases cerradas no siguen las convenciones de los treebanks: esto llegará en las próximas versiones.
+    Las palabras con clíticos y las desconocidas aún no tienen análisis: llegarán en próximas versiones.

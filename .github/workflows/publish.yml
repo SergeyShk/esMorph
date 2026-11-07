@@ -81,10 +81,20 @@ jobs:
           # On Windows the hash of a script with CRLF differs: any earlier cache fits, the download checks SHA-256
           restore-keys: wiktionary-
           enableCrossOsArchive: true
+      - name: Cache treebanks
+        # The training parts of the treebanks from GitHub are downloaded once per version of the script
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/ud/raw
+          key: ud-${{ hashFiles('scripts/export_ud.py') }}
+          # On Windows the hash of a script with CRLF differs: any earlier cache fits, the download checks SHA-256
+          restore-keys: ud-
+          enableCrossOsArchive: true
       - name: Build dictionary
         run: |
           uv run --no-sync python scripts/export_wiktionary.py build/wiktionary
-          cargo run --release --locked -p esmorph-build -- build/wiktionary python/esmorph/data/es.dict
+          uv run --no-sync python scripts/export_ud.py build/ud
+          cargo run --release --locked -p esmorph-build -- build/wiktionary build/ud python/esmorph/data/es.dict
           sha256sum python/esmorph/data/es.dict
       - name: Upload dictionary
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

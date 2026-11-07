@@ -3,11 +3,14 @@ import errno
 import json
 import pickle
 import threading
+from pathlib import Path
 
 import pytest
 
 import esmorph
 from esmorph import Analysis, Analyzer
+
+ROOT = Path(__file__).parents[1]
 
 
 @pytest.fixture(scope="module")
@@ -162,8 +165,8 @@ def test_forms_with_clitics_are_not_word_forms(morph, word):
 @pytest.mark.parametrize(
     "word, lemma",
     [
-        ("resintiendo", "resentirse"),
-        ("inmiscuyendo", "inmiscuirse"),
+        ("resintiendo", "resentir"),
+        ("inmiscuyendo", "inmiscuir"),
         ("ufanando", "ufanar"),
         ("antojando", "antojar"),
     ],
@@ -302,7 +305,152 @@ def test_one_sense_with_several_persons_and_tenses(morph):
 
 def test_finite_rows_of_pronominal_tables(morph):
     assert morph.is_known("destoso")
-    assert "resentirse" in lemmas(morph, "resiente") or "resentir" in lemmas(morph, "resiente")
+    assert "resentir" in lemmas(morph, "resiente")
+
+
+@pytest.mark.parametrize(
+    "word, lemma",
+    [
+        ("resiente", "resentir"),
+        ("quejarse", "quejar"),
+        ("destoso", "destoser"),
+        ("destoser", "destoser"),
+    ],
+)
+def test_verbs_have_no_clitic_in_the_lemma(morph, word, lemma):
+    assert {a.lemma for a in morph.analyze(word) if a.pos == "VERB"} == {lemma}
+
+
+@pytest.mark.parametrize(
+    "word, lemma, pos",
+    [
+        ("la", "el", "DET"),
+        ("los", "el", "DET"),
+        ("un", "uno", "DET"),
+        ("una", "uno", "DET"),
+        ("se", "él", "PRON"),
+        ("me", "yo", "PRON"),
+        ("te", "tú", "PRON"),
+        ("usted", "tú", "PRON"),
+        ("esto", "este", "PRON"),
+        ("éste", "este", "PRON"),
+        ("del", "de", "ADP"),
+        ("al", "a", "ADP"),
+        ("muy", "mucho", "ADV"),
+        ("tan", "tanto", "ADV"),
+        ("buena", "buen", "ADJ"),
+        ("malos", "mal", "ADJ"),
+        ("primer", "primero", "ADJ"),
+        ("cuando", "cuando", "SCONJ"),
+    ],
+)
+def test_lemmas_of_the_treebanks(morph, word, lemma, pos):
+    assert (lemma, pos) in {(a.lemma, a.pos) for a in morph.analyze(word)}, word
+    assert morph.analyze(word)[0].lemma == lemma, word
+
+
+@pytest.mark.parametrize(
+    "word, pos, feats",
+    [
+        ("el", "DET", {"Definite": "Def", "PronType": "Art"}),
+        ("mi", "DET", {"Person": "1", "Poss": "Yes"}),
+        ("no", "ADV", {"Polarity": "Neg"}),
+        ("más", "ADV", {"Degree": "Cmp"}),
+        ("dónde", "ADV", {"PronType": "Int"}),
+        ("mejores", "ADJ", {"Degree": "Cmp", "Number": "Plur"}),
+        ("primera", "ADJ", {"NumType": "Ord", "Gender": "Fem"}),
+        ("máximo", "ADJ", {"Degree": "Sup"}),
+        ("dos", "NUM", {"NumType": "Card", "Number": "Plur"}),
+        ("treintaiuno", "NUM", {"NumType": "Card", "Number": "Plur"}),
+        ("doscientas", "NUM", {"NumType": "Card", "Gender": "Fem"}),
+    ],
+)
+def test_lexical_features(morph, word, pos, feats):
+    assert any(a.pos == pos and feats.items() <= a.feats.items() for a in morph.analyze(word)), (
+        word
+    )
+
+
+def test_clitics_have_their_case_apart(morph):
+    cases = {a.feats.get("Case") for a in morph.analyze("se")}
+    assert cases == {"Acc", "Dat", None}
+    assert morph.analyze("le")[0].feats["Case"] == "Dat"
+
+
+def test_auxiliaries_are_also_verbs(morph):
+    for word, lemma in [("ha", "haber"), ("fue", "ser"), ("puede", "poder")]:
+        pairs = {(a.lemma, a.pos) for a in morph.analyze(word)}
+        assert {(lemma, "AUX"), (lemma, "VERB")} <= pairs, word
+    assert "AUX" not in {a.pos for a in morph.analyze("come")}
+
+
+def test_participles_are_also_adjectives(morph):
+    analyses = {a.pos: a for a in morph.analyze("compradas") if a.pos in ("VERB", "ADJ")}
+    assert analyses["VERB"].lemma == "comprar"
+    assert analyses["VERB"].feats["Tense"] == "Past"
+    assert analyses["ADJ"].lemma == "comprado"
+    assert analyses["ADJ"].feats == {"Gender": "Fem", "Number": "Plur", "VerbForm": "Part"}
+    adjectives = [a for a in morph.analyze("cansado") if a.pos == "ADJ"]
+    assert [a.feats.get("VerbForm") for a in adjectives] == ["Part"]
+
+
+def test_absolute_superlatives(morph):
+    adjective = next(a for a in morph.analyze("grandísimas") if a.pos == "ADJ")
+    assert adjective.lemma == "grandísimo"
+    assert adjective.feats["Degree"] == "Abs"
+
+
+def test_names_have_no_features(morph):
+    names = [a for a in morph.analyze("madrid") if a.pos == "PROPN"]
+    assert names and all(a.feats == {} for a in names)
+
+
+def test_closed_class_out_of_the_table_only_without_other_analyses(morph):
+    assert "ADP" not in {a.pos for a in morph.analyze("hace")}
+    assert "ADP" not in {a.pos for a in morph.analyze("debajo")}
+    assert "ADP" in {a.pos for a in morph.analyze("apud")}
+
+
+@pytest.mark.parametrize(
+    "word, lemma, pos",
+    [
+        ("casa", "casa", "NOUN"),
+        ("la", "el", "DET"),
+        ("ha", "haber", "AUX"),
+        ("sobre", "sobre", "ADP"),
+        ("sólo", "sólo", "ADV"),
+    ],
+)
+def test_the_most_probable_analysis_is_first(morph, word, lemma, pos):
+    first = morph.analyze(word)[0]
+    assert (first.lemma, first.pos) == (lemma, pos)
+
+
+def test_most_common_features_are_first(morph):
+    assert morph.analyze("come")[0].feats["Mood"] == "Ind"
+
+
+def test_probabilities(morph):
+    for word in ["casa", "la", "que", "como", "fue", "publico", "se"]:
+        probs = [a.prob for a in morph.analyze(word)]
+        assert probs == sorted(probs, reverse=True), word
+        assert sum(probs) == pytest.approx(1, abs=1e-3), word
+    assert morph.analyze("camión")[0].prob == 1
+    # No treebank has this word: its analyses are equal and still ordered
+    probs = {round(a.prob, 6) for a in morph.analyze("ababillamos")}
+    assert len(probs) == 1
+
+
+def test_table_of_closed_classes():
+    rows = (ROOT / "data" / "closed-classes.tsv").read_text(encoding="utf-8").splitlines()
+    assert rows == sorted(set(rows))
+    for row in rows:
+        lemma, pos, form, feats = row.split("\t")
+        assert lemma == lemma.lower(), row
+        assert form == form.lower(), row
+        assert pos in {"ADJ", "ADP", "ADV", "CCONJ", "DET", "NUM", "PRON", "SCONJ"}, row
+        names = [] if feats == "_" else [feat.split("=")[0] for feat in feats.split("|")]
+        assert names == sorted(names, key=str.lower), row
 
 
 def test_canonical_rows_are_the_word_itself(morph):
@@ -391,7 +539,7 @@ def test_analysis_equality_and_hash(morph):
 def test_analysis_repr(morph):
     assert repr(morph.analyze("camión")[0]) == (
         "Analysis(word='camión', lemma='camión', pos='NOUN', "
-        "feats={'Gender': 'Masc', 'Number': 'Sing'}, source='dictionary')"
+        "feats={'Gender': 'Masc', 'Number': 'Sing'}, prob=1.000000, source='dictionary')"
     )
 
 
@@ -409,7 +557,7 @@ def test_analysis_pickle_and_copy(morph):
 
 def test_analysis_cannot_be_made_with_an_unknown_source():
     with pytest.raises(ValueError, match="Unknown source"):
-        esmorph._esmorph._analysis("a", "a", "NOUN", "", "other")
+        esmorph._esmorph._analysis("a", "a", "NOUN", "", 1.0, "other")
 
 
 def test_analyzer_pickle(morph, tmp_path):

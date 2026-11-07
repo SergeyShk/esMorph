@@ -36,6 +36,8 @@ impl Tag {
 ///     lemma (str): The lemma
 ///     pos (str): The part of speech of Universal Dependencies
 ///     feats (dict[str, str]): The Universal Dependencies features
+///     prob (float): Share of the analysis among the analyses of the word, by the counts of
+///         treebanks; equal for a word they did not see
 ///     source (str): Where the analysis comes from: "dictionary"
 ///
 /// Example:
@@ -49,6 +51,8 @@ struct Analysis {
     word: String,
     #[pyo3(get)]
     lemma: String,
+    #[pyo3(get)]
+    prob: f64,
     #[pyo3(get)]
     source: &'static str,
     tag: Arc<Tag>,
@@ -72,11 +76,12 @@ impl Analysis {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "Analysis(word={}, lemma={}, pos={}, feats={}, source={})",
+            "Analysis(word={}, lemma={}, pos={}, feats={}, prob={:.6}, source={})",
             py_repr(py, &self.word)?,
             py_repr(py, &self.lemma)?,
             py_repr(py, &self.tag.pos)?,
             self.feats(py)?.repr()?,
+            self.prob,
             py_repr(py, self.source)?
         ))
     }
@@ -86,12 +91,20 @@ impl Analysis {
         self.word == other.word
             && self.lemma == other.lemma
             && self.tag == other.tag
+            && self.prob == other.prob
             && self.source == other.source
     }
 
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        (&self.word, &self.lemma, &self.tag, self.source).hash(&mut hasher);
+        (
+            &self.word,
+            &self.lemma,
+            &self.tag,
+            self.prob.to_bits(),
+            self.source,
+        )
+            .hash(&mut hasher);
         hasher.finish()
     }
 
@@ -104,6 +117,7 @@ impl Analysis {
                 self.lemma.clone(),
                 self.tag.pos.clone(),
                 self.tag.feats.clone(),
+                self.prob,
                 self.source.to_owned(),
             ),
         ))
@@ -111,7 +125,7 @@ impl Analysis {
 }
 
 /// Arguments of `_analysis`: the fields of an analysis for pickle
-type AnalysisState = (String, String, String, String, String);
+type AnalysisState = (String, String, String, String, f64, String);
 
 /// Restores an analysis from pickle
 #[pyfunction]
@@ -120,6 +134,7 @@ fn _analysis(
     lemma: String,
     pos: String,
     feats: String,
+    prob: f64,
     source: &str,
 ) -> PyResult<Analysis> {
     let source = match source {
@@ -133,6 +148,7 @@ fn _analysis(
     Ok(Analysis {
         word,
         lemma,
+        prob,
         source,
         tag: Arc::new(Tag { pos, feats }),
     })
@@ -141,10 +157,10 @@ fn _analysis(
 /// Morphological analyzer of Spanish
 ///
 /// Description:
-///     Finds the analyses of a word form in the dictionary. Case does not matter. A word spelled as
-///     in the dictionary gives the analyses of that spelling; a word absent as written is looked
-///     for without its accents and with a lost diaeresis. The dictionary is loaded once when the
-///     analyzer is created; an analyzer can be used from several threads
+///     Finds the analyses of a word form in the dictionary, the most probable first. Case does not
+///     matter. A word spelled as in the dictionary gives the analyses of that spelling; a word
+///     absent as written is looked for without its accents and with a lost diaeresis. The dictionary
+///     is loaded once when the analyzer is created; an analyzer can be used from several threads
 ///
 /// Arguments:
 ///     path (str | os.PathLike | None): Path to a dictionary file; by default the dictionary of the
@@ -371,6 +387,7 @@ impl Analyzer {
                 Some(Analysis {
                     tag: Arc::clone(self.tags.get(usize::from(analysis.ud))?),
                     source: analysis.source.as_str(),
+                    prob: analysis.prob,
                     word: analysis.word,
                     lemma: analysis.lemma,
                 })

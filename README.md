@@ -52,7 +52,7 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps        # create the environment, install the dependencies and build the Rust module
-make dictionary  # build the dictionary from the snapshot of Wiktionary
+make dictionary  # build the dictionary from the snapshot of Wiktionary and the counts of treebanks
 make test        # run the Python tests, the docstring examples (doctest) and the Rust tests
 make lint        # ruff, mypy, rustfmt and clippy
 ```
