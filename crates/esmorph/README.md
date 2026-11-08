@@ -6,9 +6,10 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 - The analyses of a word form by a dictionary built from Wiktionary and treebanks, the most probable first: the lemma,
   the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features.
 - Case does not matter. A word absent as written is looked for without its accents and with a lost diaeresis.
+- A verb with enclitic pronouns is analyzed as its verb, with the words of the token: `dámelo` is `da` + `me` + `lo`.
 - The dictionary is mapped into memory or read from the data of the program without copies.
 
-Work in progress: words with clitics, unknown words and inflection come in the next versions.
+Work in progress: unknown words and inflection come in the next versions.
 
 ## Installation
 

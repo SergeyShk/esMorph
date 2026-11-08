@@ -20,6 +20,7 @@
 mod alphabet;
 #[cfg(any(test, feature = "build"))]
 mod builder;
+mod clitics;
 mod dictionary;
 mod error;
 mod format;

@@ -97,7 +97,8 @@ def with_table(rows: set[Row], table: set[Row]) -> set[Row]:
 
 def verb_lemmas(rows: set[Row]) -> set[Row]:
     """
-    Verbs without `-se` in the lemma; a verb known only with it gets its plain infinitive
+    Verbs without `-se` in the lemma; a verb known only with it gets its plain infinitive. An
+    infinitive with `-se` is a verb with a clitic, which the analyzer splits
 
     Arguments:
         rows (set[Row]): The rows
@@ -110,6 +111,8 @@ def verb_lemmas(rows: set[Row]) -> set[Row]:
         if pos == "VERB" and lemma.endswith("rse"):
             lemma = lemma.removesuffix("se")
             result.add((lemma, pos, lemma, "VerbForm=Inf"))
+        if pos == "VERB" and form != lemma and form.endswith("rse") and feats == "VerbForm=Inf":
+            continue
         result.add((lemma, pos, form, feats))
     return result
 

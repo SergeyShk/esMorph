@@ -36,6 +36,22 @@ Los análisis van del más probable al menos probable. `prob` es la parte de un 
 
 Los lemas y los rasgos siguen las convenciones de estos treebanks: `la` es una forma de `el`, `se` de `él`, `muy` de `mucho`, y los verbos no llevan `-se` en el lema. Un verbo auxiliar tiene análisis `AUX` y `VERB`, y un participio también es un adjetivo.
 
+## Palabras con clíticos { #clitics }
+
+Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. `del` y `al` también tienen sus dos palabras. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`.
+
+=== "Código"
+
+    ``` python
+    [(a.lemma, a.pos, a.words, a.source) for a in morph.analyze("dámelo")]
+    ```
+
+=== "Resultado"
+
+    ```
+    [('dar', 'VERB', ('da', 'me', 'lo'), 'clitics')]
+    ```
+
 ## Ortografía { #spelling }
 
 Las mayúsculas no importan. Una palabra escrita como en el diccionario da los análisis de esa grafía: `publico` no es `público`. Una palabra que no está tal como se escribe se busca sin sus tildes y con la diéresis perdida, y `word` muestra la grafía del diccionario.
@@ -60,9 +76,9 @@ Las mayúsculas no importan. Una palabra escrita como en el diccionario da los a
 | `analyze(word)` | La lista de `Analysis`; vacía para una palabra desconocida |
 | `analyze_many(words)` | Lo mismo para una colección de palabras, sin el GIL |
 | `lemmatize(words)` | El lema del primer análisis de cada palabra; una palabra desconocida en minúsculas, sin el GIL |
-| `is_known(word)` | Si `analyze` encuentra la palabra en el diccionario |
+| `is_known(word)` | Si `analyze` encuentra análisis de la palabra |
 
-`Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob` y `source`. Es inmutable y se puede usar como clave, y tanto el analizador como el análisis se pueden serializar con pickle.
+`Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob`, `words` y `source`. Es inmutable y se puede usar como clave, y tanto el analizador como el análisis se pueden serializar con pickle.
 
 !!! note "En desarrollo"
-    Las palabras con clíticos y las desconocidas aún no tienen análisis: llegarán en próximas versiones.
+    Las palabras desconocidas aún no tienen análisis: llegarán en próximas versiones.

@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use pyo3::exceptions::{PyOSError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString, PyType};
+use pyo3::types::{PyDict, PyString, PyTuple, PyType};
 
 /// How many words `analyze_many` and `lemmatize` analyze at a time without the GIL: results are
 /// converted and Ctrl+C is checked between the chunks
@@ -32,19 +32,26 @@ impl Tag {
 /// Analysis of a word form
 ///
 /// Attributes:
-///     word (str): The word form as the dictionary spells it, with its accents
+///     word (str): The word form as the dictionary spells it, with its accents; a verb with
+///         clitics as written, in lower case
 ///     lemma (str): The lemma
 ///     pos (str): The part of speech of Universal Dependencies
 ///     feats (dict[str, str]): The Universal Dependencies features
 ///     prob (float): Share of the analysis among the analyses of the word, by the counts of
 ///         treebanks; equal for a word they did not see
-///     source (str): Where the analysis comes from: "dictionary"
+///     words (tuple[str, ...]): Words of the token: a verb and its clitics, the words of a
+///         contraction, or the word itself; the analysis describes the first of them
+///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the
+///         dictionary with clitics
 ///
 /// Example:
 ///     >>> from esmorph import Analyzer
 ///     >>> analysis = Analyzer().analyze("camion")[0]
 ///     >>> analysis.word, analysis.lemma, analysis.pos, analysis.feats
 ///     ('camión', 'camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Sing'})
+///     >>> analysis = Analyzer().analyze("dámelo")[0]
+///     >>> analysis.lemma, analysis.pos, analysis.words
+///     ('dar', 'VERB', ('da', 'me', 'lo'))
 #[pyclass(frozen, module = "esmorph")]
 struct Analysis {
     #[pyo3(get)]
@@ -56,6 +63,8 @@ struct Analysis {
     #[pyo3(get)]
     source: &'static str,
     tag: Arc<Tag>,
+    /// Words of a token of several; empty for one word
+    words: Vec<String>,
 }
 
 #[pymethods]
@@ -74,14 +83,24 @@ impl Analysis {
         Ok(feats)
     }
 
+    #[getter]
+    fn words<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        if self.words.is_empty() {
+            PyTuple::new(py, [&self.word])
+        } else {
+            PyTuple::new(py, &self.words)
+        }
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "Analysis(word={}, lemma={}, pos={}, feats={}, prob={:.6}, source={})",
+            "Analysis(word={}, lemma={}, pos={}, feats={}, prob={:.6}, words={}, source={})",
             py_repr(py, &self.word)?,
             py_repr(py, &self.lemma)?,
             py_repr(py, &self.tag.pos)?,
             self.feats(py)?.repr()?,
             self.prob,
+            self.words(py)?.repr()?,
             py_repr(py, self.source)?
         ))
     }
@@ -92,6 +111,7 @@ impl Analysis {
             && self.lemma == other.lemma
             && self.tag == other.tag
             && self.prob == other.prob
+            && self.words == other.words
             && self.source == other.source
     }
 
@@ -102,6 +122,7 @@ impl Analysis {
             &self.lemma,
             &self.tag,
             self.prob.to_bits(),
+            &self.words,
             self.source,
         )
             .hash(&mut hasher);
@@ -118,6 +139,7 @@ impl Analysis {
                 self.tag.pos.clone(),
                 self.tag.feats.clone(),
                 self.prob,
+                self.words.clone(),
                 self.source.to_owned(),
             ),
         ))
@@ -125,7 +147,7 @@ impl Analysis {
 }
 
 /// Arguments of `_analysis`: the fields of an analysis for pickle
-type AnalysisState = (String, String, String, String, f64, String);
+type AnalysisState = (String, String, String, String, f64, Vec<String>, String);
 
 /// Restores an analysis from pickle
 #[pyfunction]
@@ -135,10 +157,12 @@ fn _analysis(
     pos: String,
     feats: String,
     prob: f64,
+    words: Vec<String>,
     source: &str,
 ) -> PyResult<Analysis> {
     let source = match source {
         "dictionary" => esmorph::Source::Dictionary.as_str(),
+        "clitics" => esmorph::Source::Clitics.as_str(),
         _ => {
             return Err(PyValueError::new_err(format!(
                 "Unknown source of an analysis: {source}"
@@ -151,6 +175,7 @@ fn _analysis(
         prob,
         source,
         tag: Arc::new(Tag { pos, feats }),
+        words,
     })
 }
 
@@ -159,8 +184,9 @@ fn _analysis(
 /// Description:
 ///     Finds the analyses of a word form in the dictionary, the most probable first. Case does not
 ///     matter. A word spelled as in the dictionary gives the analyses of that spelling; a word
-///     absent as written is looked for without its accents and with a lost diaeresis. The dictionary
-///     is loaded once when the analyzer is created; an analyzer can be used from several threads
+///     absent as written is looked for without its accents and with a lost diaeresis. A word absent
+///     from the dictionary may be a verb with clitics (`dámelo`). The dictionary is loaded once
+///     when the analyzer is created; an analyzer can be used from several threads
 ///
 /// Arguments:
 ///     path (str | os.PathLike | None): Path to a dictionary file; by default the dictionary of the
@@ -346,13 +372,14 @@ impl Analyzer {
         Ok(result)
     }
 
-    /// Whether the word form is in the dictionary
+    /// Whether the word form has analyses
     ///
     /// Arguments:
     ///     word (str): The word form
     ///
     /// Returns:
-    ///     bool: Whether analyze finds the word form in the dictionary
+    ///     bool: Whether analyze finds the word form in the dictionary or as a verb of it with
+    ///     clitics
     ///
     /// Raises:
     ///     TypeError: If the word is not a string
@@ -390,6 +417,7 @@ impl Analyzer {
                     prob: analysis.prob,
                     word: analysis.word,
                     lemma: analysis.lemma,
+                    words: analysis.words,
                 })
             })
             .collect()

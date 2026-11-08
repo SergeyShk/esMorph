@@ -88,6 +88,7 @@ INFINITIVE = re.compile(r"[aeiíoó]r(se)?$")
 # The finite rows of a pronominal table are `me destoso`
 TABLE_CLITIC = re.compile(r"^(me|te|se|nos|os) ")
 CLITIC_ENDING = re.compile(r"(me|te|se|nos|os|lo|la|le|los|las|les)$")
+REFLEXIVE_ENDING = re.compile(r"(nos|os|te|se)$")
 NON_FINITE_ROWS = {"infinitive", "gerund"}
 FORMS_WITH_CLITICS = NON_FINITE_ROWS | {"imperative"}
 # A sense "diminutive of" names another word: the treebanks keep such a word as its own lemma
@@ -323,8 +324,12 @@ def verb_rows(word: str, forms: list[tuple[str, set[str]]]) -> Iterator[tuple[st
         if not is_verb_form(tags):
             continue
         if tags & FORMS_WITH_CLITICS:
-            if reflexive and ("imperative" in tags or (form != word and form.endswith("rse"))):
+            if reflexive and form != word and form.endswith("rse"):
                 continue
+            if reflexive and "imperative" in tags:
+                form = plain_imperative(form, tags)
+                if not form:
+                    continue
             if reflexive and "gerund" in tags:
                 form = unicodedata.normalize("NFD", form.removesuffix("se")).replace("\u0301", "")
             if pronominal:
@@ -333,6 +338,30 @@ def verb_rows(word: str, forms: list[tuple[str, set[str]]]) -> Iterator[tuple[st
                     continue
                 seen.add(key)
         yield TABLE_CLITIC.sub("", form), tags
+
+
+def plain_imperative(form: str, tags: set[str]) -> str:
+    """
+    The imperative of a table of a reflexive verb without its clitic: a host of clitics
+
+    Arguments:
+        form (str): The row of the table
+        tags (set[str]): Its tags
+
+    Returns:
+        str: The imperative: `resiéntete` is `resiente`, `quejémonos` is `quejemos`, `quejaos` is
+        `quejad`; empty for a form of `vos`, whose accent the clitic removes (`quejate`), and for a
+        form without a clitic
+    """
+    ending = REFLEXIVE_ENDING.search(form)
+    if "vos-form" in tags or not ending:
+        return ""
+    stem = unicodedata.normalize("NFD", form[: ending.start()]).replace("\u0301", "")
+    if ending[1] == "nos":
+        stem += "s"
+    elif ending[1] == "os" and stem.endswith(("a", "e", "i")):
+        stem += "d"
+    return unicodedata.normalize("NFC", stem)
 
 
 def is_other_gender(tags: set[str], gender: set[str]) -> bool:

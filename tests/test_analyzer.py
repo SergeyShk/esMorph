@@ -33,6 +33,7 @@ def test_analysis_fields(morph):
     assert analysis.lemma == "camión"
     assert analysis.pos == "NOUN"
     assert analysis.feats == {"Gender": "Masc", "Number": "Sing"}
+    assert analysis.words == ("camión",)
     assert analysis.source == "dictionary"
 
 
@@ -159,7 +160,59 @@ def test_normalized_queries(morph):
     ],
 )
 def test_forms_with_clitics_are_not_word_forms(morph, word):
-    assert [a for a in morph.analyze(word) if a.pos == "VERB"] == []
+    # The dictionary has no such form: the verb comes from the rule of clitics
+    assert all(a.source == "clitics" for a in morph.analyze(word) if a.pos == "VERB"), word
+
+
+@pytest.mark.parametrize(
+    "word, lemma, words",
+    [
+        ("dámelo", "dar", ("da", "me", "lo")),
+        ("Dámelo", "dar", ("da", "me", "lo")),
+        ("damelo", "dar", ("da", "me", "lo")),
+        ("hacerlo", "hacer", ("hacer", "lo")),
+        ("diciéndoselo", "decir", ("diciendo", "se", "lo")),
+        ("oírlo", "oír", ("oír", "lo")),
+        ("déme", "dar", ("dé", "me")),
+        ("vámonos", "ir", ("vamos", "nos")),
+        ("digámoselo", "decir", ("digamos", "se", "lo")),
+        ("sentaos", "sentar", ("sentad", "os")),
+        ("cuéntenos", "contar", ("cuente", "nos")),
+        ("llámenos", "llamar", ("llame", "nos")),
+        ("vérselas", "ver", ("ver", "se", "las")),
+        ("quejarse", "quejar", ("quejar", "se")),
+        ("resiéntete", "resentir", ("resiente", "te")),
+        ("quejémonos", "quejar", ("quejemos", "nos")),
+    ],
+)
+def test_words_with_clitics(morph, word, lemma, words):
+    analysis = morph.analyze(word)[0]
+    assert (analysis.lemma, analysis.pos, analysis.words) == (lemma, "VERB", words)
+    assert analysis.source == "clitics"
+    assert analysis.word == word.lower()
+    assert sum(a.prob for a in morph.analyze(word)) == pytest.approx(1)
+    assert morph.is_known(word)
+    assert morph.lemmatize([word]) == [lemma]
+
+
+def test_hosts_of_clitics_are_infinitives_gerunds_and_imperatives(morph):
+    for word in ["dámelo", "hacerlo", "diciéndoselo", "vámonos"]:
+        for analysis in morph.analyze(word):
+            assert (
+                analysis.feats.get("VerbForm") in ("Inf", "Ger") or analysis.feats["Mood"] == "Imp"
+            )
+
+
+def test_words_of_the_dictionary_are_not_split(morph):
+    assert {a.source for a in morph.analyze("comete")} == {"dictionary"}
+    assert morph.analyze("cómetelo")[0].words == ("come", "te", "lo")
+    assert not morph.is_known("kayla")
+
+
+def test_words_of_contractions(morph):
+    assert morph.analyze("del")[0].words == ("de", "el")
+    assert morph.analyze("Al")[0].words == ("a", "el")
+    assert morph.analyze("camión")[0].words == ("camión",)
 
 
 @pytest.mark.parametrize(
@@ -600,7 +653,8 @@ def test_analysis_equality_and_hash(morph):
 def test_analysis_repr(morph):
     assert repr(morph.analyze("camión")[0]) == (
         "Analysis(word='camión', lemma='camión', pos='NOUN', "
-        "feats={'Gender': 'Masc', 'Number': 'Sing'}, prob=1.000000, source='dictionary')"
+        "feats={'Gender': 'Masc', 'Number': 'Sing'}, prob=1.000000, words=('camión',), "
+        "source='dictionary')"
     )
 
 
@@ -618,7 +672,7 @@ def test_analysis_pickle_and_copy(morph):
 
 def test_analysis_cannot_be_made_with_an_unknown_source():
     with pytest.raises(ValueError, match="Unknown source"):
-        esmorph._esmorph._analysis("a", "a", "NOUN", "", 1.0, "other")
+        esmorph._esmorph._analysis("a", "a", "NOUN", "", 1.0, [], "other")
 
 
 def test_analyzer_pickle(morph, tmp_path):
