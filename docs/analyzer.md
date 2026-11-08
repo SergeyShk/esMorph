@@ -36,9 +36,25 @@ Analyses go from the most probable to the least. `prob` is the share of an analy
 
 Lemmas and features follow the conventions of these treebanks: `la` is a form of `el`, `se` of `él`, `muy` of `mucho`, and verbs have no `-se` in the lemma. An auxiliary verb has both `AUX` and `VERB` analyses, and a participle is also an adjective.
 
+## Words with clitics { #clitics }
+
+A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. `del` and `al` also have their two words. A word of the dictionary is not split: `comete` is a form of `cometer`.
+
+=== "Code"
+
+    ``` python
+    [(a.lemma, a.pos, a.words, a.source) for a in morph.analyze("dámelo")]
+    ```
+
+=== "Result"
+
+    ```
+    [('dar', 'VERB', ('da', 'me', 'lo'), 'clitics')]
+    ```
+
 ## Spelling { #spelling }
 
-Case does not matter. A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary.
+Case does not matter. A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary; for a verb with clitics `word` is the token as written, in lower case.
 
 === "Code"
 
@@ -60,9 +76,9 @@ Case does not matter. A word spelled as in the dictionary gives the analyses of 
 | `analyze(word)` | The list of `Analysis`; empty for an unknown word |
 | `analyze_many(words)` | The same for a collection of words, without the GIL |
 | `lemmatize(words)` | The lemma of the first analysis of every word; an unknown word in lower case, without the GIL |
-| `is_known(word)` | Whether `analyze` finds the word in the dictionary |
+| `is_known(word)` | Whether `analyze` finds analyses of the word |
 
-`Analysis` has the fields `word`, `lemma`, `pos`, `feats`, `prob` and `source`. It is immutable and hashable, and an analyzer and an analysis can be pickled.
+`Analysis` has the fields `word`, `lemma`, `pos`, `feats`, `prob`, `words` and `source`. It is immutable and hashable, and an analyzer and an analysis can be pickled.
 
 !!! note "Work in progress"
-    Words with clitics and unknown words have no analyses yet: they come in later versions.
+    Unknown words have no analyses yet: they come in later versions.

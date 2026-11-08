@@ -7,6 +7,7 @@ use fst::Map;
 
 use crate::Error;
 use crate::alphabet::{Alphabet, Key};
+use crate::clitics;
 use crate::format::{
     self, HAS_PROBABILITIES, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice, Storage,
     Strings, WordValue,
@@ -19,13 +20,16 @@ use crate::ud::{UdTag, UdTags};
 pub enum Source {
     /// The word form is in the dictionary
     Dictionary,
+    /// The word form is a verb of the dictionary with enclitic pronouns
+    Clitics,
 }
 
 impl Source {
-    /// Name of the source: `dictionary`
+    /// Name of the source: `dictionary`, `clitics`
     pub fn as_str(self) -> &'static str {
         match self {
             Source::Dictionary => "dictionary",
+            Source::Clitics => "clitics",
         }
     }
 }
@@ -43,7 +47,8 @@ pub struct Entry {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct Analysis {
-    /// The word form as the dictionary spells it: with its accents
+    /// The word form as the dictionary spells it: with its accents; a verb with clitics as written,
+    /// in lower case
     pub word: String,
     /// The lemma
     pub lemma: String,
@@ -56,6 +61,9 @@ pub struct Analysis {
     pub source: Source,
     /// The form of the inflection table
     pub entry: Option<Entry>,
+    /// Words of a token of several: a verb and its clitics (`da`, `me`, `lo`) or a contraction
+    /// (`de`, `el`); empty for a token of one word. The analysis describes the first of them
+    pub words: Vec<String>,
 }
 
 /// Dictionary of word forms
@@ -75,6 +83,17 @@ pub struct Dictionary {
     table_offsets: Vec<u32>,
     words: Map<Slice>,
     word_count: usize,
+    /// Which hosts of clitics a UD tag gives, by number
+    hosts: Vec<Host>,
+}
+
+/// A form that takes clitics
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Host {
+    No,
+    /// An infinitive or a gerund
+    NonFinite,
+    Imperative,
 }
 
 impl std::fmt::Debug for Dictionary {
@@ -180,6 +199,7 @@ impl Dictionary {
             words: automaton(&storage, &layout.words)?,
             table_offsets: Vec::new(),
             word_count: 0,
+            hosts: Vec::new(),
             layout,
             storage: Arc::clone(&storage),
         };
@@ -187,6 +207,21 @@ impl Dictionary {
         dictionary.table_offsets = dictionary.check_tables()?;
         dictionary.check_records()?;
         dictionary.word_count = dictionary.words.len() + dictionary.check_variants()?;
+        dictionary.hosts = dictionary
+            .ud
+            .iter()
+            .map(|tag| {
+                if !matches!(tag.pos(), "VERB" | "AUX") {
+                    Host::No
+                } else if matches!(tag.feat("VerbForm"), Some("Inf" | "Ger")) {
+                    Host::NonFinite
+                } else if tag.feat("Mood") == Some("Imp") {
+                    Host::Imperative
+                } else {
+                    Host::No
+                }
+            })
+            .collect();
         Ok(dictionary)
     }
 
@@ -217,10 +252,104 @@ impl Dictionary {
 
     /// Analyses of a word form, the most probable first. Case does not matter. A word spelled as in
     /// the dictionary gives the analyses of that spelling; a word absent as written is looked for
-    /// without its accents and with a lost diaeresis. An unknown word has no analyses
+    /// without its accents and with a lost diaeresis. A word absent from the dictionary may be a
+    /// verb with clitics (`dámelo`). An unknown word has no analyses
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
-        let Some((key, spellings)) = self.lookup(&word) else {
+        let mut analyses = self.found(&word);
+        if analyses.is_empty() {
+            return self.with_clitics(&word);
+        }
+        if let Some(words) = clitics::contraction(&word) {
+            for analysis in analyses.iter_mut().filter(|a| a.lemma == words[0]) {
+                analysis.words = words.iter().map(|&word| word.to_owned()).collect();
+            }
+        }
+        analyses
+    }
+
+    /// Whether `analyze` finds analyses of the word form: it is in the dictionary or a verb of the
+    /// dictionary with clitics
+    pub fn is_known(&self, word: &str) -> bool {
+        let word = normalized(word);
+        self.lookup(&word).is_some() || !self.with_clitics(&word).is_empty()
+    }
+
+    /// Analyses of a verb with clitics: of the first split into a host and clitics, the most
+    /// clitics first, whose host is an infinitive, a gerund or an imperative of the dictionary
+    fn with_clitics(&self, word: &str) -> Vec<Analysis> {
+        let token = word.to_lowercase();
+        let splits = clitics::splits(&token);
+        // The accent that clitics put on a host marks its stressed vowel: in `piénselo` the host
+        // is `piense`, not `píen`; without such a host the accent is not looked at
+        let accent = token.chars().position(|c| "áéíóú".contains(c));
+        let strict = accent.map(|at| {
+            splits
+                .iter()
+                .find_map(|split| self.split_analyses(&token, split, Some(at)))
+        });
+        match strict.flatten() {
+            Some(analyses) => analyses,
+            None => splits
+                .iter()
+                .find_map(|split| self.split_analyses(&token, split, None))
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Analyses of a token by a split into a host and clitics, if the host is an infinitive, a
+    /// gerund or an imperative of the dictionary, stressed on the vowel `accent` if it is given
+    fn split_analyses(
+        &self,
+        token: &str,
+        split: &clitics::Split,
+        accent: Option<usize>,
+    ) -> Option<Vec<Analysis>> {
+        let first = split.clitics[0];
+        let mut found = Vec::new();
+        for host in clitics::hosts(split.host, first) {
+            found.extend(self.found(&host).into_iter().filter(|analysis| {
+                let kind = match self.hosts.get(usize::from(analysis.ud)) {
+                    Some(Host::NonFinite) => true,
+                    // `os` follows only the imperative of `vosotros`, which loses its `d`:
+                    // `cuéntenos` is `cuente` + `nos`, not `cuenten` + `os`
+                    Some(Host::Imperative) => first != "os" || host.ends_with('d'),
+                    _ => false,
+                };
+                kind && accent.is_none_or(|at| clitics::stressed(&analysis.word) == Some(at))
+            }));
+            if !found.is_empty() {
+                break;
+            }
+        }
+        if found.is_empty() {
+            return None;
+        }
+        let total: f64 = found.iter().map(|analysis| analysis.prob).sum();
+        Some(
+            found
+                .into_iter()
+                .map(|host| {
+                    let mut words = Vec::with_capacity(1 + split.clitics.len());
+                    words.push(host.word);
+                    words.extend(split.clitics.iter().map(|&clitic| clitic.to_owned()));
+                    Analysis {
+                        word: token.to_owned(),
+                        lemma: host.lemma,
+                        ud: host.ud,
+                        prob: host.prob / total,
+                        source: Source::Clitics,
+                        entry: host.entry,
+                        words,
+                    }
+                })
+                .collect(),
+        )
+    }
+
+    /// Analyses of a word form in the dictionary
+    fn found(&self, word: &str) -> Vec<Analysis> {
+        let Some((key, spellings)) = self.lookup(word) else {
             return Vec::new();
         };
         let (count, total) = spellings
@@ -243,7 +372,7 @@ impl Dictionary {
                 // below then keeps the order of the spellings
                 let share = match probabilities.get(at) {
                     Some(&millionths) => {
-                        f64::from(millionths) / f64::from(PROBABILITY_SCALE) * weight / total
+                        f64::from(millionths) / f64::from(PROBABILITY_SCALE) * (weight / total)
                     }
                     None => weight / records.len() as f64 / total,
                 };
@@ -256,11 +385,6 @@ impl Dictionary {
             analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
         }
         analyses
-    }
-
-    /// Whether `analyze` finds the word form in the dictionary
-    pub fn is_known(&self, word: &str) -> bool {
-        self.lookup(&normalized(word)).is_some()
     }
 
     /// The key of a word and its spellings: the key as written, then with a lost diaeresis restored
@@ -312,6 +436,7 @@ impl Dictionary {
             prob,
             source: Source::Dictionary,
             entry: Some(entry),
+            words: Vec::new(),
         })
     }
 
@@ -680,6 +805,78 @@ pub(crate) mod tests {
         let summary: Vec<_> = analyses.iter().map(|a| (a.word.as_str(), a.prob)).collect();
         assert_eq!(summary.len(), 2);
         assert!(summary.iter().all(|&(_, prob)| prob == 0.5));
+    }
+
+    fn clitic_dictionary() -> Dictionary {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let imperative = "Mood=Imp|Number=Sing|Person=2|VerbForm=Fin";
+        builder.add_form("dar", "VERB", "da", imperative).unwrap();
+        builder
+            .add_form("dar", "VERB", "da", "Mood=Ind|Person=3")
+            .unwrap();
+        builder
+            .add_form("dar", "VERB", "dar", "VerbForm=Inf")
+            .unwrap();
+        builder
+            .add_form("ir", "VERB", "vamos", "Mood=Imp|Person=1")
+            .unwrap();
+        builder
+            .add_form("cometer", "VERB", "comete", "Mood=Ind")
+            .unwrap();
+        builder
+            .add_form("comer", "VERB", "come", imperative)
+            .unwrap();
+        for (form, person) in [("cuente", "3"), ("cuenten", "3")] {
+            let feats = format!("Mood=Imp|Person={person}");
+            builder.add_form("contar", "VERB", form, &feats).unwrap();
+        }
+        builder
+            .add_form("sentar", "VERB", "sentad", "Mood=Imp|Person=2")
+            .unwrap();
+        builder.add_form("de", "ADP", "del", "").unwrap();
+        builder.add_form("casa", "NOUN", "casa", "").unwrap();
+        Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_verb_with_clitics_is_its_host() {
+        let dictionary = clitic_dictionary();
+        let analyses = dictionary.analyze("Dámelo");
+        assert_eq!(analyses.len(), 1, "only the imperative takes clitics");
+        let analysis = &analyses[0];
+        assert_eq!(analysis.word, "dámelo");
+        assert_eq!(analysis.lemma, "dar");
+        assert_eq!(analysis.words, ["da", "me", "lo"]);
+        assert_eq!(analysis.source, Source::Clitics);
+        assert_eq!(analysis.prob, 1.0);
+        assert_eq!(dictionary.analyze("darlo")[0].words, ["dar", "lo"]);
+        assert_eq!(dictionary.analyze("vámonos")[0].words, ["vamos", "nos"]);
+        assert_eq!(dictionary.analyze("cuéntenos")[0].words, ["cuente", "nos"]);
+        assert_eq!(dictionary.analyze("sentaos")[0].words, ["sentad", "os"]);
+        assert_eq!(dictionary.analyze("daros")[0].words, ["dar", "os"]);
+        assert!(dictionary.is_known("dámelo"));
+    }
+
+    #[test]
+    fn a_word_of_the_dictionary_is_not_split() {
+        let dictionary = clitic_dictionary();
+        let analyses = dictionary.analyze("comete");
+        assert_eq!(analyses[0].lemma, "cometer");
+        assert!(analyses[0].words.is_empty());
+        assert_eq!(
+            dictionary.analyze("cómetelo")[0].words,
+            ["come", "te", "lo"]
+        );
+        // No host: a noun takes no clitics
+        assert!(dictionary.analyze("casalo").is_empty());
+        assert!(!dictionary.is_known("casalo"));
+    }
+
+    #[test]
+    fn a_contraction_has_its_words() {
+        assert_eq!(clitic_dictionary().analyze("del")[0].words, ["de", "el"]);
+        assert!(clitic_dictionary().analyze("casa")[0].words.is_empty());
     }
 
     #[test]
