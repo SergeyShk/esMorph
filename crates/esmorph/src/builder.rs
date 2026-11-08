@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use fst::MapBuilder;
@@ -5,20 +6,23 @@ use fst::MapBuilder;
 use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
-    self, HAS_PROBABILITIES, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Sections, WordValue,
+    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Sections,
+    VARIANT, WordValue,
 };
 
 /// Builder of a dictionary from the forms of lexemes
 ///
 /// A lexeme is the forms of one lemma and part of speech. The longest common start of its forms is
-/// its stem and the rest are the suffixes of a paradigm; lexemes with one paradigm, one lemma form
-/// and the same tags share an inflection table. An analysis of a word form refers to a table and
-/// a form. The result depends only on the added forms, not on their order
+/// its stem and the rest are the suffixes of a paradigm; lexemes with one paradigm and the same tags
+/// share an inflection table. The forms of a table go in the order of the paradigm: the lemma, then
+/// the main forms by their features (`VerbForm`, `Mood`, `Tense`, `Number`, `Person`, `Gender`...),
+/// then the variants in the same order. An analysis of a word form refers to a table and a form.
+/// The result depends only on the added forms, not on their order
 #[derive(Default)]
 pub struct Builder {
     meta: String,
-    /// Forms of a lexeme: the form and its normalized features, and its place among the analyses
-    lexemes: BTreeMap<(String, String), BTreeMap<(String, String), Place>>,
+    /// Forms of a lexeme: the form and its normalized features, and what is known of it
+    lexemes: BTreeMap<(String, String), BTreeMap<(String, String), Form>>,
     /// How often texts have a word form
     frequencies: HashMap<String, u32>,
 }
@@ -30,13 +34,58 @@ struct Place {
     probability: Option<u32>,
 }
 
-/// A form of a lexeme in its table: its word, its UD tag and whether it is only the lemma
+/// An added form: its place among the analyses of its word, whether it is a variant and how
+/// often texts have it
+#[derive(Clone, Copy, Default)]
+struct Form {
+    place: Place,
+    variant: bool,
+    count: u32,
+}
+
+/// A form of a lexeme in its table: its word, features and UD tag, its flags and count
 struct Row<'a> {
     word: &'a str,
+    feats: &'a str,
     ud: u16,
     place: Place,
-    lemma_only: bool,
+    flags: u32,
+    count: u32,
 }
+
+impl<'a> Row<'a> {
+    /// Place in a table: the main forms before the variants, then by the features, the more
+    /// frequent of equal forms first, then in the order of letters
+    fn order(
+        &self,
+    ) -> (
+        u32,
+        ([usize; FEATURE_ORDER.len()], &'a str),
+        Reverse<u32>,
+        &'a str,
+    ) {
+        (
+            self.flags,
+            paradigm_key(self.feats),
+            Reverse(self.count),
+            self.word,
+        )
+    }
+}
+
+/// Order of the values of features in a paradigm: a form without a feature goes first, an unknown
+/// value after the known ones
+const FEATURE_ORDER: [(&str, &[&str]); 9] = [
+    ("VerbForm", &["Inf", "Ger", "Part", "Fin"]),
+    ("Mood", &["Ind", "Cnd", "Sub", "Imp"]),
+    ("Tense", &["Pres", "Imp", "Past", "Fut"]),
+    ("Number", &["Sing", "Plur"]),
+    ("Person", &["1", "2", "3"]),
+    ("Gender", &["Masc", "Fem"]),
+    ("Case", &["Nom", "Acc", "Dat"]),
+    ("PrepCase", &["Npr", "Pre"]),
+    ("Reflex", &["Yes"]),
+];
 
 /// An analysis of a word form: `(table << 16) | form` and its place
 struct Listed {
@@ -97,11 +146,7 @@ impl Builder {
         probability: Option<f64>,
     ) -> Result<(), Error> {
         let feats = normalized(feats)?;
-        let place = self
-            .lexemes
-            .get_mut(&(lemma.to_owned(), pos.to_owned()))
-            .and_then(|forms| forms.get_mut(&(form.to_owned(), feats)))
-            .ok_or_else(|| Error::Build(format!("no form {form:?} of lexeme {lemma:?} {pos}")))?;
+        let place = &mut self.form(lemma, pos, form, feats)?.place;
         *place = Place {
             number,
             probability: probability
@@ -120,6 +165,50 @@ impl Builder {
         Ok(())
     }
 
+    /// Marks an added form as a variant of another form with the same features: `hablás` of
+    /// `hablas`, `fablar` of `hablar`. The analyses of the form stay the same, while inflection
+    /// gives a variant only from a variant
+    pub fn mark_variant(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: &str,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        self.form(lemma, pos, form, feats)?.variant = true;
+        Ok(())
+    }
+
+    /// Sets how often texts have an added form with its lemma and features: of the forms of a
+    /// lexeme with the same features the more frequent goes first, as `hay` before `ha` in the verb
+    /// `haber`; forms without a count go in the order of letters
+    pub fn set_count(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: &str,
+        count: u32,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        self.form(lemma, pos, form, feats)?.count = count;
+        Ok(())
+    }
+
+    fn form(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: String,
+    ) -> Result<&mut Form, Error> {
+        self.lexemes
+            .get_mut(&(lemma.to_owned(), pos.to_owned()))
+            .and_then(|forms| forms.get_mut(&(form.to_owned(), feats)))
+            .ok_or_else(|| Error::Build(format!("no form {form:?} of lexeme {lemma:?} {pos}")))
+    }
+
     /// Sets how often texts have a word form. Spellings of one key share a query that lost its
     /// accents by this number and the number of their analyses: without it every analysis of the
     /// key has an equal share
@@ -136,33 +225,39 @@ impl Builder {
         let mut words: BTreeMap<&str, Vec<Listed>> = BTreeMap::new();
         for ((lemma, pos), forms) in &self.lexemes {
             let mut rows = Vec::with_capacity(forms.len() + 1);
-            for ((form, feats), &place) in forms {
+            for ((form, feats), info) in forms {
                 rows.push(Row {
                     word: form,
+                    feats,
                     ud: tags.number((pos.clone(), feats.clone()), "UD tags", u16::MAX)? as u16,
-                    place,
-                    lemma_only: false,
+                    place: info.place,
+                    flags: if info.variant { VARIANT } else { 0 },
+                    count: info.count,
                 });
             }
-            let lemma_form = match rows.iter().position(|row| row.word == lemma) {
-                Some(at) => at,
-                None => {
-                    // The tables have no row of the lemma itself: it stays a form only for analyses
-                    rows.push(Row {
+            rows.sort_by(|a, b| a.order().cmp(&b.order()));
+            // The lemma is the first form of a table; a lemma that is no form of its lexeme stays a
+            // form only for analyses
+            match rows.iter().position(|row| row.word == lemma) {
+                Some(at) => {
+                    let row = rows.remove(at);
+                    rows.insert(0, row);
+                }
+                None => rows.insert(
+                    0,
+                    Row {
                         word: lemma,
+                        feats: "",
                         ud: tags.number((pos.clone(), String::new()), "UD tags", u16::MAX)? as u16,
                         place: Place::default(),
-                        lemma_only: true,
-                    });
-                    rows.len() - 1
-                }
-            };
-            let lemma_form = u16::try_from(lemma_form)
-                .ok()
-                .filter(|_| rows.len() <= 1 << 16);
-            let Some(lemma_form) = lemma_form else {
+                        flags: LEMMA_ONLY,
+                        count: 0,
+                    },
+                ),
+            }
+            if rows.len() > 1 << 16 {
                 return Err(Error::Build(format!("lexeme {lemma:?} has too many forms")));
-            };
+            }
             let stem = common_start(rows.iter().map(|row| row.word));
             let mut paradigm = Vec::with_capacity(rows.len());
             for row in &rows {
@@ -172,11 +267,11 @@ impl Builder {
             let paradigm = paradigms.number(paradigm, "paradigms", u32::MAX)?;
             let cells = rows
                 .iter()
-                .map(|row| u32::from(lemma_form) << 16 | u32::from(row.ud))
+                .map(|row| row.flags | u32::from(row.ud))
                 .collect();
             let table = tables.number((paradigm, cells), "inflection tables", u16::MAX)?;
             for (form, row) in rows.iter().enumerate() {
-                if !row.lemma_only {
+                if row.flags & LEMMA_ONLY == 0 {
                     words.entry(row.word).or_default().push(Listed {
                         record: table << 16 | form as u32,
                         place: row.place,
@@ -324,6 +419,23 @@ impl<T: Clone + Eq + std::hash::Hash> Interned<T> {
         self.numbers.insert(value, number as u32);
         Ok(number as u32)
     }
+}
+
+/// Place of features in a paradigm: the ranks of the values of `FEATURE_ORDER`, then the features
+fn paradigm_key(feats: &str) -> ([usize; FEATURE_ORDER.len()], &str) {
+    let value = |name: &str| {
+        feats
+            .split('|')
+            .find_map(|feat| feat.strip_prefix(name)?.strip_prefix('='))
+    };
+    let ranks = FEATURE_ORDER.map(|(name, values)| match value(name) {
+        None => 0,
+        Some(value) => values
+            .iter()
+            .position(|&known| known == value)
+            .map_or(values.len() + 1, |at| at + 1),
+    });
+    (ranks, feats)
 }
 
 /// Features in the order of CoNLL-U: alphabetical without regard to case

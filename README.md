@@ -16,10 +16,10 @@
 
 ---
 
-**esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it will find the analyses in a dictionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and give the forms of a lexeme by their features: conjugation, gender and number.
+**esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it finds the analyses in a dictionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and gives the forms of a lexeme by their features: conjugation, gender and number.
 
 > [!WARNING]
-> Work in progress: the analyses of word forms already work, but unknown words and inflection come in the next versions. Versions `0.1.0.devN` are published on TestPyPI, and the documentation site appears with the first release.
+> Work in progress: the analyses and the inflection of dictionary words already work, but unknown words come in the next versions. Versions `0.1.0.devN` are published on TestPyPI, and the documentation site appears with the first release.
 
 ## Installation
 
@@ -39,8 +39,10 @@ Wheels are built for Linux (Alpine included), macOS and Windows and for the free
 >>> analysis = morph.analyze("camiones")[0]
 >>> analysis.lemma, analysis.pos, analysis.feats
 ('camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
->>> morph.is_known("hablamos")
-True
+>>> morph.analyze("hablar")[0].inflect(Tense="Past", Person="3", Number="Plur")
+'hablaron'
+>>> [form.word for form in morph.analyze("bonitas")[0].forms()]
+['bonito', 'bonita', 'bonitos', 'bonitas']
 ```
 
 ## Development

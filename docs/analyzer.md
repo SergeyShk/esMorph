@@ -78,7 +78,7 @@ Case does not matter. A word spelled as in the dictionary gives the analyses of 
 | `lemmatize(words)` | The lemma of the first analysis of every word; an unknown word in lower case, without the GIL |
 | `is_known(word)` | Whether `analyze` finds analyses of the word |
 
-`Analysis` has the fields `word`, `lemma`, `pos`, `feats`, `prob`, `words` and `source`. It is immutable and hashable, and an analyzer and an analysis can be pickled.
+`Analysis` has the fields `word`, `lemma`, `pos`, `feats`, `prob`, `words` and `source` and the methods `forms()` and `inflect()` - see [Inflection](inflection.md). It is immutable and hashable and is compared without the probability. An analyzer and an analysis can be pickled; an analysis keeps its analyzer, which a pickle saves once.
 
 !!! note "Work in progress"
     Unknown words have no analyses yet: they come in later versions.

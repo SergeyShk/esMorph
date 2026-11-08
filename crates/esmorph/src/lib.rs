@@ -1,6 +1,6 @@
 //! Spanish morphological analyzer: the analyses of a word form (lemma, part of speech and
-//! Universal Dependencies features). Word forms are kept in a finite state automaton, and
-//! analyses are restored through paradigms
+//! Universal Dependencies features) and the forms of its lexeme. Word forms are kept in a finite
+//! state automaton, and analyses and forms are restored through paradigms
 //!
 //! ```
 //! # #[cfg(feature = "bundled")] {

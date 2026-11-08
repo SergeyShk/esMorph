@@ -122,7 +122,13 @@ pub(crate) fn stressed(word: &str) -> Option<usize> {
     if let Some(at) = letters.iter().position(|&c| without_acute(c) != c) {
         return Some(at);
     }
-    // Syllables by their vowels: two strong vowels are two syllables
+    // Syllables by their vowels: weak vowels join the strong vowel after them, then the one before
+    // them, so two strong vowels are two syllables, as are `noi` and `a` of `paranoia`
+    let weak = |at: usize| {
+        letters
+            .get(at)
+            .is_some_and(|&c| is_vowel(c) && !is_strong(c))
+    };
     let mut nuclei = Vec::new();
     let mut at = 0;
     while at < letters.len() {
@@ -131,12 +137,14 @@ pub(crate) fn stressed(word: &str) -> Option<usize> {
             continue;
         }
         let start = at;
-        at += 1;
-        while at < letters.len()
-            && is_vowel(letters[at])
-            && !(is_strong(letters[at - 1]) && is_strong(letters[at]))
-        {
+        while weak(at) {
             at += 1;
+        }
+        if letters.get(at).is_some_and(|&c| is_strong(c)) {
+            at += 1;
+            while weak(at) {
+                at += 1;
+            }
         }
         nuclei.push(start..at);
     }
@@ -249,6 +257,11 @@ mod tests {
         assert_eq!(stressed("ver"), Some(1));
         assert_eq!(stressed("cuida"), Some(2));
         assert_eq!(stressed("autoaisla"), Some(4));
+        // A weak vowel between two strong ones goes with the first: `pa-ra-noi-a`
+        assert_eq!(stressed("paranoia"), Some(5));
+        assert_eq!(stressed("emparanoie"), Some(7));
+        assert_eq!(stressed("buey"), Some(2));
+        assert_eq!(stressed("guiais"), Some(3));
         assert_eq!(stressed("prr"), None);
         assert_eq!(stressed(""), None);
     }

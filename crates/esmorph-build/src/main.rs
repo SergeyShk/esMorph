@@ -1,7 +1,7 @@
 //! Builder of the dictionary of esMorph: `esmorph-build <export directory> <counts directory>
-//! <dictionary file>`. The export is `lexemes.tsv` (lemma, part of speech, form, features) and
-//! `meta.json`, written by `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv`
-//! and `sources.json`, written by `scripts/export_ud.py`
+//! <dictionary file>`. The export is `lexemes.tsv` (lemma, part of speech, form, features, `variant`
+//! or `_`) and `meta.json`, written by `scripts/export_wiktionary.py`; the counts are `analyses.tsv`,
+//! `pos.tsv` and `sources.json`, written by `scripts/export_ud.py`
 
 mod frequencies;
 
@@ -44,14 +44,24 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
     let mut forms: BTreeMap<&str, Vec<Row>> = BTreeMap::new();
     for (number, line) in table.lines().enumerate() {
         let fields: Vec<&str> = line.split('\t').collect();
-        let &[lemma, pos, form, feats] = fields.as_slice() else {
+        let &[lemma, pos, form, feats, kind] = fields.as_slice() else {
             return Err(Error::Build(format!(
-                "line {}: expected 4 fields, got {}",
+                "line {}: expected 5 fields, got {}",
                 number + 1,
                 fields.len()
             )));
         };
         builder.add_form(lemma, pos, form, plain(feats))?;
+        match kind {
+            "_" => {}
+            "variant" => builder.mark_variant(lemma, pos, form, plain(feats))?,
+            _ => {
+                return Err(Error::Build(format!(
+                    "line {}: the last field is `variant` or `_`, not {kind:?}",
+                    number + 1
+                )));
+            }
+        }
         forms
             .entry(form)
             .or_default()
@@ -63,6 +73,12 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
     )?;
     for (form, rows) in &forms {
         builder.set_frequency(form, counts.frequency(form));
+        for &row in rows {
+            let count = counts.count(form, row);
+            if count > 0 {
+                builder.set_count(row.lemma, row.pos, form, plain(row.feats), count)?;
+            }
+        }
         if rows.len() < 2 {
             continue;
         }
