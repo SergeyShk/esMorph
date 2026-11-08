@@ -4,16 +4,23 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyLookupError, PyOSError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString, PyTuple, PyType};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyString, PyTuple, PyWeakrefMethods, PyWeakrefReference};
 
 /// How many words `analyze_many` and `lemmatize` analyze at a time without the GIL: results are
 /// converted and Ctrl+C is checked between the chunks
 const CHUNK: usize = 8192;
+
+/// The analyzer of the dictionary of the package that pickle restores: one for the process
+static PACKAGE: PyOnceLock<Py<Analyzer>> = PyOnceLock::new();
+/// Analyzers of dictionary files that pickle saved or restored, by path; a weak reference lets an
+/// analyzer go with its file
+static FILES: Mutex<BTreeMap<PathBuf, Py<PyWeakrefReference>>> = Mutex::new(BTreeMap::new());
 
 create_exception!(
     esmorph,
@@ -41,8 +48,9 @@ impl Tag {
 ///
 /// Description:
 ///     Analyses are immutable and hashable; they are compared without the probability, so an
-///     analysis equals its form from forms(). An analysis keeps its analyzer: pickle saves them
-///     together
+///     analysis equals its form from forms(). An analysis keeps its analyzer; pickle saves the
+///     path of its dictionary, and unpickling takes the analyzer of that path the process has
+///     loaded, or the dictionary of the package if the file is gone
 ///
 /// Attributes:
 ///     word (str): The word form as the dictionary spells it, with its accents; a verb with
@@ -273,13 +281,13 @@ impl Analysis {
                 self.prob,
                 self.words.clone(),
                 self.source.to_owned(),
-                Some(self.analyzer.clone_ref(py)),
+                Analyzer::saved_path(self.analyzer.bind(py))?,
             ),
         ))
     }
 }
 
-/// Arguments of `_analysis`: the fields of an analysis and its analyzer for pickle
+/// Arguments of `_analysis`: the fields of an analysis and the path of its dictionary for pickle
 type AnalysisState = (
     String,
     String,
@@ -288,12 +296,13 @@ type AnalysisState = (
     f64,
     Vec<String>,
     String,
-    Option<Py<Analyzer>>,
+    Option<PathBuf>,
 );
 
-/// Restores an analysis from pickle; without an analyzer it takes the dictionary of the package
+/// Restores an analysis from pickle with the analyzer of `path` (`None` for the dictionary of the
+/// package); if that file cannot be read, with the dictionary of the package
 #[pyfunction]
-#[pyo3(signature = (word, lemma, pos, feats, prob, words, source, analyzer=None))]
+#[pyo3(signature = (word, lemma, pos, feats, prob, words, source, path=None))]
 #[allow(clippy::too_many_arguments)]
 fn _analysis(
     py: Python<'_>,
@@ -304,7 +313,7 @@ fn _analysis(
     prob: f64,
     words: Vec<String>,
     source: &str,
-    analyzer: Option<Py<Analyzer>>,
+    path: Option<PathBuf>,
 ) -> PyResult<Analysis> {
     let source = match source {
         "dictionary" => esmorph::Source::Dictionary.as_str(),
@@ -315,9 +324,10 @@ fn _analysis(
             )));
         }
     };
-    let analyzer = match analyzer {
-        Some(analyzer) => analyzer,
-        None => Py::new(py, Analyzer::new(py, None)?)?,
+    let analyzer = match path.map(|path| shared(py, Some(path))) {
+        Some(Ok(analyzer)) => analyzer,
+        Some(Err(err)) if !err.is_instance_of::<PyOSError>(py) => return Err(err),
+        _ => shared(py, None)?,
     };
     // The tag of the dictionary is shared by its analyses
     let tag = Tag { pos, feats };
@@ -333,6 +343,32 @@ fn _analysis(
         words,
         analyzer,
     })
+}
+
+/// Restores an analyzer from pickle: the analyzer of the dictionary of the package or of the file
+/// at `path` that the process has, otherwise a new one
+#[pyfunction]
+#[pyo3(signature = (path=None))]
+fn _analyzer(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
+    shared(py, path)
+}
+
+/// The analyzer of the dictionary of the package, or of the file at `path`, shared in the process
+fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
+    let Some(path) = path else {
+        let analyzer = PACKAGE.get_or_try_init(py, || Py::new(py, Analyzer::new(py, None)?))?;
+        return Ok(analyzer.clone_ref(py));
+    };
+    let known = (FILES.lock().unwrap_or_else(PoisonError::into_inner))
+        .get(&path)
+        .and_then(|reference| reference.bind(py).upgrade());
+    if let Some(analyzer) = known {
+        return Ok(analyzer.cast_into::<Analyzer>()?.unbind());
+    }
+    // The dictionary is loaded without the lock: the loading lets other threads run
+    let analyzer = Bound::new(py, Analyzer::new(py, Some(path))?)?;
+    Analyzer::saved_path(&analyzer)?;
+    Ok(analyzer.unbind())
 }
 
 /// Morphological analyzer of Spanish
@@ -358,7 +394,7 @@ fn _analysis(
 ///     >>> morph = Analyzer()
 ///     >>> sorted({analysis.lemma for analysis in morph.analyze("hablamos")})
 ///     ['hablar']
-#[pyclass(frozen, module = "esmorph")]
+#[pyclass(frozen, weakref, module = "esmorph")]
 struct Analyzer {
     dictionary: Arc<esmorph::Dictionary>,
     tags: Vec<Arc<Tag>>,
@@ -410,10 +446,11 @@ impl Analyzer {
         })
     }
 
-    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> (Bound<'py, PyType>, (Option<PathBuf>,)) {
-        let analyzer = slf.get();
-        let path = analyzer.explicit.then(|| analyzer.path.clone());
-        (slf.get_type(), (path,))
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyAny>, (Option<PathBuf>,))> {
+        let restore = slf.py().import("esmorph._esmorph")?.getattr("_analyzer")?;
+        Ok((restore, (Analyzer::saved_path(slf)?,)))
     }
 
     /// Path to the dictionary file
@@ -581,6 +618,20 @@ impl Analyzer {
 }
 
 impl Analyzer {
+    /// The path that pickle saves for an analyzer: `None` for the dictionary of the package. An
+    /// analyzer of a file becomes the one that unpickling in this process takes for its path
+    fn saved_path(analyzer: &Bound<'_, Analyzer>) -> PyResult<Option<PathBuf>> {
+        let this = analyzer.get();
+        if !this.explicit {
+            return Ok(None);
+        }
+        let reference = PyWeakrefReference::new(analyzer)?.unbind();
+        let mut files = FILES.lock().unwrap_or_else(PoisonError::into_inner);
+        files.retain(|_, known| known.bind(analyzer.py()).upgrade().is_some());
+        files.insert(this.path.clone(), reference);
+        Ok(Some(this.path.clone()))
+    }
+
     /// Analyses for Python; `analyzer` is this analyzer
     fn convert(
         &self,
@@ -720,6 +771,7 @@ fn _esmorph(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Analysis>()?;
     m.add("FormNotFoundError", m.py().get_type::<FormNotFoundError>())?;
     m.add_function(wrap_pyfunction!(_analysis, m)?)?;
+    m.add_function(wrap_pyfunction!(_analyzer, m)?)?;
     m.add("__version__", package_version())?;
     Ok(())
 }

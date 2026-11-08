@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
@@ -434,9 +435,11 @@ impl Dictionary {
     }
 
     /// The form of the lexeme of an analysis with the features `feats` ("name", "value"): of the
-    /// forms that have them, the one that keeps most of the other features of the analysis, then
-    /// a variant only for a variant, then the one in the place of the analysis among the forms
-    /// with equal features, then the first in the paradigm. An infinitive and a gerund
+    /// forms that have them, the one that keeps most of the other features of the analysis and,
+    /// for a noun, an adjective, a determiner or a pronoun, has fewest features more, then a
+    /// variant only for a variant, then the first in the paradigm; of the forms with equal
+    /// features, the closest in spelling to the analysis if it has such forms too, as `hablase`
+    /// and `hablara`. An infinitive and a gerund
     /// asked for features they have not become finite forms: `hablar` with `Tense=Past` is
     /// `hablé`. A form of a noun, an adjective, a determiner or a pronoun without a gender or a
     /// number takes any, though a form that has it goes first: `grande` with `Gender=Fem` is
@@ -463,16 +466,30 @@ impl Dictionary {
         for &(name, value) in feats {
             want(name, value);
         }
-        // Forms of one tag go one after another; the place among them is kept: `hablase` with
-        // `Person=3` is `hablase`, not `hablara`
-        let rank = |form: usize| {
-            lexeme.cells[..form]
-                .iter()
-                .rev()
-                .take_while(|&&cell| cell == lexeme.cells[form])
-                .count()
+        // Of the forms of one tag the closest in spelling to the analysis, if its own tag has
+        // several: `hablase` with `Person=3` is `hablase`, `elegido` with `Gender=Fem` is
+        // `elegida`, not `electa`
+        let several = lexeme.cells.iter().filter(|&&cell| cell == own).count() > 1;
+        let own_word = lexeme.spell(&self.suffixes, own_form)?;
+        let closeness = |form: usize| {
+            if !several {
+                return (0, 0);
+            }
+            let word = lexeme.spell(&self.suffixes, form).unwrap_or_default();
+            let common = |same: fn(char, char) -> bool| {
+                (own_word.chars().zip(word.chars()))
+                    .take_while(|&(a, b)| same(a, b))
+                    .count()
+            };
+            let plain = common(|a, b| clitics::without_acute(a) == clitics::without_acute(b));
+            (plain, common(|a, b| a == b))
         };
-        let own_rank = rank(own_form);
+        // Forms of one tag are one group in the place of its first form
+        let group = |form: usize| {
+            (lexeme.cells.iter())
+                .position(|&cell| cell == lexeme.cells[form])
+                .unwrap_or(form)
+        };
         let best = (0..lexeme.cells.len())
             .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
             .filter_map(|form| {
@@ -488,8 +505,21 @@ impl Dictionary {
                 let missed = (wanted.iter())
                     .filter(|&&(name, value)| !has(tag.feat(name), value))
                     .count();
+                // A pronoun with a feature more is another word: `vos` is not `usted`
+                let extra = (tag.feats())
+                    .filter(|&(name, _)| nominal && !matches!(name, "Gender" | "Number"))
+                    .filter(|&(name, _)| wanted.iter().all(|&(known, _)| known != name))
+                    .count();
                 let variant = (lexeme.cells[form] ^ own) & VARIANT != 0;
-                fits.then_some(((missed, variant, rank(form) != own_rank, form), form))
+                let key = (
+                    missed,
+                    extra,
+                    variant,
+                    group(form),
+                    Reverse(closeness(form)),
+                    form,
+                );
+                fits.then_some((key, form))
             })
             .min()?
             .1;
@@ -1172,6 +1202,91 @@ pub(crate) mod tests {
         assert_eq!(build(&[]), "ha");
         assert_eq!(build(&[("hay", 7), ("ha", 2)]), "hay");
         assert_eq!(build(&[("ha", 2)]), "ha");
+    }
+
+    #[test]
+    fn equal_forms_keep_the_spelling_of_the_analysis() {
+        let mut builder = Builder::new();
+        let part = |gender: &str| format!("Gender={gender}|Number=Sing|Tense=Past|VerbForm=Part");
+        builder
+            .add_form("elegir", "VERB", "elegir", "VerbForm=Inf")
+            .unwrap();
+        for (form, gender) in [
+            ("elegido", "Masc"),
+            ("electo", "Masc"),
+            ("elegida", "Fem"),
+            ("electa", "Fem"),
+        ] {
+            builder
+                .add_form("elegir", "VERB", form, &part(gender))
+                .unwrap();
+        }
+        // Only the masculine has a count: the feminine goes in the order of letters
+        builder
+            .set_count("elegir", "VERB", "elegido", &part("Masc"), 18)
+            .unwrap();
+        let pronoun = "Case=Nom|Number=Sing|Person=3";
+        builder.add_form("él", "PRON", "él", pronoun).unwrap();
+        builder
+            .add_form(
+                "él",
+                "PRON",
+                "ella",
+                "Case=Nom|Gender=Fem|Number=Sing|Person=3",
+            )
+            .unwrap();
+        builder.add_form("él", "PRON", "ello", pronoun).unwrap();
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let fem = [("Gender", "Fem")];
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("elegido")[0], &fem),
+            "elegida"
+        );
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("electo")[0], &fem),
+            "electa"
+        );
+        // Without a form of its own tag to keep, the first form of the paradigm
+        let elegir = &dictionary.analyze("elegir")[0];
+        assert_eq!(
+            inflected(&dictionary, elegir, &[("VerbForm", "Part")]),
+            "elegido"
+        );
+        // The lemma first in the table is still one of its group
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("ello")[0], &[]),
+            "ello"
+        );
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("él")[0], &[]),
+            "él"
+        );
+    }
+
+    #[test]
+    fn a_pronoun_with_a_feature_more_is_another_word() {
+        let mut builder = Builder::new();
+        for (form, feats) in [
+            ("tú", "Case=Nom|Number=Sing|Person=2"),
+            ("usted", "Case=Nom|Number=Sing|Person=2|Polite=Form"),
+            ("vos", "Case=Nom|Number=Sing|Person=2"),
+            ("vosotros", "Case=Nom|Number=Plur|Person=2"),
+            ("ustedes", "Case=Nom|Number=Plur|Person=2|Polite=Form"),
+        ] {
+            builder.add_form("tú", "PRON", form, feats).unwrap();
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let plural = [("Number", "Plur")];
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("tú")[0], &plural),
+            "vosotros"
+        );
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("vos")[0], &[]),
+            "vos"
+        );
+        let usted = &dictionary.analyze("usted")[0];
+        assert_eq!(inflected(&dictionary, usted, &plural), "ustedes");
     }
 
     #[test]

@@ -119,6 +119,7 @@ VARIANT_TAGS = {
 ACUTE_OF = str.maketrans("aeiou", "áéíóú")
 MASCULINE_PARTICIPLE = "Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part"
 WORD_SIGNS = {".", "-", "'"}
+APOCOPE = "before a noun "
 MAX_WORD = 64
 
 
@@ -524,8 +525,10 @@ def nominal_rows(
         gender (set[str]): Genders of the headword
 
     Returns:
-        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant
+        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant: an
+        apocope before a noun is (`san` of `santo`)
     """
+    feminine = any(row == {"feminine"} for _, row in forms)
     for form, tags in forms:
         if not tags or not tags <= NOMINAL_FORM:
             continue
@@ -539,8 +542,12 @@ def nominal_rows(
             if lemma is None:
                 continue
         row_tags = tags if tags & GENDERS else tags | gender
+        apocope = form.startswith(APOCOPE)
+        # A word without a feminine shortens before nouns of both genders: `gran` as `grande`
+        if apocope and not feminine:
+            row_tags = row_tags - GENDERS
         for feats in features(pos, row_tags):
-            yield lemma, pos, form.removeprefix("before a noun "), feats, False
+            yield lemma, pos, form.removeprefix(APOCOPE), feats, apocope
 
 
 def entry_rows(entry: dict, entries: set[str], lower_entries: set[str]) -> Iterator[SourceRow]:

@@ -161,7 +161,8 @@ pub(crate) fn stressed(word: &str) -> Option<usize> {
         .or(nucleus.last())
 }
 
-fn without_acute(c: char) -> char {
+/// A vowel without its acute: `á` is `a`
+pub(crate) fn without_acute(c: char) -> char {
     match c {
         'á' => 'a',
         'é' => 'e',

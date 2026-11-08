@@ -908,15 +908,32 @@ def test_inflect_errors(morph):
         gato.inflect(Number=1)
 
 
-def test_pickle_keeps_the_analyzer_once(morph):
+def test_pickle_keeps_the_analyzer(morph):
     analyses = morph.analyze("gatos") + morph.analyze("hablamos")
-    data = pickle.dumps(analyses)
-    restored = pickle.loads(data)
+    restored = pickle.loads(pickle.dumps(analyses))
     assert restored == analyses
     assert [form.word for form in restored[0].forms()][:2] == ["gato", "gata"]
     assert restored[-1].inflect(Number="Sing") == analyses[-1].inflect(Number="Sing")
-    # The analyzer is saved once for the whole list
-    assert len(data) < 200 * len(analyses)
+    # Analyses unpickled one by one share the analyzer of the package
+    singles = [pickle.loads(pickle.dumps(analysis)) for analysis in analyses]
+    assert singles == analyses
+    assert pickle.loads(pickle.dumps(morph)) is pickle.loads(pickle.dumps(Analyzer()))
+
+
+def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
+    path = tmp_path / "es.dict"
+    path.write_bytes(morph.path.read_bytes())
+    own = Analyzer(path)
+    assert pickle.loads(pickle.dumps(own)) is own
+    analysis = pickle.loads(pickle.dumps(own.analyze("gatos")[0]))
+    assert analysis.inflect(Gender="Fem") == "gatas"
+    # The analyses of a file that is gone come with the dictionary of the package
+    gone = esmorph._esmorph._analysis(
+        "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary", tmp_path / "x"
+    )
+    assert gone.inflect(Number="Sing") == "gato"
+    with pytest.raises(FileNotFoundError):
+        esmorph._esmorph._analyzer(tmp_path / "x")
 
 
 def test_an_analysis_of_another_dictionary_has_no_forms(morph):
