@@ -287,6 +287,9 @@ impl Analysis {
     }
 }
 
+/// The path of a dictionary that pickle saves: `None` for the dictionary of the package
+type SavedPath = Option<Py<PyAny>>;
+
 /// Arguments of `_analysis`: the fields of an analysis and the path of its dictionary for pickle
 type AnalysisState = (
     String,
@@ -296,7 +299,7 @@ type AnalysisState = (
     f64,
     Vec<String>,
     String,
-    Option<PathBuf>,
+    SavedPath,
 );
 
 /// Restores an analysis from pickle with the analyzer of `path` (`None` for the dictionary of the
@@ -405,6 +408,8 @@ struct Analyzer {
     /// The path was given: otherwise pickle does not keep it, and another environment takes the
     /// dictionary of its own package
     explicit: bool,
+    /// The path that pickle saves, made once: one object for all analyses of a list
+    saved: PyOnceLock<Option<Py<PyAny>>>,
 }
 
 #[pymethods]
@@ -443,12 +448,11 @@ impl Analyzer {
             features,
             path,
             explicit,
+            saved: PyOnceLock::new(),
         })
     }
 
-    fn __reduce__<'py>(
-        slf: &Bound<'py, Self>,
-    ) -> PyResult<(Bound<'py, PyAny>, (Option<PathBuf>,))> {
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<(Bound<'py, PyAny>, (SavedPath,))> {
         let restore = slf.py().import("esmorph._esmorph")?.getattr("_analyzer")?;
         Ok((restore, (Analyzer::saved_path(slf)?,)))
     }
@@ -620,16 +624,22 @@ impl Analyzer {
 impl Analyzer {
     /// The path that pickle saves for an analyzer: `None` for the dictionary of the package. An
     /// analyzer of a file becomes the one that unpickling in this process takes for its path
-    fn saved_path(analyzer: &Bound<'_, Analyzer>) -> PyResult<Option<PathBuf>> {
+    fn saved_path(analyzer: &Bound<'_, Analyzer>) -> PyResult<SavedPath> {
+        let py = analyzer.py();
         let this = analyzer.get();
-        if !this.explicit {
-            return Ok(None);
-        }
-        let reference = PyWeakrefReference::new(analyzer)?.unbind();
-        let mut files = FILES.lock().unwrap_or_else(PoisonError::into_inner);
-        files.retain(|_, known| known.bind(analyzer.py()).upgrade().is_some());
-        files.insert(this.path.clone(), reference);
-        Ok(Some(this.path.clone()))
+        let saved = this.saved.get_or_try_init(py, || -> PyResult<_> {
+            if !this.explicit {
+                return Ok(None);
+            }
+            let reference = PyWeakrefReference::new(analyzer)?.unbind();
+            let mut files = FILES.lock().unwrap_or_else(PoisonError::into_inner);
+            files.retain(|_, known| known.bind(py).upgrade().is_some());
+            files.insert(this.path.clone(), reference);
+            Ok(Some(
+                this.path.clone().into_pyobject(py)?.into_any().unbind(),
+            ))
+        })?;
+        Ok(saved.as_ref().map(|path| path.clone_ref(py)))
     }
 
     /// Analyses for Python; `analyzer` is this analyzer

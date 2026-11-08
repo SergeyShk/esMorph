@@ -437,7 +437,8 @@ impl Dictionary {
     /// The form of the lexeme of an analysis with the features `feats` ("name", "value"): of the
     /// forms that have them, the one that keeps most of the other features of the analysis and,
     /// for a noun, an adjective, a determiner or a pronoun, has fewest features more, then a
-    /// variant only for a variant, then the first in the paradigm; of the forms with equal
+    /// variant only for a variant, then a form of the tag of the analysis, then the first in the
+    /// paradigm; of the forms with equal
     /// features, the closest in spelling to the analysis if it has such forms too, as `hablase`
     /// and `hablara`. An infinitive and a gerund
     /// asked for features they have not become finite forms: `hablar` with `Tense=Past` is
@@ -468,7 +469,8 @@ impl Dictionary {
         }
         // Of the forms of one tag the closest in spelling to the analysis, if its own tag has
         // several: `hablase` with `Person=3` is `hablase`, `elegido` with `Gender=Fem` is
-        // `elegida`, not `electa`
+        // `elegida`, not `electa`; of equally close ones the analysis itself: `paga` stays `paga`,
+        // not `pagada`, and `ha` stays `ha`, not `hay`
         let several = lexeme.cells.iter().filter(|&&cell| cell == own).count() > 1;
         let own_word = lexeme.spell(&self.suffixes, own_form)?;
         let closeness = |form: usize| {
@@ -515,8 +517,10 @@ impl Dictionary {
                     missed,
                     extra,
                     variant,
+                    lexeme.cells[form] != own,
                     group(form),
                     Reverse(closeness(form)),
+                    form != own_form,
                     form,
                 );
                 fits.then_some((key, form))
@@ -1197,11 +1201,21 @@ pub(crate) mod tests {
             }
             let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
             let haber = &dictionary.analyze("haber")[0];
-            inflected(&dictionary, haber, &[("Tense", "Pres"), ("Person", "3")])
+            let ha = &dictionary.analyze("ha")[0];
+            (
+                inflected(&dictionary, haber, &[("Tense", "Pres"), ("Person", "3")]),
+                // The analysis that starts the more frequent form stays itself
+                inflected(&dictionary, ha, &[]),
+                inflected(&dictionary, ha, &[("Person", "3")]),
+            )
         };
-        assert_eq!(build(&[]), "ha");
-        assert_eq!(build(&[("hay", 7), ("ha", 2)]), "hay");
-        assert_eq!(build(&[("ha", 2)]), "ha");
+        let ha = ("ha".to_owned(), "ha".to_owned(), "ha".to_owned());
+        assert_eq!(build(&[]), ha);
+        assert_eq!(
+            build(&[("hay", 7), ("ha", 2)]),
+            ("hay".to_owned(), ha.1.clone(), ha.2.clone())
+        );
+        assert_eq!(build(&[("ha", 2)]), ha);
     }
 
     #[test]
