@@ -64,8 +64,9 @@ fn collect<'a>(
 }
 
 /// Spellings of a host to look for: without the accent the clitics put on it (`dá` is `da`), as
-/// written (`dé`), with the `s` that `nos` and `se` take away (`vámonos` is `vamos` + `nos`) and with
-/// the `d` that `os` takes away (`sentaos` is `sentad` + `os`)
+/// written (`dé`), with the `s` that `nos` and `se` take away (`vámonos` is `vamos` + `nos`), with
+/// the `d` that `os` takes away (`sentaos` is `sentad` + `os`) and with the accent the clitics take
+/// away (`deme` is `dé` + `me`)
 pub(crate) fn hosts(host: &str, first: &str) -> Vec<String> {
     let plain: String = host.chars().map(without_acute).collect();
     let mut spellings = Vec::with_capacity(3);
@@ -75,13 +76,81 @@ pub(crate) fn hosts(host: &str, first: &str) -> Vec<String> {
     if first == "os" && plain.ends_with(['a', 'e', 'i']) {
         spellings.push(format!("{plain}d"));
     }
+    let accented = (plain == host)
+        .then(|| with_acute_on_last_vowel(&plain))
+        .flatten();
     if plain != host {
         spellings.push(plain);
         spellings.push(host.to_owned());
     } else {
         spellings.push(plain);
     }
+    spellings.extend(accented);
     spellings
+}
+
+fn with_acute_on_last_vowel(word: &str) -> Option<String> {
+    let (at, vowel) = word.char_indices().rev().find(|&(_, c)| is_vowel(c))?;
+    let accented = match vowel {
+        'a' => 'á',
+        'e' => 'é',
+        'i' => 'í',
+        'o' => 'ó',
+        'u' => 'ú',
+        _ => return None,
+    };
+    let mut spelling = String::with_capacity(word.len() + 1);
+    spelling.push_str(&word[..at]);
+    spelling.push(accented);
+    spelling.push_str(&word[at + vowel.len_utf8()..]);
+    Some(spelling)
+}
+
+fn is_vowel(c: char) -> bool {
+    matches!(c, 'a' | 'e' | 'i' | 'o' | 'u' | 'ü')
+}
+
+fn is_strong(c: char) -> bool {
+    matches!(c, 'a' | 'e' | 'o')
+}
+
+/// The place of the stressed vowel of a word in letters: the vowel with an acute or, by the general
+/// rules, the strong vowel of the penultimate syllable of a word ending in a vowel, `n` or `s` and
+/// of the last syllable otherwise
+pub(crate) fn stressed(word: &str) -> Option<usize> {
+    let letters: Vec<char> = word.chars().collect();
+    if let Some(at) = letters.iter().position(|&c| without_acute(c) != c) {
+        return Some(at);
+    }
+    // Syllables by their vowels: two strong vowels are two syllables
+    let mut nuclei = Vec::new();
+    let mut at = 0;
+    while at < letters.len() {
+        if !is_vowel(letters[at]) {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        at += 1;
+        while at < letters.len()
+            && is_vowel(letters[at])
+            && !(is_strong(letters[at - 1]) && is_strong(letters[at]))
+        {
+            at += 1;
+        }
+        nuclei.push(start..at);
+    }
+    let last = *letters.last()?;
+    let paroxytone = is_vowel(last) || last == 'n' || last == 's';
+    let nucleus = match nuclei.len() {
+        0 => return None,
+        1 => nuclei[0].clone(),
+        count => nuclei[if paroxytone { count - 2 } else { count - 1 }].clone(),
+    };
+    nucleus
+        .clone()
+        .find(|&at| is_strong(letters[at]))
+        .or(nucleus.last())
 }
 
 fn without_acute(c: char) -> char {
@@ -158,12 +227,30 @@ mod tests {
     #[test]
     fn spellings_of_a_host() {
         assert_eq!(hosts("dá", "me"), ["da", "dá"]);
-        assert_eq!(hosts("hacer", "lo"), ["hacer"]);
+        assert_eq!(hosts("hacer", "lo"), ["hacer", "hacér"]);
         assert_eq!(hosts("vámo", "nos"), ["vamos", "vamo", "vámo"]);
         assert_eq!(hosts("digámo", "se"), ["digamos", "digamo", "digámo"]);
-        assert_eq!(hosts("senta", "os"), ["sentad", "senta"]);
+        assert_eq!(hosts("senta", "os"), ["sentad", "senta", "sentá"]);
         assert_eq!(hosts("vestí", "os"), ["vestid", "vesti", "vestí"]);
-        assert_eq!(hosts("pingüino", "lo"), ["pingüino"]);
+        assert_eq!(hosts("pingüino", "lo"), ["pingüino", "pingüinó"]);
+        assert_eq!(hosts("de", "me"), ["de", "dé"]);
+        assert_eq!(hosts("esta", "te"), ["esta", "está"]);
+    }
+
+    #[test]
+    fn stressed_vowels() {
+        assert_eq!(stressed("piense"), Some(2));
+        assert_eq!(stressed("píen"), Some(1));
+        assert_eq!(stressed("debate"), Some(3));
+        assert_eq!(stressed("deba"), Some(1));
+        assert_eq!(stressed("vamos"), Some(1));
+        assert_eq!(stressed("sentad"), Some(4));
+        assert_eq!(stressed("da"), Some(1));
+        assert_eq!(stressed("ver"), Some(1));
+        assert_eq!(stressed("cuida"), Some(2));
+        assert_eq!(stressed("autoaisla"), Some(4));
+        assert_eq!(stressed("prr"), None);
+        assert_eq!(stressed(""), None);
     }
 
     #[test]

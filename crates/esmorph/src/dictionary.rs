@@ -47,7 +47,8 @@ pub struct Entry {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct Analysis {
-    /// The word form as the dictionary spells it: with its accents
+    /// The word form as the dictionary spells it: with its accents; a verb with clitics as written,
+    /// in lower case
     pub word: String,
     /// The lemma
     pub lemma: String,
@@ -278,35 +279,62 @@ impl Dictionary {
     /// clitics first, whose host is an infinitive, a gerund or an imperative of the dictionary
     fn with_clitics(&self, word: &str) -> Vec<Analysis> {
         let token = word.to_lowercase();
-        for split in clitics::splits(&token) {
-            let mut found = Vec::new();
-            let first = split.clitics[0];
-            for host in clitics::hosts(split.host, first) {
-                found.extend(self.found(&host).into_iter().filter(|analysis| {
-                    match self.hosts.get(usize::from(analysis.ud)) {
-                        Some(Host::NonFinite) => true,
-                        // `os` follows only the imperative of `vosotros`, which loses its `d`:
-                        // `cuéntenos` is `cuente` + `nos`, not `cuenten` + `os`
-                        Some(Host::Imperative) => first != "os" || host.ends_with('d'),
-                        _ => false,
-                    }
-                }));
-                if !found.is_empty() {
-                    break;
-                }
+        let splits = clitics::splits(&token);
+        // The accent that clitics put on a host marks its stressed vowel: in `piénselo` the host
+        // is `piense`, not `píen`; without such a host the accent is not looked at
+        let accent = token.chars().position(|c| "áéíóú".contains(c));
+        let strict = accent.map(|at| {
+            splits
+                .iter()
+                .find_map(|split| self.split_analyses(&token, split, Some(at)))
+        });
+        match strict.flatten() {
+            Some(analyses) => analyses,
+            None => splits
+                .iter()
+                .find_map(|split| self.split_analyses(&token, split, None))
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Analyses of a token by a split into a host and clitics, if the host is an infinitive, a
+    /// gerund or an imperative of the dictionary, stressed on the vowel `accent` if it is given
+    fn split_analyses(
+        &self,
+        token: &str,
+        split: &clitics::Split,
+        accent: Option<usize>,
+    ) -> Option<Vec<Analysis>> {
+        let first = split.clitics[0];
+        let mut found = Vec::new();
+        for host in clitics::hosts(split.host, first) {
+            found.extend(self.found(&host).into_iter().filter(|analysis| {
+                let kind = match self.hosts.get(usize::from(analysis.ud)) {
+                    Some(Host::NonFinite) => true,
+                    // `os` follows only the imperative of `vosotros`, which loses its `d`:
+                    // `cuéntenos` is `cuente` + `nos`, not `cuenten` + `os`
+                    Some(Host::Imperative) => first != "os" || host.ends_with('d'),
+                    _ => false,
+                };
+                kind && accent.is_none_or(|at| clitics::stressed(&analysis.word) == Some(at))
+            }));
+            if !found.is_empty() {
+                break;
             }
-            if found.is_empty() {
-                continue;
-            }
-            let total: f64 = found.iter().map(|analysis| analysis.prob).sum();
-            return found
+        }
+        if found.is_empty() {
+            return None;
+        }
+        let total: f64 = found.iter().map(|analysis| analysis.prob).sum();
+        Some(
+            found
                 .into_iter()
                 .map(|host| {
                     let mut words = Vec::with_capacity(1 + split.clitics.len());
                     words.push(host.word);
                     words.extend(split.clitics.iter().map(|&clitic| clitic.to_owned()));
                     Analysis {
-                        word: token.clone(),
+                        word: token.to_owned(),
                         lemma: host.lemma,
                         ud: host.ud,
                         prob: host.prob / total,
@@ -315,9 +343,8 @@ impl Dictionary {
                         words,
                     }
                 })
-                .collect();
-        }
-        Vec::new()
+                .collect(),
+        )
     }
 
     /// Analyses of a word form in the dictionary

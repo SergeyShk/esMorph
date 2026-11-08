@@ -89,6 +89,9 @@ INFINITIVE = re.compile(r"[aeiíoó]r(se)?$")
 TABLE_CLITIC = re.compile(r"^(me|te|se|nos|os) ")
 CLITIC_ENDING = re.compile(r"(me|te|se|nos|os|lo|la|le|los|las|les)$")
 REFLEXIVE_ENDING = re.compile(r"(nos|os|te|se)$")
+ACUTE = set("áéíóú")
+# Vowels of a syllable: two strong vowels are two syllables
+SYLLABLE_VOWELS = re.compile(r"[iuü]*[aeo][iuü]*|[iuü]+")
 NON_FINITE_ROWS = {"infinitive", "gerund"}
 FORMS_WITH_CLITICS = NON_FINITE_ROWS | {"imperative"}
 # A sense "diminutive of" names another word: the treebanks keep such a word as its own lemma
@@ -308,7 +311,8 @@ def verb_rows(word: str, forms: list[tuple[str, set[str]]]) -> Iterator[tuple[st
         A table with rows like `abatirme` has a second block for the reflexive verb: `abatirse`,
         `abatiéndose`, `abátete`. Only the first row of a set of tags stays there. A table of a
         `-se` lemma, or one with no infinitive of its headword (`ufanar` lists `ufanarse`), holds the
-        reflexive verb alone: its imperative is left out and its gerund loses the clitic
+        reflexive verb alone: its imperative and its gerund lose the clitic, and its infinitive with
+        the clitic is left out
 
     Arguments:
         word (str): Headword
@@ -356,12 +360,36 @@ def plain_imperative(form: str, tags: set[str]) -> str:
     ending = REFLEXIVE_ENDING.search(form)
     if "vos-form" in tags or not ending:
         return ""
-    stem = unicodedata.normalize("NFD", form[: ending.start()]).replace("\u0301", "")
+    stem = unicodedata.normalize("NFC", form[: ending.start()])
     if ending[1] == "nos":
         stem += "s"
-    elif ending[1] == "os" and stem.endswith(("a", "e", "i")):
+    elif ending[1] == "os" and stem.endswith(("a", "e", "i", "í")):
         stem += "d"
-    return unicodedata.normalize("NFC", stem)
+    plain = unicodedata.normalize("NFC", unicodedata.normalize("NFD", stem).replace("\u0301", ""))
+    # The clitic put the accent only where the plain word is stressed anyway: `autoaíslate`
+    # keeps the accent of `autoaísla`
+    accent = next((at for at, char in enumerate(stem) if char in ACUTE), None)
+    return plain if accent is None or stressed_vowel(plain) == accent else stem
+
+
+def stressed_vowel(word: str) -> int | None:
+    """
+    The place of the stressed vowel of a word without an acute, by the general rules
+
+    Arguments:
+        word (str): The word
+
+    Returns:
+        int | None: The place in letters: the strong vowel of the penultimate syllable of a word
+        ending in a vowel, `n` or `s` and of the last syllable otherwise; `None` without vowels
+    """
+    nuclei = [(match.start(), match.group()) for match in SYLLABLE_VOWELS.finditer(word)]
+    if not nuclei:
+        return None
+    paroxytone = word.endswith(("a", "e", "i", "o", "u", "n", "s")) and len(nuclei) > 1
+    start, vowels = nuclei[-2] if paroxytone else nuclei[-1]
+    strong = next((at for at, char in enumerate(vowels) if char in "aeo"), len(vowels) - 1)
+    return start + strong
 
 
 def is_other_gender(tags: set[str], gender: set[str]) -> bool:
