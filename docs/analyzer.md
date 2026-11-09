@@ -72,12 +72,12 @@ Case does not matter. A word spelled as in the dictionary gives the analyses of 
 
 A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
 
-- a sign of punctuation is `PUNCT` with its `PunctType`, and `PunctSide` for paired signs; a symbol such as `%` or `€` is `SYM`;
+- a sign of punctuation is `PUNCT` with its `PunctType`, and `PunctSide` for paired signs; a symbol such as `%`, `€` or `²` is `SYM`;
 - a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too; the lemma drops the periods between thousands: `10.000` is `10000`;
 - a Roman numeral is `NUM` with `NumForm=Roman`, less often a name;
 - a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`.
 
-A word in capitals that the dictionary knows may be a name too: a word of up to four letters gets the name first, as it is mostly an acronym (`ETA`, `PP`), while a longer word and a word of a closed class get it after the analyses of the dictionary, as they are mostly words of a headline (`CAMIONES`, `EL`). An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
+A word in capitals that the dictionary knows may be a name too, with its share: a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a word of a closed class are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral in `I` such as `VI` or `XI` is a numeral first. A token with a capital letter that splits as a verb with clitics is mostly a name too: `Mandela` is first of all `PROPN`. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
 
 === "Code"
 

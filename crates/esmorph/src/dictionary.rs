@@ -13,7 +13,7 @@ use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
     Storage, Strings, UD_BITS, VARIANT, WordValue,
 };
-use crate::rules::{self, CAPS_NAME, Rule, RuleTags, SHORT_CAPS};
+use crate::rules::{self, CAPS_NAME, CLITICS_NAME, Rule, RuleTags, SHORT_CAPS};
 use crate::ud::{UdTag, UdTags};
 
 /// Where an analysis comes from
@@ -277,11 +277,16 @@ impl Dictionary {
             } else {
                 Vec::new()
             };
-            return if analyses.is_empty() {
-                self.ruled(&word)
-            } else {
-                analyses
-            };
+            if analyses.is_empty() {
+                return self.ruled(&word);
+            }
+            // A token with a capital letter that splits as a verb with clitics is mostly a name:
+            // `Mandela`, `Portela`
+            let mut analyses = analyses;
+            if word.chars().any(char::is_uppercase) {
+                self.add_rules(&word, &[(Rule::Name, CLITICS_NAME)], &mut analyses);
+            }
+            return analyses;
         }
         if let Some(words) = clitics::contraction(&word) {
             for analysis in analyses.iter_mut().filter(|a| a.lemma == words[0]) {
@@ -313,13 +318,12 @@ impl Dictionary {
             .collect()
     }
 
-    /// Adds the analysis of a name to the analyses of a word in capitals that has none, with its
-    /// share: first for a short word, which is mostly an acronym, after the others for a longer
-    /// word and for a word of a closed class, which are mostly words of a headline
+    /// Adds the analysis of a name to the analyses of a word in capitals that has none, by its
+    /// share: a short word is mostly an acronym, so its name usually goes first, while a longer
+    /// word and a word of a closed class are mostly words of a headline, so their name usually
+    /// goes after the analyses of the dictionary. A Roman numeral in `I` of an open class gets the
+    /// analyses of a numeral instead: `VI`, `XI`
     fn add_name(&self, token: &str, analyses: &mut Vec<Analysis>) {
-        let Some(tags) = &self.rule_tags else {
-            return;
-        };
         let pos = |analysis: &Analysis| self.ud.get(analysis.ud).map(|tag| tag.pos());
         if analyses
             .iter()
@@ -339,23 +343,43 @@ impl Dictionary {
         } else {
             usize::from(letters > SHORT_CAPS)
         }];
-        for analysis in analyses.iter_mut() {
-            analysis.prob *= 1.0 - share;
+        if !closed && token.ends_with('I') && rules::roman(token) {
+            let (number, name) = rules::roman_shares(token);
+            let rules = [(Rule::Roman, share * number), (Rule::Name, share * name)];
+            self.add_rules(token, &rules, analyses);
+        } else {
+            self.add_rules(token, &[(Rule::Name, share)], analyses);
         }
-        let name = Analysis {
-            word: token.to_owned(),
-            lemma: token.to_owned(),
-            ud: tags.number(Rule::Name),
-            prob: share,
-            source: Source::Rule,
-            entry: None,
-            words: Vec::new(),
+    }
+
+    /// Adds analyses of rules with their shares to the analyses of a token, which keep the rest;
+    /// the order stays by the probability
+    fn add_rules(&self, token: &str, rules: &[(Rule, f64)], analyses: &mut Vec<Analysis>) {
+        let Some(tags) = &self.rule_tags else {
+            return;
         };
-        let at = analyses
-            .iter()
-            .position(|analysis| analysis.prob < share)
-            .unwrap_or(analyses.len());
-        analyses.insert(at, name);
+        let taken: f64 = rules.iter().map(|&(_, share)| share).sum();
+        for analysis in analyses.iter_mut() {
+            analysis.prob *= 1.0 - taken;
+        }
+        for &(rule, share) in rules {
+            let at = analyses
+                .iter()
+                .position(|analysis| analysis.prob < share)
+                .unwrap_or(analyses.len());
+            analyses.insert(
+                at,
+                Analysis {
+                    word: token.to_owned(),
+                    lemma: token.to_owned(),
+                    ud: tags.number(rule),
+                    prob: share,
+                    source: Source::Rule,
+                    entry: None,
+                    words: Vec::new(),
+                },
+            );
+        }
     }
 
     /// Whether `analyze` finds analyses of the word form: it is in the dictionary or a verb of the
@@ -1056,6 +1080,12 @@ pub(crate) mod tests {
         ("ano", "NOUN", "ano", "Gender=Masc|Number=Sing"),
         ("yo", "PRON", "me", "Person=1"),
         ("guión", "NOUN", "guiones", "Number=Plur"),
+        (
+            "ver",
+            "VERB",
+            "vi",
+            "Mood=Ind|Number=Sing|Person=1|Tense=Past|VerbForm=Fin",
+        ),
     ];
 
     fn ranked_dictionary() -> Dictionary {
@@ -1142,7 +1172,7 @@ pub(crate) mod tests {
     #[test]
     fn a_verb_with_clitics_is_its_host() {
         let dictionary = clitic_dictionary();
-        let analyses = dictionary.analyze("Dámelo");
+        let analyses = dictionary.analyze("dámelo");
         assert_eq!(analyses.len(), 1, "only the imperative takes clitics");
         let analysis = &analyses[0];
         assert_eq!(analysis.word, "dámelo");
@@ -1156,6 +1186,22 @@ pub(crate) mod tests {
         assert_eq!(dictionary.analyze("sentaos")[0].words, ["sentad", "os"]);
         assert_eq!(dictionary.analyze("daros")[0].words, ["dar", "os"]);
         assert!(dictionary.is_known("dámelo"));
+    }
+
+    #[test]
+    fn a_token_with_a_capital_that_splits_is_mostly_a_name() {
+        let dictionary = clitic_dictionary();
+        let analyses = dictionary.analyze("Dámelo");
+        let summary: Vec<(&str, Source)> = (analyses.iter())
+            .map(|analysis| (analysis.lemma.as_str(), analysis.source))
+            .collect();
+        assert_eq!(
+            summary,
+            [("Dámelo", Source::Rule), ("dar", Source::Clitics)]
+        );
+        assert!(analyses[0].prob > 0.9);
+        let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+        assert!((total - 1.0).abs() < 1e-9, "{total}");
     }
 
     #[test]
@@ -1648,6 +1694,11 @@ pub(crate) mod tests {
         assert!(summary("qzxw").is_empty());
         // The rules give analyses, not words of the dictionary
         assert!(!dictionary.is_known("Josep") && !dictionary.is_known(","));
+        // A Roman numeral in `I` that the dictionary knows is a numeral first
+        let summary_vi: Vec<String> = (dictionary.analyze("VI").into_iter())
+            .map(|analysis| dictionary.ud_tag(analysis.ud).unwrap().pos().to_owned())
+            .collect();
+        assert_eq!(summary_vi, ["NUM", "VERB", "PROPN"]);
         // A known word in capitals of a closed class is a name last
         let me = dictionary.analyze("ME");
         assert_eq!(me.len(), 2);
@@ -1910,8 +1961,8 @@ pub(crate) mod tests {
     fn counts_spellings_as_word_forms() {
         let dictionary = dictionary();
         // Every form of the table once: casa and casas, casar, camión, camiones, público, publico,
-        // publicó, más, mas, pingüino, averigüé, ambigúes, año, ano, me, guiones
-        assert_eq!(dictionary.len(), 17);
+        // publicó, más, mas, pingüino, averigüé, ambigúes, año, ano, me, guiones, vi
+        assert_eq!(dictionary.len(), 18);
     }
 
     #[test]

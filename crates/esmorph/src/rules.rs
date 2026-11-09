@@ -9,7 +9,7 @@ use crate::ud::UdTags;
 const SIGNS: [(&str, &str, &str); 13] = [
     (",", "Comm", ""),
     (".", "Peri", ""),
-    (":", "Colo", ""),
+    (":/", "Colo", ""),
     (";", "Semi", ""),
     ("…", "Elip", ""),
     ("-‐‑‒–—―", "Dash", ""),
@@ -22,15 +22,23 @@ const SIGNS: [(&str, &str, &str); 13] = [
     ("!", "Excl", "Fin"),
 ];
 
-/// Symbols out of the symbol blocks of Unicode that are `SYM`, not `PUNCT`
+/// Symbols out of the symbol blocks of Unicode that are `SYM`, not `PUNCT`; the superscripts and
+/// the ordinal indicators are a letter and digits for Unicode but signs for the treebanks
+/// (`m²`, `25 º`)
 const SYMBOLS: &[char] = &[
     '%', '‰', '$', '£', '¥', '¢', '°', '+', '=', '<', '>', '±', '×', '÷', '§', '©', '®', '&', '@',
-    '#', '*', '~', '^', '|', '\\', '¶', '¬',
+    '#', '*', '~', '^', '|', '\\', '¶', '¬', '¹', '²', '³', 'º', 'ª',
 ];
 
 /// Shares of the analyses of a Roman numeral the dictionary does not have, of several letters and
 /// of one: a number or a name, by AnCora and GSD train
 const ROMAN: [(f64, f64); 2] = [(363.0, 24.0), (32.0, 27.0)];
+/// The longest Roman numeral below 4000: `MMMDCCCLXXXVIII`
+const LONGEST_ROMAN: usize = 15;
+
+/// Share of a name among the analyses of a token with a capital letter that splits as a verb with
+/// clitics: `Mandela`, `Portela`, by AnCora and GSD train (49 of 53)
+pub(crate) const CLITICS_NAME: f64 = 49.0 / 53.0;
 
 /// Shares of a name among the analyses of a word in capitals that the dictionary knows without
 /// one, by AnCora and GSD train: a word of up to `SHORT_CAPS` letters is mostly an acronym (`ETA`,
@@ -103,7 +111,7 @@ pub(crate) fn rules(token: &str) -> Vec<(String, Rule, f64)> {
     {
         return Vec::new();
     }
-    if token.chars().all(|c| !c.is_alphanumeric()) {
+    if token.chars().all(|c| !c.is_alphanumeric() || symbol(c)) {
         let rule = if token.chars().any(symbol) {
             Rule::Symbol
         } else {
@@ -115,17 +123,22 @@ pub(crate) fn rules(token: &str) -> Vec<(String, Rule, f64)> {
         return vec![(lemma, Rule::Cardinal, 1.0)];
     }
     if roman(token) {
-        let (number, name) = ROMAN[usize::from(token.len() == 1)];
-        let total = number + name;
+        let (number, name) = roman_shares(token);
         return vec![
-            (token.to_owned(), Rule::Roman, number / total),
-            (token.to_owned(), Rule::Name, name / total),
+            (token.to_owned(), Rule::Roman, number),
+            (token.to_owned(), Rule::Name, name),
         ];
     }
     if token.chars().any(char::is_uppercase) {
         return vec![(token.to_owned(), Rule::Name, 1.0)];
     }
     Vec::new()
+}
+
+/// Shares of a Roman numeral and of a name for a Roman numeral
+pub(crate) fn roman_shares(token: &str) -> (f64, f64) {
+    let (number, name) = ROMAN[usize::from(token.len() == 1)];
+    (number / (number + name), name / (number + name))
 }
 
 /// Whether a token is a word in capitals: two letters at least and no lowercase one (`ETA`, `PP`,
@@ -159,7 +172,8 @@ fn symbol(c: char) -> bool {
     SYMBOLS.contains(&c)
         || matches!(
             c,
-            '\u{20A0}'..='\u{20CF}'
+            '\u{2070}'..='\u{209F}'
+                | '\u{20A0}'..='\u{20CF}'
                 | '\u{2100}'..='\u{214F}'
                 | '\u{2190}'..='\u{23FF}'
                 | '\u{25A0}'..='\u{27BF}'
@@ -196,7 +210,7 @@ fn number(token: &str) -> Option<String> {
 }
 
 /// A Roman numeral in capitals in its canonical spelling, below 4000: `XIV`, `MMXXVI`, not `IIII`
-fn roman(token: &str) -> bool {
+pub(crate) fn roman(token: &str) -> bool {
     const DIGITS: [(&str, u32); 13] = [
         ("M", 1000),
         ("CM", 900),
@@ -212,7 +226,10 @@ fn roman(token: &str) -> bool {
         ("IV", 4),
         ("I", 1),
     ];
-    if token.is_empty() || !token.chars().all(|c| "MDCLXVI".contains(c)) {
+    if token.is_empty()
+        || token.len() > LONGEST_ROMAN
+        || !token.chars().all(|c| "MDCLXVI".contains(c))
+    {
         return false;
     }
     let mut value = 0;
@@ -266,8 +283,9 @@ mod tests {
         assert_eq!(kinds("--"), [("--".into(), sign("Dash", ""))]);
         // Signs of different kinds and signs out of the table have no features
         assert_eq!(kinds("?!"), [("?!".into(), Rule::Punct)]);
-        assert_eq!(kinds("/"), [("/".into(), Rule::Punct)]);
-        for symbol in ["%", "€", "+", "&", "→", "😀"] {
+        assert_eq!(kinds("/"), [("/".into(), sign("Colo", ""))]);
+        assert_eq!(kinds("…/"), [("…/".into(), Rule::Punct)]);
+        for symbol in ["%", "€", "+", "&", "→", "😀", "²", "º", "ª", "⁴"] {
             assert_eq!(kinds(symbol), [(symbol.into(), Rule::Symbol)], "{symbol}");
         }
     }
@@ -300,6 +318,9 @@ mod tests {
         for word in ["IIII", "IC", "VX", "XXXX", "ii", "", "MMMM"] {
             assert!(!roman(word), "{word}");
         }
+        assert!(roman("MMMDCCCLXXXVIII"));
+        // A long token is no numeral and is not summed
+        assert!(!roman(&"M".repeat(5_000_000)));
         let analyses = rules("XXI");
         assert_eq!(analyses[0].1, Rule::Roman);
         assert_eq!(analyses[1].1, Rule::Name);

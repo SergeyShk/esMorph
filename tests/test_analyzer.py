@@ -169,7 +169,6 @@ def test_forms_with_clitics_are_not_word_forms(morph, word):
     "word, lemma, words",
     [
         ("dámelo", "dar", ("da", "me", "lo")),
-        ("Dámelo", "dar", ("da", "me", "lo")),
         ("damelo", "dar", ("da", "me", "lo")),
         ("hacerlo", "hacer", ("hacer", "lo")),
         ("diciéndoselo", "decir", ("diciendo", "se", "lo")),
@@ -1036,3 +1035,29 @@ def test_an_analysis_of_a_rule_is_its_only_form(morph):
     name = morph.analyze("Josep")[0]
     assert pickle.loads(pickle.dumps(name)) == name
     assert pickle.loads(pickle.dumps(name)).forms() == [name]
+
+
+def test_rules_for_signs_of_the_treebanks(morph):
+    assert summary(morph, "/") == [("/", "/", "PUNCT", {"PunctType": "Colo"}, "rule")]
+    for sign in ["²", "º", "ª"]:
+        assert summary(morph, sign) == [(sign, sign, "SYM", {}, "rule")], sign
+    # A long token of Roman letters is no numeral
+    assert [a.pos for a in morph.analyze("M" * 100)] == ["PROPN"]
+
+
+def test_known_roman_numerals_and_names_with_clitics(morph):
+    six = morph.analyze("VI")
+    assert (six[0].pos, six[0].feats["NumForm"]) == ("NUM", "Roman")
+    assert any(a.lemma == "ver" for a in six)
+    assert sum(a.prob for a in six) == pytest.approx(1.0)
+    # An acronym that looks like a numeral stays a name
+    assert morph.analyze("CD")[0].pos == "PROPN"
+    mandela = morph.analyze("Mandela")
+    assert [(a.lemma, a.pos, a.source) for a in mandela] == [
+        ("Mandela", "PROPN", "rule"),
+        ("mandar", "VERB", "clitics"),
+    ]
+    assert morph.analyze("mandela")[0].source == "clitics"
+    # Case does not matter for the words of the verb, which is the second analysis
+    verb = morph.analyze("Dámelo")[1]
+    assert (verb.lemma, verb.word, verb.words) == ("dar", "dámelo", ("da", "me", "lo"))

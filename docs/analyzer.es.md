@@ -72,12 +72,12 @@ Las mayúsculas no importan. Una palabra escrita como en el diccionario da los a
 
 Un token que el diccionario no tiene recibe los análisis de unas reglas, con `source` igual a `"rule"` y `word` tal como está escrito:
 
-- un signo de puntuación es `PUNCT` con su `PunctType`, y `PunctSide` para los signos dobles; un símbolo como `%` o `€` es `SYM`;
+- un signo de puntuación es `PUNCT` con su `PunctType`, y `PunctSide` para los signos dobles; un símbolo como `%`, `€` o `²` es `SYM`;
 - un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año; el lema quita los puntos entre los millares: `10.000` es `10000`;
 - un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre;
 - un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`.
 
-Una palabra en mayúsculas que el diccionario conoce también puede ser un nombre: una palabra de hasta cuatro letras recibe el nombre primero, porque suele ser una sigla (`ETA`, `PP`), mientras que una palabra más larga y una palabra de una clase cerrada lo reciben después de los análisis del diccionario, porque suelen ser palabras de un titular (`CAMIONES`, `EL`). Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
+Una palabra en mayúsculas que el diccionario conoce también puede ser un nombre, con su parte: una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra de una clase cerrada suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano en `I` como `VI` o `XI` es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también suele ser un nombre: `Mandela` es ante todo `PROPN`. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
 
 === "Código"
 
