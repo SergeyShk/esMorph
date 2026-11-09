@@ -7,6 +7,7 @@ nav:
     - Home:
       - About: index.md
       - Installation: installation.md
+      - Comparison: comparison.md
       - Exceptions: exceptions.md
       - Authors: authors.md
     - Analyzer: analyzer.md
@@ -67,6 +68,7 @@ plugins:
             Home: Inicio
             About: Acerca de
             Installation: Instalación
+            Comparison: Comparación
             Authors: Autores
             Exceptions: Excepciones
             Analyzer: Analizador
