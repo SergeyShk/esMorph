@@ -68,17 +68,42 @@ Las mayúsculas no importan. Una palabra escrita como en el diccionario da los a
     ['camión', 'camión', 'pingüino']
     ```
 
+## Tokens fuera del diccionario { #rules }
+
+Un token que el diccionario no tiene recibe los análisis de unas reglas, con `source` igual a `"rule"` y `word` tal como está escrito:
+
+- un signo de puntuación es `PUNCT` con su `PunctType`, y `PunctSide` para los signos dobles; un símbolo como `%`, `€` o `²` es `SYM`;
+- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año; el lema quita los puntos entre los millares: `10.000` es `10000`;
+- un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre;
+- un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`.
+
+Una palabra en mayúsculas que el diccionario conoce también puede ser un nombre, con su parte: una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra de una clase cerrada suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano en `I` como `VI` o `XI` es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también suele ser un nombre: `Mandela` es ante todo `PROPN`. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
+
+=== "Código"
+
+    ``` python
+    [(a.lemma, a.pos, a.feats, a.source) for a in morph.analyze("10.000")]
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("ETA")]
+    ```
+
+=== "Resultado"
+
+    ```
+    [('10000', 'NUM', {'NumForm': 'Digit', 'NumType': 'Card'}, 'rule')]
+    [('ETA', 'PROPN', 0.82), ('eta', 'NOUN', 0.18)]
+    ```
+
 ## Métodos { #methods }
 
 | Método | Resultado |
 | :-- | :-- |
 | `Analyzer(path=None)` | Un analizador con el diccionario del paquete o de un archivo |
-| `analyze(word)` | La lista de `Analysis`; vacía para una palabra desconocida |
+| `analyze(word)` | La lista de `Analysis`; vacía para una palabra en minúsculas fuera del diccionario |
 | `analyze_many(words)` | Lo mismo para una colección de palabras, sin el GIL |
-| `lemmatize(words)` | El lema del primer análisis de cada palabra; una palabra desconocida en minúsculas, sin el GIL |
-| `is_known(word)` | Si `analyze` encuentra análisis de la palabra |
+| `lemmatize(words)` | El lema del primer análisis de cada palabra; una palabra sin análisis en minúsculas, sin el GIL |
+| `is_known(word)` | Si el diccionario tiene la palabra, tal como está escrita o como un verbo con clíticos |
 
 `Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob`, `words` y `source` y los métodos `forms()` e `inflect()` - véase [Flexión](inflection.md). Es inmutable, se puede usar como clave y se compara sin la probabilidad. El analizador y el análisis se pueden serializar con pickle: al deserializarlos se toma el analizador del mismo diccionario que el proceso ya tiene, así que los análisis deserializados uno a uno lo comparten, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete.
 
 !!! note "En desarrollo"
-    Las palabras desconocidas aún no tienen análisis: llegarán en próximas versiones.
+    Una palabra en minúsculas fuera del diccionario aún no tiene análisis: la estimación llegará en próximas versiones.

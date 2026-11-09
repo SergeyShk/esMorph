@@ -24,6 +24,7 @@ mod clitics;
 mod dictionary;
 mod error;
 mod format;
+mod rules;
 mod ud;
 
 #[cfg(feature = "build")]

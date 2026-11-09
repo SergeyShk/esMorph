@@ -8,9 +8,10 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 - Case does not matter. A word absent as written is looked for without its accents and with a lost diaeresis.
 - A verb with enclitic pronouns is analyzed as its verb, with the words of the token: `dámelo` is `da` + `me` + `lo`.
 - The forms of a lexeme in the order of its paradigm and the form with given features: conjugation, gender and number.
+- Tokens out of the dictionary by rules: punctuation, symbols, numbers, Roman numerals, names and acronyms.
 - The dictionary is mapped into memory or read from the data of the program without copies.
 
-Work in progress: unknown words come in the next versions.
+Work in progress: guessing unknown words comes in the next versions.
 
 ## Installation
 

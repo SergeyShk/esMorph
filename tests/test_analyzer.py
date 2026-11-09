@@ -91,7 +91,8 @@ def test_irregular_verbs(morph):
 
 def test_case_does_not_matter(morph):
     for word in ["CAMIÓN", "Camión", "cAmIóN"]:
-        assert lemmas(morph, word) == ["camión"]
+        assert morph.analyze(word)[0].lemma == "camión"
+    assert lemmas(morph, "Camión") == ["camión"]
     assert morph.analyze("Camión")[0].word == "camión"
 
 
@@ -128,7 +129,7 @@ def test_tilde_is_no_accent(morph):
 
 def test_normalized_queries(morph):
     assert lemmas(morph, "camión") == ["camión"]
-    assert lemmas(morph, "CAMIÓN") == ["camión"]
+    assert morph.analyze("CAMIÓN")[0].lemma == "camión"
     assert lemmas(morph, "año") == ["año"]
     assert lemmas(morph, "ca­mión") == ["camión"]
     assert lemmas(morph, "﻿camión​") == ["camión"]
@@ -168,7 +169,6 @@ def test_forms_with_clitics_are_not_word_forms(morph, word):
     "word, lemma, words",
     [
         ("dámelo", "dar", ("da", "me", "lo")),
-        ("Dámelo", "dar", ("da", "me", "lo")),
         ("damelo", "dar", ("da", "me", "lo")),
         ("hacerlo", "hacer", ("hacer", "lo")),
         ("diciéndoselo", "decir", ("diciendo", "se", "lo")),
@@ -579,7 +579,7 @@ def test_canonical_rows_are_the_word_itself(morph):
     assert morph.analyze("tdhle") == []
 
 
-@pytest.mark.parametrize("word", ["", " ", "qzxw", "­", "123", "a b", "\x00", "\ud83d"])
+@pytest.mark.parametrize("word", ["", " ", "qzxw", "­", "a b", "\x00", "\ud83d", "1 000"])
 def test_unknown_words(morph, word):
     assert morph.analyze(word) == []
     assert not morph.is_known(word)
@@ -604,7 +604,12 @@ def test_analyze_many(morph):
 
 
 def test_lemmatize(morph):
-    assert morph.lemmatize(["CAMIONES", "Qzxw"]) == ["camión", "qzxw"]
+    assert morph.lemmatize(["CAMIONES", "Qzxw", "qzxw", "10.000"]) == [
+        "camión",
+        "Qzxw",
+        "qzxw",
+        "10000",
+    ]
     assert morph.lemmatize(iter(["hablo"])) == ["hablar"]
     assert morph.lemmatize([]) == []
     words = morph.lemmatize(["hablo"] * 20_000)
@@ -946,3 +951,113 @@ def test_an_analysis_of_another_dictionary_has_no_forms(morph):
         "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary"
     )
     assert found.inflect(Number="Sing") == "gato"
+
+
+def summary(morph, token):
+    return [(a.word, a.lemma, a.pos, a.feats, a.source) for a in morph.analyze(token)]
+
+
+@pytest.mark.parametrize(
+    ("token", "feats"),
+    [
+        (",", {"PunctType": "Comm"}),
+        (".", {"PunctType": "Peri"}),
+        ("...", {"PunctType": "Elip"}),
+        ("«", {"PunctType": "Quot"}),
+        ("—", {"PunctType": "Dash"}),
+        ("(", {"PunctSide": "Ini", "PunctType": "Brck"}),
+        ("?", {"PunctSide": "Fin", "PunctType": "Qest"}),
+        ("¡", {"PunctSide": "Ini", "PunctType": "Excl"}),
+        ("?!", {}),
+    ],
+)
+def test_punctuation(morph, token, feats):
+    assert summary(morph, token) == [(token, token, "PUNCT", feats, "rule")]
+
+
+def test_symbols_and_numbers(morph):
+    assert summary(morph, "%") == [("%", "%", "SYM", {}, "rule")]
+    assert summary(morph, "€") == [("€", "€", "SYM", {}, "rule")]
+    card = {"NumForm": "Digit", "NumType": "Card"}
+    for token, lemma in [
+        ("1999", "1999"),
+        ("10.000", "10000"),
+        ("1.234,5", "1234,5"),
+        ("3,14", "3,14"),
+        ("15:00", "15:00"),
+        ("2-1", "2-1"),
+    ]:
+        assert summary(morph, token) == [(token, lemma, "NUM", card, "rule")], token
+
+
+def test_roman_numerals(morph):
+    analyses = morph.analyze("XXI")
+    assert [(a.pos, a.feats) for a in analyses] == [
+        ("NUM", {"NumForm": "Roman", "NumType": "Card"}),
+        ("PROPN", {}),
+    ]
+    assert analyses[0].prob > 0.9
+    assert sum(a.prob for a in analyses) == pytest.approx(1.0)
+
+
+def test_names(morph):
+    for token in ["Josep", "CiU", "W.", "TV-3", "Macapagal-Arroyo"]:
+        assert summary(morph, token) == [(token, token, "PROPN", {}, "rule")], token
+    assert morph.lemmatize(["Clinton", "clinton"]) == ["Clinton", "clinton"]
+    # The rules give analyses, not words of the dictionary
+    assert not morph.is_known("Josep")
+    assert not morph.is_known("1999")
+
+
+def test_words_in_capitals_may_be_names(morph):
+    # A short word in capitals is mostly an acronym
+    eta = morph.analyze("ETA")
+    assert (eta[0].lemma, eta[0].pos, eta[0].source) == ("ETA", "PROPN", "rule")
+    assert eta[1].lemma == "eta"
+    assert sum(a.prob for a in eta) == pytest.approx(1.0)
+    # A longer word and a word of a closed class are mostly words of a headline
+    camiones = morph.analyze("CAMIONES")
+    assert (camiones[0].lemma, camiones[-1].pos) == ("camión", "PROPN")
+    article = morph.analyze("EL")
+    assert article[0].pos == "DET"
+    assert any(a.pos == "PROPN" for a in article)
+    # A name of the dictionary needs no other
+    assert [a.source for a in morph.analyze("PSOE")] == ["dictionary"] * len(morph.analyze("PSOE"))
+
+
+def test_an_analysis_of_a_rule_is_its_only_form(morph):
+    number = morph.analyze("10.000")[0]
+    assert number.forms() == [number]
+    assert number.forms()[0].prob == 1.0
+    assert number.inflect(NumType="Card") == "10.000"
+    with pytest.raises(esmorph.FormNotFoundError):
+        number.inflect(Number="Plur")
+    name = morph.analyze("Josep")[0]
+    assert pickle.loads(pickle.dumps(name)) == name
+    assert pickle.loads(pickle.dumps(name)).forms() == [name]
+
+
+def test_rules_for_signs_of_the_treebanks(morph):
+    assert summary(morph, "/") == [("/", "/", "PUNCT", {"PunctType": "Colo"}, "rule")]
+    for sign in ["²", "º", "ª"]:
+        assert summary(morph, sign) == [(sign, sign, "SYM", {}, "rule")], sign
+    # A long token of Roman letters is no numeral
+    assert [a.pos for a in morph.analyze("M" * 100)] == ["PROPN"]
+
+
+def test_known_roman_numerals_and_names_with_clitics(morph):
+    six = morph.analyze("VI")
+    assert (six[0].pos, six[0].feats["NumForm"]) == ("NUM", "Roman")
+    assert any(a.lemma == "ver" for a in six)
+    assert sum(a.prob for a in six) == pytest.approx(1.0)
+    # An acronym that looks like a numeral stays a name
+    assert morph.analyze("CD")[0].pos == "PROPN"
+    mandela = morph.analyze("Mandela")
+    assert [(a.lemma, a.pos, a.source) for a in mandela] == [
+        ("Mandela", "PROPN", "rule"),
+        ("mandar", "VERB", "clitics"),
+    ]
+    assert morph.analyze("mandela")[0].source == "clitics"
+    # Case does not matter for the words of the verb, which is the second analysis
+    verb = morph.analyze("Dámelo")[1]
+    assert (verb.lemma, verb.word, verb.words) == ("dar", "dámelo", ("da", "me", "lo"))

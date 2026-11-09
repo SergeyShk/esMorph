@@ -19,7 +19,7 @@
 **esMorph** es un analizador morfológico del español: un núcleo en Rust con API para Python. Para una forma de palabra busca los análisis en un diccionario - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) - y da las formas de un lexema según sus rasgos: conjugación, género y número.
 
 > [!WARNING]
-> En desarrollo: los análisis y la flexión de las palabras del diccionario ya funcionan, pero las palabras desconocidas llegarán en las próximas versiones. Las versiones `0.1.0.devN` se publican en TestPyPI, y el sitio de la documentación aparecerá con el primer lanzamiento.
+> En desarrollo: los análisis y la flexión de las palabras del diccionario y las reglas de números, signos y nombres ya funcionan, pero la estimación de las palabras desconocidas llegará en las próximas versiones. Las versiones `0.1.0.devN` se publican en TestPyPI, y el sitio de la documentación aparecerá con el primer lanzamiento.
 
 ## Instalación
 

@@ -106,6 +106,16 @@ pub(crate) struct UdTags {
     data: Vec<u16>,
 }
 
+impl Default for UdTags {
+    fn default() -> Self {
+        UdTags {
+            strings: Vec::new(),
+            bounds: vec![0],
+            data: Vec::new(),
+        }
+    }
+}
+
 impl UdTags {
     /// Tags from a table of strings and tags in a row as numbers of strings
     pub fn read(table: &Strings, data: &[u16]) -> Result<Self, Error> {
@@ -181,6 +191,36 @@ impl UdTags {
     pub fn iter(&self) -> impl ExactSizeIterator<Item = UdTag<'_>> {
         (0..self.len()).map(|number| self.tag(number))
     }
+
+    /// Number of the tag with the part of speech and the features in CoNLL-U order and without
+    /// labels; a missing tag is added. `None` if the table is full
+    pub fn find_or_add(&mut self, pos: &str, feats: &[(&str, &str)]) -> Option<u16> {
+        let found = self.iter().position(|tag| {
+            tag.pos() == pos && tag.feats().eq(feats.iter().copied()) && tag.labels().len() == 0
+        });
+        if let Some(number) = found {
+            return u16::try_from(number).ok();
+        }
+        let number = u16::try_from(self.len()).ok()?;
+        let mut string = |text: &str| -> Option<u16> {
+            match self.strings.iter().position(|known| &**known == text) {
+                Some(at) => u16::try_from(at).ok(),
+                None => {
+                    let at = u16::try_from(self.strings.len()).ok()?;
+                    self.strings.push(text.into());
+                    Some(at)
+                }
+            }
+        };
+        let mut tag = vec![string(pos)?, u16::try_from(feats.len()).ok()?];
+        for &(name, value) in feats {
+            tag.extend([string(name)?, string(value)?]);
+        }
+        tag.push(0);
+        self.data.extend(tag);
+        self.bounds.push(u32::try_from(self.data.len()).ok()?);
+        Some(number)
+    }
 }
 
 #[cfg(test)]
@@ -221,6 +261,26 @@ mod tests {
             format!("{:?}", tags.get(1).unwrap()),
             r#"UdTag { pos: "VERB", feats: [], labels: [] }"#
         );
+    }
+
+    #[test]
+    fn finds_and_adds_tags() {
+        let strings = table(&["NOUN", "Gender", "Fem", "vos"]);
+        let mut tags = UdTags::read(&strings, &[0, 1, 1, 2, 0, 0, 1, 1, 2, 1, 3]).unwrap();
+        assert_eq!(tags.find_or_add("NOUN", &[("Gender", "Fem")]), Some(0));
+        // A tag with labels is another tag
+        assert_eq!(tags.len(), 2);
+        let punct = tags.find_or_add("PUNCT", &[("PunctType", "Comm")]).unwrap();
+        assert_eq!(punct, 2);
+        let tag = tags.get(punct).unwrap();
+        assert_eq!(
+            (tag.pos(), tag.feats_string()),
+            ("PUNCT", "PunctType=Comm".into())
+        );
+        assert_eq!(tag.labels().len(), 0);
+        assert_eq!(tags.find_or_add("PUNCT", &[("PunctType", "Comm")]), Some(2));
+        assert_eq!(tags.find_or_add("NOUN", &[]), Some(3));
+        assert_eq!(tags.get(0).unwrap().feats_string(), "Gender=Fem");
     }
 
     #[test]

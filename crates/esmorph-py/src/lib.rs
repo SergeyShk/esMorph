@@ -54,7 +54,7 @@ impl Tag {
 ///
 /// Attributes:
 ///     word (str): The word form as the dictionary spells it, with its accents; a verb with
-///         clitics as written, in lower case
+///         clitics as written, in lower case; a token of the rules as written
 ///     lemma (str): The lemma
 ///     pos (str): The part of speech of Universal Dependencies
 ///     feats (dict[str, str]): The Universal Dependencies features
@@ -63,7 +63,8 @@ impl Tag {
 ///     words (tuple[str, ...]): Words of the token: a verb and its clitics, the words of a
 ///         contraction, or the word itself; the analysis describes the first of them
 ///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the
-///         dictionary with clitics
+///         dictionary with clitics, "rule" for a token out of the dictionary (punctuation, a
+///         symbol, a number, a Roman numeral, a name) and the name of a word in capitals
 ///
 /// Example:
 ///     >>> from esmorph import Analyzer
@@ -141,7 +142,8 @@ impl Analysis {
     ///     The lemma, then the forms in the order of the paradigm: the infinitive, the gerund,
     ///     the participles, the finite forms by mood, tense, number and person; for a noun or an
     ///     adjective by number and gender. The probability of every form is 1. A verb with
-    ///     clitics gives the forms of its verb, without clitics
+    ///     clitics gives the forms of its verb, without clitics; an analysis of a rule is its
+    ///     only form
     ///
     /// Returns:
     ///     list[Analysis]: The forms
@@ -321,6 +323,7 @@ fn _analysis(
     let source = match source {
         "dictionary" => esmorph::Source::Dictionary.as_str(),
         "clitics" => esmorph::Source::Clitics.as_str(),
+        "rule" => esmorph::Source::Rule.as_str(),
         _ => {
             return Err(PyValueError::new_err(format!(
                 "Unknown source of an analysis: {source}"
@@ -380,8 +383,9 @@ fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
 ///     Finds the analyses of a word form in the dictionary, the most probable first. Case does not
 ///     matter. A word spelled as in the dictionary gives the analyses of that spelling; a word
 ///     absent as written is looked for without its accents and with a lost diaeresis. A word absent
-///     from the dictionary may be a verb with clitics (`dámelo`). The dictionary is loaded once
-///     when the analyzer is created; an analyzer can be used from several threads
+///     from the dictionary may be a verb with clitics (`dámelo`); other tokens get the analyses of
+///     rules: punctuation, symbols, numbers, Roman numerals and names. The dictionary is loaded
+///     once when the analyzer is created; an analyzer can be used from several threads
 ///
 /// Arguments:
 ///     path (str | os.PathLike | None): Path to a dictionary file; by default the dictionary of the
@@ -466,7 +470,10 @@ impl Analyzer {
     /// Analyses of a word form
     ///
     /// Description:
-    ///     A word that is not in the dictionary has no analyses
+    ///     A token that the dictionary does not have gets the analyses of the rules: punctuation,
+    ///     a symbol, a number in digits, a Roman numeral, a name with a capital letter. A word in
+    ///     capitals that the dictionary knows may be a name too (`ETA`). A lowercase word out of
+    ///     the dictionary has no analyses
     ///
     /// Arguments:
     ///     word (str): The word form
@@ -480,8 +487,10 @@ impl Analyzer {
     /// Example:
     ///     >>> from esmorph import Analyzer
     ///     >>> morph = Analyzer()
-    ///     >>> [(analysis.lemma, analysis.pos) for analysis in morph.analyze("CAMIONES")]
+    ///     >>> [(analysis.lemma, analysis.pos) for analysis in morph.analyze("Camiones")]
     ///     [('camión', 'NOUN')]
+    ///     >>> [(analysis.lemma, analysis.pos, analysis.source) for analysis in morph.analyze("10.000")]
+    ///     [('10000', 'NUM', 'rule')]
     ///     >>> morph.analyze("qzxw")
     ///     []
     fn analyze(slf: &Bound<'_, Self>, word: &Bound<'_, PyAny>) -> PyResult<Vec<Analysis>> {
@@ -538,8 +547,8 @@ impl Analyzer {
     /// Lemmas of a list of word forms
     ///
     /// Description:
-    ///     The lemma of the first analysis; a word that is not in the dictionary comes back in
-    ///     lower case. The analysis goes without the GIL
+    ///     The lemma of the first analysis; a word without analyses comes back in lower case. The
+    ///     analysis goes without the GIL
     ///
     /// Arguments:
     ///     words (Iterable[str]): The word forms
@@ -552,8 +561,8 @@ impl Analyzer {
     ///
     /// Example:
     ///     >>> from esmorph import Analyzer
-    ///     >>> Analyzer().lemmatize(["CAMIONES", "Qzxw"])
-    ///     ['camión', 'qzxw']
+    ///     >>> Analyzer().lemmatize(["CAMIONES", "Bush", "qzxw"])
+    ///     ['camión', 'Bush', 'qzxw']
     fn lemmatize(&self, py: Python<'_>, words: &Bound<'_, PyAny>) -> PyResult<Vec<Py<PyString>>> {
         let words = collect_words(words)?;
         // Equal lemmas are one string object: a list of the lemmas of a corpus takes much less memory
