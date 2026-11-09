@@ -49,7 +49,7 @@ El objeto guarda la ruta del diccionario en `path`, de tipo `Path` y solo de lec
 analyze(word)
 ```
 
-Los análisis de la forma de palabra, primero el más probable; las probabilidades suman 1. Las mayúsculas no importan, y una palabra que no está tal como se escribe se busca sin sus tildes y con una diéresis perdida ([ortografía](analysis.md#spelling)). Un verbo con pronombres enclíticos se analiza como su verbo ([clíticos](analysis.md#clitics)), un token que el diccionario no tiene - un signo, un número, un nombre - [por reglas](analysis.md#rules), y una palabra desconocida en minúsculas se [estima](analysis.md#guess). Un token que nada analiza - con un espacio o un carácter de control, una palabra en minúsculas sin modelo como `qzxw` - no tiene análisis.
+Los análisis de la forma de palabra, primero el más probable; las probabilidades suman 1. Las mayúsculas no importan para buscar la palabra en el diccionario, aunque un token con mayúscula también puede ser un nombre, y una palabra que no está tal como se escribe se busca sin sus tildes y con una diéresis perdida ([ortografía](analysis.md#spelling)). Un verbo con pronombres enclíticos se analiza como su verbo ([clíticos](analysis.md#clitics)), un token que el diccionario no tiene - un signo, un número, un nombre - [por reglas](analysis.md#rules), y una palabra desconocida en minúsculas se [estima](analysis.md#guess). Un token que nada analiza - con un espacio o un carácter de control, una palabra en minúsculas sin modelo como `qzxw` - no tiene análisis.
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |
@@ -86,7 +86,7 @@ Excepciones:
 analyze_many(words)
 ```
 
-Los análisis de cada forma de palabra, como con [`analyze`](#analyze); con una lista el método es más rápido que `analyze` en un bucle, y libera el GIL.
+Los análisis de cada forma de palabra, como con [`analyze`](#analyze).
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |
@@ -186,7 +186,7 @@ El diccionario del paquete se crea a partir del [Wiktionary](https://en.wiktiona
 
 ## Hilos y procesos { #parallel }
 
-Un mismo analizador se puede usar desde varios hilos: `analyze_many` y `lemmatize` liberan el GIL y procesan las listas en paralelo, y el paquete tiene ruedas para Python 3.14t sin GIL. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Pickle guarda la ruta del archivo del diccionario (ninguna para el diccionario del paquete): al deserializar se toma el analizador del mismo diccionario que el proceso ya tiene, así que los análisis deserializados uno a uno lo comparten, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero no tiene otras formas.
+Un mismo analizador se puede usar desde varios hilos. `lemmatize` libera el GIL, así que los hilos lo aceleran; `analyze_many` crea los análisis con el GIL, así que con él los hilos lo aceleran poco, y en Python 3.14t sin GIL, que tiene su propio paquete precompilado, sí lo aceleran. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Pickle guarda la ruta del archivo del diccionario (ninguna para el diccionario del paquete): al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
 
 === "Código"
 

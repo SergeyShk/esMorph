@@ -40,13 +40,13 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 Parts of speech, features and lemmas follow the [Universal Dependencies](https://universaldependencies.org/u/pos/) guidelines and, where they are silent, the conventions of the largest Spanish treebank, [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), so the output can be compared with spaCy, Stanza and other UD tools:
 
 - determiners, pronouns, prepositions and conjunctions have the lemmas and features of AnCora: `la` is the article `el` (`Definite=Def`, `PronType=Art`) or the pronoun `él`, `se` is `él` with `Reflex=Yes`, `su` is `DET` with `Poss=Yes`, `muy` is a form of `mucho`;
-- `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` and `saber` have both `AUX` and `VERB` analyses; `hay` is the verb `haber`;
+- `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` and `saber` have both `AUX` and `VERB` analyses; `hay` is first of all the verb `haber`;
 - a participle is a verb with the infinitive as the lemma (`VerbForm=Part`, `Tense=Past`) and an adjective with the masculine singular as the lemma (`VerbForm=Part` without `Tense`);
 - verbs have no `-se` in the lemma: `quejarse` is `quejar` with the clitic `se`;
 - the conditional and the imperative have no `Tense`, and a proper name has no features;
 - an adjective in `-ísimo` is its own lemma with `Degree=Abs`.
 
-If the part of speech of a word depends on context, the word has both analyses: `que` is `PRON` and `SCONJ`, `la` is `DET` and `PRON`, a participle is `VERB` and `ADJ`. Features: gender, number, person, tense, mood, verb form, degree, definiteness (`Definite`), the type of a pronoun or a determiner (`PronType`), possessiveness (`Poss`), reflexivity (`Reflex`), the case of personal pronouns (`Case`) and whether they follow a preposition (`PrepCase`), politeness (`Polite=Form` of `usted`), the type of a numeral (`NumType`) and how it is written (`NumForm`), and the kind of a sign of punctuation (`PunctType`, `PunctSide`).
+If the part of speech of a word depends on context, the word has both analyses: `que` is `PRON` and `SCONJ`, `la` is `DET` and `PRON`, a participle is `VERB` and `ADJ`. Features: gender, number, person, tense, mood, verb form, degree, negation (`Polarity=Neg` of `no`), definiteness (`Definite`), the type of a pronoun or a determiner (`PronType`), possessiveness (`Poss`), reflexivity (`Reflex`), the case of personal pronouns (`Case`) and whether they follow a preposition (`PrepCase`), politeness (`Polite=Form` of `usted`), the type of a numeral (`NumType`) and how it is written (`NumForm`), and the kind of a sign of punctuation (`PunctType`, `PunctSide`).
 
 ## Order of analyses { #order }
 
@@ -82,7 +82,7 @@ A verb with enclitic pronouns is analyzed as its verb: the analysis describes th
 
 ## Spelling { #spelling }
 
-Case does not matter. A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary; for a verb with clitics `word` is the token as written, in lower case.
+Case does not matter for finding a word in the dictionary, though a token with a capital letter may also be a [name](#rules). A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary; for a verb with clitics `word` is the token as written, in lower case.
 
 === "Code"
 
@@ -100,12 +100,12 @@ Case does not matter. A word spelled as in the dictionary gives the analyses of 
 
 A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
 
-- a sign of punctuation is `PUNCT` with its `PunctType`, and `PunctSide` for paired signs; a symbol such as `%`, `€` or `²` is `SYM`;
+- a sign of punctuation is `PUNCT` with its `PunctType`, and `PunctSide` for brackets and question and exclamation marks; a symbol such as `%`, `€` or `²` is `SYM`;
 - a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too; the lemma drops the periods between thousands: `10.000` is `10000`;
 - a Roman numeral is `NUM` with `NumForm=Roman`, less often a name;
 - a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`.
 
-A word in capitals that the dictionary knows may be a name too, with its share: a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a word of a closed class are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral in `I` such as `VI` or `XI` is a numeral first. A token with a capital letter that splits as a verb with clitics is mostly a name too: `Mandela` is first of all `PROPN`. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
+A word in capitals that the dictionary knows may be a name too, with its share: a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral in `I` such as `VI` or `XI` is a numeral first. A token with a capital letter that splits as a verb with clitics is mostly a name too: `Mandela` is first of all `PROPN`. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
 
 === "Code"
 

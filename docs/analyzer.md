@@ -49,7 +49,7 @@ The object keeps the dictionary path in `path` of type `Path`, read-only. The di
 analyze(word)
 ```
 
-Analyses of the word form, the most probable first; the probabilities sum to 1. Case does not matter, and a word absent as written is looked for without its accents and with a lost diaeresis ([spelling](analysis.md#spelling)). A verb with enclitic pronouns is analyzed as its verb ([clitics](analysis.md#clitics)), a token that the dictionary does not have - a sign, a number, a name - [by rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). A token that nothing analyzes - with a space or a control character, a lowercase word without a sample such as `qzxw` - has no analyses.
+Analyses of the word form, the most probable first; the probabilities sum to 1. Case does not matter for finding the word in the dictionary, though a token with a capital letter may also be a name, and a word absent as written is looked for without its accents and with a lost diaeresis ([spelling](analysis.md#spelling)). A verb with enclitic pronouns is analyzed as its verb ([clitics](analysis.md#clitics)), a token that the dictionary does not have - a sign, a number, a name - [by rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). A token that nothing analyzes - with a space or a control character, a lowercase word without a sample such as `qzxw` - has no analyses.
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |
@@ -86,7 +86,7 @@ Exceptions:
 analyze_many(words)
 ```
 
-Analyses of every word form, as with [`analyze`](#analyze); on a list the method is faster than `analyze` in a loop, and it releases the GIL.
+Analyses of every word form, as with [`analyze`](#analyze).
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |
@@ -186,7 +186,7 @@ The dictionary of the package is built from the English [Wiktionary](https://en.
 
 ## Threads and processes { #parallel }
 
-One analyzer can be used from several threads: `analyze_many` and `lemmatize` release the GIL and process lists in parallel, and the package has wheels for the free-threaded Python 3.14t. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. A pickle keeps the path of the dictionary file (none for the dictionary of the package): unpickling takes the analyzer of the same dictionary that the process already has, so analyses unpickled one by one share it, and an analysis whose dictionary file is gone takes the dictionary of the package. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields but has no other forms.
+One analyzer can be used from several threads. `lemmatize` releases the GIL, so threads speed it up; `analyze_many` creates the analyses with the GIL, so with it threads speed it up little, and on the free-threaded Python 3.14t, which has a wheel of its own, they do. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. A pickle keeps the path of the dictionary file (none for the dictionary of the package): unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, and an analysis whose dictionary file is gone takes the dictionary of the package. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
 
 === "Code"
 
