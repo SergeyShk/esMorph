@@ -1,6 +1,6 @@
 # Comparación
 
-esMorph analiza una palabra sin contexto y da todos sus análisis, primero el más probable. Su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD y que el de spaCy `es_core_news_sm` en PUD y COSER, y su primer análisis tiene los rasgos de UD correctos más a menudo que ambos etiquetadores en PUD; el análisis correcto está entre los análisis de esMorph para el 96-97 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 700 mil tokens por segundo, 16 veces más rápido que spaCy y 227 veces más rápido que Stanza, responde a un texto corto junto con la carga en 3 ms, y cada proceso más con el mismo diccionario añade 6.4 MB de memoria.
+esMorph analiza una palabra sin contexto y da todos sus análisis, primero el más probable. Su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD y que el de spaCy `es_core_news_sm` en PUD y COSER, y su primer análisis tiene los rasgos de UD correctos más a menudo que ambos etiquetadores en PUD; un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 96-97 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 800 mil tokens por segundo, 18 veces más rápido que spaCy y 285 veces más rápido que Stanza, responde a un texto corto junto con la carga en 3 ms, y cada proceso más con el mismo diccionario añade 6.4 MB de memoria.
 
 ## Calidad { #quality }
 
@@ -61,15 +61,15 @@ La proporción de palabras con la categoría gramatical correcta, con los rasgos
 
 ### Flexión { #inflection }
 
-La proporción de verbos cuya forma da el sistema a partir de su lema y sus rasgos de referencia (infinitivo, gerundio, participio, modo, tiempo, persona y número), %; esMorph, la única forma de [`inflect`](inflection.md); ablaut y verbecc, cualquier forma de la casilla de su tabla de conjugación:
+La proporción de verbos cuya forma da el sistema a partir de su lema y sus rasgos de referencia (infinitivo, gerundio, participio, modo, tiempo, persona y número), %. Cada sistema recibe solo el lema y los rasgos: esMorph se evalúa por [`inflect`](inflection.md) de sus lexemas verbales y auxiliares del lema, una forma de cada uno; ablaut y verbecc, por cualquier forma de la casilla de su tabla de conjugación:
 
 | Sistema | AnCora | PUD | COSER |
 | :------ | :----- | :-- | :---- |
-| esMorph | **99.60** | **93.23** | **95.39** |
+| esMorph | **99.60** | **93.23** | **95.55** |
 | ablaut | 98.87 | 92.71 | 93.61 |
 | verbecc | 95.37 | 92.91 | 93.53 |
 
-Un auxiliar se flexiona como `AUX`. La mayoría de los fallos de los tres sistemas son convenciones y habla: PUD da `Tense=Past` a los auxiliares `ha` y `había` de los tiempos compuestos, y COSER tiene formas orales como `trabajao` y `tá`. Para el pretérito imperfecto de subjuntivo esMorph y ablaut dan la forma en `-ra` (`fuera`), así que una forma en `-se` (`fuese`) es un fallo para ellos.
+En AnCora la mayoría de los fallos de ablaut y verbecc son la tercera persona del singular del presente de `haber`: ablaut da solo `ha` y verbecc solo `hay`, mientras que esMorph tiene las dos, `ha` del auxiliar y `hay` del verbo; verbecc además falla con `pasar`, `resultar` y `suceder`, que cuentan como fallos. En PUD la mayoría de los fallos de los tres son una convención: los auxiliares `ha` y `había` de los tiempos compuestos tienen `Tense=Past`; COSER tiene formas orales como `trabajao` y `tá`. Para el pretérito imperfecto de subjuntivo esMorph y ablaut dan la forma en `-ra` (`fuera`), así que una forma en `-se` (`fuese`) es un fallo para ellos.
 
 ## Velocidad { #speed }
 
@@ -79,14 +79,14 @@ El tiempo de análisis de un texto junto con la importación y la carga del sist
 
 ![Tiempo de análisis de un texto con la carga según su tamaño](img/speed.es.svg)
 
-En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3 ms, simplemma en 0.35 s, spaCy en 0.9 s y Stanza en 2.2 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:
+En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3 ms, simplemma en 0.33 s, spaCy en 0.9 s y Stanza en 2.1 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:
 
 | Sistema | Tokens por segundo |
 | :------ | :----------------- |
-| simplemma, solo lemas | 2 208 871 |
-| esMorph | 700 605 |
-| spaCy es_core_news_sm | 44 336 |
-| Stanza | 3089 |
+| simplemma, solo lemas | 2 580 736 |
+| esMorph | 802 785 |
+| spaCy es_core_news_sm | 43 801 |
+| Stanza | 2820 |
 
 esMorph da todos los análisis de una palabra, con rasgos y probabilidades; su lematización sola es tan rápida como simplemma, véase [Operaciones](#operations).
 
@@ -119,6 +119,6 @@ El archivo del diccionario de esMorph se proyecta en memoria, así que los proce
 ## Cómo se midió { #method }
 
 - Calidad, flexión y análisis de un texto: el script [`scripts/compare.py`](https://github.com/SergeyShk/esMorph/blob/master/scripts/compare.py), `uv run scripts/compare.py target/compare --chart docs/img/speed.svg`. Instala los sistemas en un entorno aparte con las versiones de todos los paquetes fijadas en `scripts/compare.py.lock` (esMorph, la versión de ese archivo o un paquete con `uv run --with dist/esmorph-*.whl`), descarga las partes de prueba de los treebanks y el modelo de Stanza comprobando sus sumas de control antes de medir y analiza las palabras de referencia. Flexión: los 5939, 2893 y 1237 verbos de AnCora, PUD y COSER cuyo lema es un infinitivo, sin erratas ni palabras extranjeras.
-- Versiones: Python 3.11, esMorph 0.1.0.dev7, simplemma 2.0.0, spaCy 3.8.16 con el modelo es_core_news_sm 3.8.0 sin el analizador sintáctico ni NER, Stanza 1.15.0 con el modelo por defecto en la CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (el paquete no trae modelo y entrena uno en la primera ejecución). Ordenador: Apple M3 Pro, macOS 26, con otras aplicaciones abiertas (carga media de alrededor de 4), así que las velocidades indican el orden de magnitud.
+- Versiones: Python 3.11, esMorph 0.1.0.dev7, simplemma 2.0.0, spaCy 3.8.16 con el modelo es_core_news_sm 3.8.0 sin el analizador sintáctico ni NER, Stanza 1.15.0 con el modelo por defecto en la CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (el paquete no trae modelo y entrena uno en la primera ejecución, así que sus cifras varían en unas centésimas entre instalaciones). Ordenador: Apple M3 Pro, macOS 26, con otras aplicaciones abiertas (carga media de alrededor de 4), así que las velocidades indican el orden de magnitud.
 - Velocidad del análisis de un texto: los 53 622 tokens de la parte de prueba de AnCora con la puntuación; tokens por segundo, el mejor de dos análisis de la parte entera después de la carga; puntos del gráfico, la importación, la carga y el análisis de los primeros 10-50 000 tokens en un proceso nuevo. Solo se mide la llamada al sistema: esMorph, `analyze_many` de todas las palabras; simplemma, `lemmatize` de cada palabra con la caché vacía; spaCy, `nlp.pipe` de las oraciones; Stanza, el texto entero. esMorph y simplemma trabajan en un hilo, spaCy y Stanza con su configuración por defecto.
 - Operaciones: 47 288 palabras de la parte de prueba de AnCora sin la puntuación, la mejor de tres pasadas en un hilo, salvo la fila con hilos; verbos, los lexemas de los 4634 verbos de referencia cuyo lema es un infinitivo (verbecc, los primeros 2000, una pasada). Carga y memoria: la importación, la creación del analizador y el primer análisis, el aumento de la memoria residente del proceso (`ps -o rss`), la mediana de tres ejecuciones; cada proceso más, el aumento de la memoria que el proceso no comparte con otros (USS) en cada uno de cuatro procesos de `multiprocessing` que cargan el sistema y analizan 200 oraciones.

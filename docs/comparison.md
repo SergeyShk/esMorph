@@ -1,6 +1,6 @@
 # Comparison
 
-esMorph analyzes a word without context and gives all its analyses, the most probable first. Its first lemma is right more often than that of simplemma on all three UD test sets and of spaCy `es_core_news_sm` on PUD and COSER, and its first analysis has the right UD features more often than both taggers on PUD; the right analysis is among the analyses of esMorph for 96-97 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 700 thousand tokens per second, 16 times faster than spaCy and 227 times faster than Stanza, answers a short text together with loading in 3 ms, and every further process with the same dictionary adds 6.4 MB of memory.
+esMorph analyzes a word without context and gives all its analyses, the most probable first. Its first lemma is right more often than that of simplemma on all three UD test sets and of spaCy `es_core_news_sm` on PUD and COSER, and its first analysis has the right UD features more often than both taggers on PUD; an analysis with the right part of speech and lemma is among the analyses of esMorph for 96-97 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 800 thousand tokens per second, 18 times faster than spaCy and 285 times faster than Stanza, answers a short text together with loading in 3 ms, and every further process with the same dictionary adds 6.4 MB of memory.
 
 ## Quality { #quality }
 
@@ -61,15 +61,15 @@ The share of words with the right part of speech, features (gender, number, pers
 
 ### Inflection { #inflection }
 
-The share of verbs whose form the system gives for their gold lemma and features (infinitive, gerund, participle, mood, tense, person and number), %; esMorph - the one form of [`inflect`](inflection.md), ablaut and verbecc - any form of the cell of their conjugation table:
+The share of verbs whose form the system gives for their gold lemma and features (infinitive, gerund, participle, mood, tense, person and number), %. Every system gets only the lemma and the features: esMorph is scored by [`inflect`](inflection.md) of its verb and auxiliary lexemes of the lemma, one form of each, ablaut and verbecc by any form of the cell of their conjugation table:
 
 | System | AnCora | PUD | COSER |
 | :----- | :----- | :-- | :---- |
-| esMorph | **99.60** | **93.23** | **95.39** |
+| esMorph | **99.60** | **93.23** | **95.55** |
 | ablaut | 98.87 | 92.71 | 93.61 |
 | verbecc | 95.37 | 92.91 | 93.53 |
 
-An auxiliary is inflected as `AUX`. Most misses of all three systems are conventions and speech: PUD gives the auxiliaries `ha` and `había` of compound tenses `Tense=Past`, and COSER has spoken forms such as `trabajao` and `tá`. For the imperfect subjunctive esMorph and ablaut give the form in `-ra` (`fuera`), so a form in `-se` (`fuese`) is a miss for them.
+On AnCora most misses of ablaut and verbecc are the third person singular of the present of `haber`: ablaut gives only `ha` and verbecc only `hay`, while esMorph has both, `ha` of the auxiliary and `hay` of the verb; verbecc also fails on `pasar`, `resultar` and `suceder`, which count as misses. On PUD most misses of all three are a convention: the auxiliaries `ha` and `había` of compound tenses have `Tense=Past`; COSER has spoken forms such as `trabajao` and `tá`. For the imperfect subjunctive esMorph and ablaut give the form in `-ra` (`fuera`), so a form in `-se` (`fuese`) is a miss for them.
 
 ## Speed { #speed }
 
@@ -79,14 +79,14 @@ The time to analyze a text together with importing and loading the system in a n
 
 ![Text analysis time with loading by text size](img/speed.svg)
 
-On a short text almost all the time goes to loading: esMorph answers in 3 ms, simplemma in 0.35 s, spaCy in 0.9 s, Stanza in 2.2 s. On a long text the analysis speed decides, tokens per second without loading, more is better:
+On a short text almost all the time goes to loading: esMorph answers in 3 ms, simplemma in 0.33 s, spaCy in 0.9 s, Stanza in 2.1 s. On a long text the analysis speed decides, tokens per second without loading, more is better:
 
 | System | Tokens per second |
 | :----- | :---------------- |
-| simplemma, lemmas only | 2,208,871 |
-| esMorph | 700,605 |
-| spaCy es_core_news_sm | 44,336 |
-| Stanza | 3,089 |
+| simplemma, lemmas only | 2,580,736 |
+| esMorph | 802,785 |
+| spaCy es_core_news_sm | 43,801 |
+| Stanza | 2,820 |
 
 esMorph gives all the analyses of a word, with features and probabilities; its lemmatization alone is as fast as simplemma, see [Operations](#operations).
 
@@ -119,6 +119,6 @@ The dictionary file of esMorph is mapped into memory, so `multiprocessing` or jo
 ## How it was measured { #method }
 
 - Quality, inflection and text analysis - the [`scripts/compare.py`](https://github.com/SergeyShk/esMorph/blob/master/scripts/compare.py) script: `uv run scripts/compare.py target/compare --chart docs/img/speed.svg`. It installs the systems into a separate environment with the versions of all packages pinned in `scripts/compare.py.lock` (esMorph - the version from it, or a wheel with `uv run --with dist/esmorph-*.whl`), downloads the treebank test parts and the Stanza model with checksum verification before measuring and analyzes the gold words. Inflection - the 5,939, 2,893 and 1,237 verbs of AnCora, PUD and COSER whose lemma is an infinitive, without typos and foreign words.
-- Versions: Python 3.11, esMorph 0.1.0.dev7, simplemma 2.0.0, spaCy 3.8.16 with the es_core_news_sm 3.8.0 model without the parser and NER, Stanza 1.15.0 with the default model on the CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (the package has no model and trains one at the first run). Computer - Apple M3 Pro, macOS 26, with other applications running (load average about 4), so the speeds are an order of magnitude.
+- Versions: Python 3.11, esMorph 0.1.0.dev7, simplemma 2.0.0, spaCy 3.8.16 with the es_core_news_sm 3.8.0 model without the parser and NER, Stanza 1.15.0 with the default model on the CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (the package has no model and trains one at the first run, so its figures vary by a few hundredths between installations). Computer - Apple M3 Pro, macOS 26, with other applications running (load average about 4), so the speeds are an order of magnitude.
 - Text analysis speed - the 53,622 tokens of the AnCora test part with punctuation: tokens per second - the best of two analyses of the whole part after loading, chart points - importing, loading and analyzing the first 10-50,000 tokens in a new process. Only the call of the system is measured: esMorph `analyze_many` of all the words, simplemma `lemmatize` of each word with an empty cache, spaCy `nlp.pipe` of the sentences, Stanza the whole text; esMorph and simplemma run in one thread, spaCy and Stanza with their default settings.
 - Operations - 47,288 words of the AnCora test part without punctuation, the best of three runs in one thread, except the row with threads; verbs - the lexemes of the 4,634 gold verbs whose lemma is an infinitive (verbecc - the first 2,000, one run). Loading and memory - importing, creating the analyzer and the first analysis, the growth of the resident memory of the process (`ps -o rss`), the median of three runs; a further process - the growth of the memory the process does not share with others (USS), in each of four `multiprocessing` processes that load the system and analyze 200 sentences.

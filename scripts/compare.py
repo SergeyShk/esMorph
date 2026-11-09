@@ -24,18 +24,18 @@ inflection and speed
 
 Description:
     Downloads the test parts of UD_Spanish-AnCora, UD_Spanish-GSD, UD_Spanish-PUD and
-    UD_Spanish-COSER of a pinned UD release with their checksums checked and the Stanza model into
-    the data directory, and analyzes the gold words with every system. esMorph analyzes a word
-    without context and is scored by its first analysis and by the best of its analyses (oracle);
-    simplemma gives only a lemma; spaCy and Stanza tag a sentence and give one analysis per word.
-    The lemmas and features of GSD are automatic, so only the part of speech is compared on it.
-    Inflection: the gold form of a verb of AnCora, PUD and COSER from its gold lemma and features,
-    by esMorph, ablaut and verbecc. Speed - tokens per second on AnCora test without loading (the
-    best of two runs) and, for the chart, the whole time with import and loading in a new process
-    on texts of different size. Writes Markdown tables,
-    results.json in the data directory (a run of some systems updates only their results) and
-    the chart in SVG. The versions of all packages are pinned in compare.py.lock; esMorph is the
-    version from it or a wheel from `--with`
+    UD_Spanish-COSER of a pinned UD release with their checksums checked and the Stanza model of
+    pinned commits into the data directory, and analyzes the gold words with every system. esMorph
+    analyzes a word without context and is scored by its first analysis and by the best of its
+    analyses (oracle); simplemma gives only a lemma; spaCy and Stanza tag a sentence and give one
+    analysis per word. The lemmas and features of GSD are automatic, so only the part of speech is
+    compared on it. Inflection: whether esMorph, ablaut and verbecc give the gold form of a verb of
+    AnCora, PUD and COSER for its gold lemma and features. Speed - tokens per second on AnCora test
+    without loading (the best of two runs) and, for the chart, the whole time with import and
+    loading in a new process on texts of different size. Writes Markdown tables, results.json in
+    the data directory (a run of some systems updates only their results) and the chart in SVG.
+    The versions of all packages are pinned in compare.py.lock; esMorph is the version from it or a
+    wheel from `--with`
 
 Example:
     uv run scripts/compare.py target/compare --chart docs/img/speed.svg
@@ -43,6 +43,7 @@ Example:
 """
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -93,6 +94,16 @@ CORE = ("Number", "Gender", "Person", "Tense", "Mood", "VerbForm")
 NO_FEATURES = {"PROPN", "NUM"}
 # Stanza processors: the words are given, the part of speech, features and lemma are needed
 STANZA_PROCESSORS = "tokenize,pos,lemma"
+# The list of Stanza models and the models at the commits of the measurement: the files of a Stanza
+# version are updated in place
+STANZA_RESOURCES = (
+    "https://raw.githubusercontent.com/stanfordnlp/stanza-resources/"
+    "967b3ec9bc08ff876e351c4364f27455b3f0a2b6"
+)
+STANZA_MODELS = (
+    "https://huggingface.co/stanfordnlp/stanza-{lang}/resolve/"
+    "6c5cf2278847a76cd1efd05ee4fddd80594b569d/models/{filename}"
+)
 # Text sizes for the speed chart, tokens
 SIZES = (10, 100, 1_000, 10_000, 50_000)
 # Persons in the order of the conjugation tables
@@ -197,7 +208,14 @@ def prepare(name: str, data: Path) -> None:
         import stanza
 
         directory = str(data / "stanza")
-        stanza.download("es", model_dir=directory, processors=STANZA_PROCESSORS, verbose=False)
+        stanza.download(
+            "es",
+            model_dir=directory,
+            processors=STANZA_PROCESSORS,
+            resources_url=STANZA_RESOURCES,
+            model_url=STANZA_MODELS,
+            verbose=False,
+        )
 
 
 Analyze = Callable[[list[list[str]]], object]
@@ -402,7 +420,7 @@ def verb_feats(key: str) -> dict[str, str]:
     return feats
 
 
-def verb_tasks(text: list[list[Token]]) -> list[tuple[str, str, str, str]]:
+def verb_tasks(text: list[list[Token]]) -> list[tuple[str, str, str]]:
     """
     Inflection tasks: verbs and auxiliaries with an infinitive as the lemma, without typos and
     foreign words
@@ -411,7 +429,7 @@ def verb_tasks(text: list[list[Token]]) -> list[tuple[str, str, str, str]]:
         text (list[list[Token]]): Gold sentences
 
     Returns:
-        list[tuple[str, str, str, str]]: Lemma, part of speech, cell of the table, gold form
+        list[tuple[str, str, str]]: Lemma, cell of the table, gold form
     """
     result = []
     for sentence in text:
@@ -421,7 +439,7 @@ def verb_tasks(text: list[list[Token]]) -> list[tuple[str, str, str, str]]:
             lemma = token.lemma.lower()
             key = verb_key(token.feats)
             if key and lemma.endswith(("ar", "er", "ir", "ír")):
-                result.append((lemma, token.pos, key, token.word.lower()))
+                result.append((lemma, key, token.word.lower()))
     return result
 
 
@@ -435,26 +453,23 @@ def participles(masculine: str) -> dict[str, list[str]]:
     }
 
 
-Inflect = Callable[[str, str, str], list[str]]
+Inflect = Callable[[str, str], list[str]]
 
 
 def esmorph_conjugator() -> Inflect:
-    """esMorph: `inflect` of the lexeme of the lemma with the gold part of speech, else of the verb;
-    one form"""
+    """esMorph: `inflect` of every verb and auxiliary lexeme of the lemma, one form of each"""
     from esmorph import Analyzer, FormNotFoundError
 
     morph = Analyzer()
 
-    def inflect(lemma: str, pos: str, key: str) -> list[str]:
-        analyses = [a for a in morph.analyze(lemma) if a.lemma == lemma]
-        lexeme = next((a for a in analyses if a.pos == pos), None)
-        lexeme = lexeme or next((a for a in analyses if a.pos == "VERB"), None)
-        if lexeme is None:
-            return []
-        try:
-            return [lexeme.inflect(**verb_feats(key))]
-        except FormNotFoundError:
-            return []
+    def inflect(lemma: str, key: str) -> list[str]:
+        result = []
+        for lexeme in morph.analyze(lemma):
+            if lexeme.lemma != lemma or lexeme.pos not in ("VERB", "AUX"):
+                continue
+            with contextlib.suppress(FormNotFoundError):
+                result.append(lexeme.inflect(**verb_feats(key)))
+        return result
 
     return inflect
 
@@ -463,11 +478,13 @@ def table_conjugator(table: Callable[[str], dict[str, list[str]]]) -> Inflect:
     """Forms of a cell of the conjugation table of the lemma, tables kept by lemma"""
     tables: dict[str, dict[str, list[str]]] = {}
 
-    def inflect(lemma: str, pos: str, key: str) -> list[str]:
+    def inflect(lemma: str, key: str) -> list[str]:
         if lemma not in tables:
             try:
                 tables[lemma] = table(lemma)
-            except Exception:
+            except Exception as error:
+                # A failure of the tool counts as a miss, but stays visible
+                print(f"no table of {lemma!r}: {error!r}", file=sys.stderr)
                 tables[lemma] = {}
         return tables[lemma].get(key, [])
 
@@ -567,10 +584,7 @@ def inflection(name: str, texts: dict[str, list[list[Token]]]) -> dict[str, floa
         if dataset in AUTOMATIC:
             continue
         tasks = verb_tasks(text)
-        hits = sum(
-            form in {f.lower() for f in inflect(lemma, pos, key)}
-            for lemma, pos, key, form in tasks
-        )
+        hits = sum(form in {f.lower() for f in inflect(lemma, key)} for lemma, key, form in tasks)
         result[dataset] = 100 * hits / len(tasks)
     return result
 
@@ -636,7 +650,8 @@ def number(value: float, spanish: bool) -> str:
     """Number for the chart: groups of thousands, as many decimals as the first significant digit
     needs"""
     text = f"{value:,}" if value >= 1 else f"{value:.{-math.floor(math.log10(value))}f}"
-    return text.replace(",", " ") if spanish else text
+    # Spanish groups the digits from five on
+    return text.replace(",", " " if value >= 10_000 else "") if spanish else text
 
 
 def chart(curves: dict[str, list[tuple[int, float]]], path: Path, spanish: bool = False) -> None:
