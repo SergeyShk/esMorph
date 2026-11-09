@@ -81,6 +81,8 @@ Bug reports, ideas and pull requests are welcome, in English or Spanish - the [i
 *   **crates/esmorph-dict-es** - the dictionary as a crate
 *   **crates/esmorph-py** - the Python module `esmorph._esmorph` built with PyO3
 *   **python/esmorph** - the Python package
+*   **scripts** - exporting Wiktionary and the counts of the treebanks, the conventions of the dictionary and checking the installed package before publishing
+*   **data** - the table of closed classes after UD Spanish AnCora
 *   **docs** - MkDocs documentation in English and Spanish
 *   **tests** - tests of the Python package
 

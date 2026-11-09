@@ -1,6 +1,17 @@
 # Analizador
 
-`Analyzer` busca los análisis de una forma de palabra en un diccionario creado a partir de Wiktionary: el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/).
+``` {.python .signature}
+Analyzer(path=None)
+```
+
+Analizador morfológico: para una forma de palabra busca todos sus [análisis](analysis.md) en un diccionario creado a partir de Wiktionary - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) - y los ordena por probabilidad. Un token que el diccionario no tiene recibe los análisis de unas [reglas](analysis.md#rules), y una palabra desconocida en minúsculas se [estima](analysis.md#guess). El diccionario se carga al crear el analizador.
+
+Excepciones:
+
+- `FileNotFoundError` - el archivo del diccionario no existe;
+- `OSError` - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio;
+- `ValueError` - el archivo no es un diccionario de esMorph o está dañado;
+- `TypeError` - una ruta que no es una cadena ni `PathLike`.
 
 === "Código"
 
@@ -8,124 +19,188 @@
     from esmorph import Analyzer
 
     morph = Analyzer()
-    analysis = morph.analyze("camiones")[0]
-    analysis.word, analysis.lemma, analysis.pos, analysis.feats
+    morph.analyze("hablamos")[0]
     ```
 
 === "Resultado"
 
     ```
-    ('camiones', 'camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
+    Analysis(word='hablamos', lemma='hablar', pos='VERB', feats={'Mood': 'Ind', 'Number': 'Plur', 'Person': '1', 'Tense': 'Pres', 'VerbForm': 'Fin'}, prob=0.978261, words=('hablamos',), source='dictionary')
     ```
 
-## Orden de los análisis { #order }
+## Parámetros
 
-Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes.
+| Parámetro | Tipo | Por defecto | Descripción |
+| :-------- | :--- | :---------- | :---------- |
+| `path` | `str` / `PathLike` | `None` | Ruta al archivo del diccionario; por defecto, el diccionario del paquete |
+
+El objeto guarda la ruta del diccionario en `path`, de tipo `Path` y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, así que no se deben cargar diccionarios de fuentes no fiables.
+
+## Métodos
+
+<div class="metric-card" markdown>
+
+### Análisis de una forma de palabra { #analyze }
+
+`analyze` · `list[Analysis]`
+{ .metric-meta }
+
+``` {.python .signature}
+analyze(word)
+```
+
+Los análisis de la forma de palabra, primero el más probable; las probabilidades suman 1. Las mayúsculas no importan, y una palabra que no está tal como se escribe se busca sin sus tildes y con una diéresis perdida ([ortografía](analysis.md#spelling)). Un verbo con pronombres enclíticos se analiza como su verbo ([clíticos](analysis.md#clitics)), un token que el diccionario no tiene - un signo, un número, un nombre - [por reglas](analysis.md#rules), y una palabra desconocida en minúsculas se [estima](analysis.md#guess). Un token que nada analiza - con un espacio o un carácter de control, una palabra en minúsculas sin modelo como `qzxw` - no tiene análisis.
+
+| Parámetro | Tipo | Por defecto | Descripción |
+| :-------- | :--- | :---------- | :---------- |
+| `word` | `str` | - | Forma de palabra |
+
+Excepciones:
+
+- `TypeError` - una palabra que no es una cadena.
 
 === "Código"
 
     ``` python
-    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("casa")][:2]
+    [(a.lemma, a.pos, round(a.prob, 3)) for a in morph.analyze("casa")]
+    [(a.lemma, a.source) for a in morph.analyze("zumbeábamos")][:1]
     ```
 
 === "Resultado"
 
     ```
-    [('casa', 'NOUN', 0.99), ('casar', 'VERB', 0.01)]
+    [('casa', 'NOUN', 0.986), ('casar', 'VERB', 0.013), ('casar', 'VERB', 0.0)]
+    [('zumbear', 'guess')]
     ```
 
-Los lemas y los rasgos siguen las convenciones de estos treebanks: `la` es una forma de `el`, `se` de `él`, `muy` de `mucho`, y los verbos no llevan `-se` en el lema. Un verbo auxiliar tiene análisis `AUX` y `VERB`, y un participio también es un adjetivo.
+</div>
 
-## Palabras con clíticos { #clitics }
+<div class="metric-card" markdown>
 
-Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. `del` y `al` también tienen sus dos palabras. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`.
+### Análisis de una lista de formas { #analyze_many }
+
+`analyze_many` · `list[list[Analysis]]`
+{ .metric-meta }
+
+``` {.python .signature}
+analyze_many(words)
+```
+
+Los análisis de cada forma de palabra, como con [`analyze`](#analyze); con una lista el método es más rápido que `analyze` en un bucle, y libera el GIL.
+
+| Parámetro | Tipo | Por defecto | Descripción |
+| :-------- | :--- | :---------- | :---------- |
+| `words` | `Iterable[str]` | - | Formas de palabra: una lista, una tupla, un generador |
+
+Excepciones:
+
+- `TypeError` - una cadena en lugar de una colección de palabras, una palabra que no es una cadena.
 
 === "Código"
 
     ``` python
-    [(a.lemma, a.pos, a.words, a.source) for a in morph.analyze("dámelo")]
+    [len(analyses) for analyses in morph.analyze_many(["el", "gato", "come"])]
     ```
 
 === "Resultado"
 
     ```
-    [('dar', 'VERB', ('da', 'me', 'lo'), 'clitics')]
+    [2, 1, 2]
     ```
 
-## Ortografía { #spelling }
+</div>
 
-Las mayúsculas no importan. Una palabra escrita como en el diccionario da los análisis de esa grafía: `publico` no es `público`. Una palabra que no está tal como se escribe se busca sin sus tildes y con la diéresis perdida, y `word` muestra la grafía del diccionario; para un verbo con clíticos `word` es el token tal como se escribe, en minúsculas.
+<div class="metric-card" markdown>
+
+### Lematización { #lemmatize }
+
+`lemmatize` · `list[str]`
+{ .metric-meta }
+
+``` {.python .signature}
+lemmatize(words)
+```
+
+Los lemas de los análisis más probables de las formas de palabra; un token sin análisis vuelve en minúsculas. Los lemas iguales son un mismo objeto de cadena, así que los lemas de un texto grande ocupan poca memoria; el método libera el GIL.
+
+| Parámetro | Tipo | Por defecto | Descripción |
+| :-------- | :--- | :---------- | :---------- |
+| `words` | `Iterable[str]` | - | Formas de palabra: una lista, una tupla, un generador |
+
+Excepciones:
+
+- `TypeError` - una cadena en lugar de una colección de palabras, una palabra que no es una cadena.
 
 === "Código"
 
     ``` python
-    [morph.analyze(word)[0].word for word in ["CAMIÓN", "camion", "pinguino"]]
+    morph.lemmatize(["Los", "niños", "cantaban", "canciones"])
     ```
 
 === "Resultado"
 
     ```
-    ['camión', 'camión', 'pingüino']
+    ['el', 'niño', 'cantar', 'canción']
     ```
 
-## Tokens fuera del diccionario { #rules }
+</div>
 
-Un token que el diccionario no tiene recibe los análisis de unas reglas, con `source` igual a `"rule"` y `word` tal como está escrito:
+<div class="metric-card" markdown>
 
-- un signo de puntuación es `PUNCT` con su `PunctType`, y `PunctSide` para los signos dobles; un símbolo como `%`, `€` o `²` es `SYM`;
-- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año; el lema quita los puntos entre los millares: `10.000` es `10000`;
-- un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre;
-- un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`.
+### Forma de palabra del diccionario { #is_known }
 
-Una palabra en mayúsculas que el diccionario conoce también puede ser un nombre, con su parte: una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra de una clase cerrada suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano en `I` como `VI` o `XI` es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también suele ser un nombre: `Mandela` es ante todo `PROPN`. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
+`is_known` · `bool`
+{ .metric-meta }
+
+``` {.python .signature}
+is_known(word)
+```
+
+Si el diccionario tiene la forma de palabra, tal como está escrita o como un verbo del diccionario con clíticos; como en `analyze`, las mayúsculas y las tildes perdidas no importan. Los tokens analizados por reglas y las palabras estimadas no están en el diccionario.
+
+| Parámetro | Tipo | Por defecto | Descripción |
+| :-------- | :--- | :---------- | :---------- |
+| `word` | `str` | - | Forma de palabra |
+
+Excepciones:
+
+- `TypeError` - una palabra que no es una cadena.
 
 === "Código"
 
     ``` python
-    [(a.lemma, a.pos, a.feats, a.source) for a in morph.analyze("10.000")]
-    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("ETA")]
+    morph.is_known("Gatos"), morph.is_known("zumbeábamos")
     ```
 
 === "Resultado"
 
     ```
-    [('10000', 'NUM', {'NumForm': 'Digit', 'NumType': 'Card'}, 'rule')]
-    [('ETA', 'PROPN', 0.82), ('eta', 'NOUN', 0.18)]
+    (True, False)
     ```
 
-## Palabras desconocidas { #guess }
+</div>
 
-Una palabra en minúsculas que ni el diccionario ni las reglas conocen recibe análisis estimados, con `source` igual a `"guess"`:
+## Diccionario { #dictionary }
 
-- una palabra con guion se analiza por su última parte de una clase abierta: `palestino-israelíes` es una forma de `palestino-israelí`;
-- una palabra con un prefijo conocido se analiza por la palabra del diccionario sin él: `supergallos` es una forma de `supergallo`, `sobreandan` de `sobreandar`;
-- un verbo con clíticos se analiza por su gerundio estimado, o por su infinitivo estimado ante `se` o un clítico de tercera persona: `autogenerarse` es `autogenerar` + `se`;
-- cualquier otra palabra se analiza por las palabras del diccionario con la misma terminación de hasta cinco letras: sus categorías, rasgos y flexión, según cuántas palabras los tienen y con qué frecuencia los treebanks tienen sus rasgos.
+El diccionario del paquete se crea a partir del [Wiktionary](https://en.wiktionary.org) en inglés de octubre de 2026: 676 mil formas de palabra de 117 mil lexemas. Los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras vienen de una tabla según el treebank [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), cuyas convenciones siguen los lemas y los rasgos ([Análisis de palabras](analysis.md#ud)). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD); las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
-Una palabra estimada tiene sus formas, también estimadas: `forms()` e `inflect()` funcionan como con una palabra del diccionario. `is_known` sigue siendo falso para ella.
+## Hilos y procesos { #parallel }
+
+Un mismo analizador se puede usar desde varios hilos: `analyze_many` y `lemmatize` liberan el GIL y procesan las listas en paralelo, y el paquete tiene ruedas para Python 3.14t sin GIL. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Pickle guarda la ruta del archivo del diccionario (ninguna para el diccionario del paquete): al deserializar se toma el analizador del mismo diccionario que el proceso ya tiene, así que los análisis deserializados uno a uno lo comparten, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero no tiene otras formas.
 
 === "Código"
 
     ``` python
-    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("zumbeábamos")]
-    morph.analyze("zumbeábamos")[0].inflect(Tense="Pres", Person="1", Number="Sing")
+    from concurrent.futures import ThreadPoolExecutor
+
+    texts = [["los", "niños", "cantaban"], ["el", "gato", "come"]]
+    with ThreadPoolExecutor(2) as pool:
+        lemmas = list(pool.map(morph.lemmatize, texts))
+    lemmas
     ```
 
 === "Resultado"
 
     ```
-    [('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
-    'zumbeo'
+    [['el', 'niño', 'cantar'], ['el', 'gato', 'comer']]
     ```
-
-## Métodos { #methods }
-
-| Método | Resultado |
-| :-- | :-- |
-| `Analyzer(path=None)` | Un analizador con el diccionario del paquete o de un archivo |
-| `analyze(word)` | La lista de `Analysis`; vacía para un token que nada analiza, como `qzxw` |
-| `analyze_many(words)` | Lo mismo para una colección de palabras, sin el GIL |
-| `lemmatize(words)` | El lema del primer análisis de cada palabra; una palabra sin análisis en minúsculas, sin el GIL |
-| `is_known(word)` | Si el diccionario tiene la palabra, tal como está escrita o como un verbo con clíticos |
-
-`Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob`, `words` y `source` y los métodos `forms()` e `inflect()` - véase [Flexión](inflection.md). Es inmutable, se puede usar como clave y se compara sin la probabilidad. El analizador y el análisis se pueden serializar con pickle: al deserializarlos se toma el analizador del mismo diccionario que el proceso ya tiene, así que los análisis deserializados uno a uno lo comparten, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete.
