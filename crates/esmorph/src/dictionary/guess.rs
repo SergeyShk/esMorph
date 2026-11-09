@@ -1,9 +1,11 @@
 //! Guessing of lowercase words that the dictionary does not have: a word with a hyphen by its last
 //! part (`palestino-israelíes`), a word with a known prefix by the word of the dictionary without
-//! it (`antimundialización`) and any other by the forms of the dictionary words with the same
-//! ending and their inflection tables. The lemma and the forms are those of the whole word
+//! it (`antimundialización`), a verb with clitics by its guessed infinitive or gerund
+//! (`autogenerarse`) and any other by the forms of the dictionary words with the same ending and
+//! their inflection tables. The lemma and the forms are those of the whole word
 
-use super::{Analysis, Dictionary, Entry, Source, guess_list};
+use super::{Analysis, Dictionary, Entry, Host, Source, guess_list, with_host_source};
+use crate::clitics;
 use crate::format::MAX_ENDING;
 
 /// Prefixes after which an unknown word is analyzed as the dictionary word without them, the
@@ -17,6 +19,8 @@ const PREFIXES: &[&str] = &[
 
 /// Parts of speech that a word after a prefix keeps: the closed classes take no prefixes
 const OPEN: [&str; 4] = ["NOUN", "ADJ", "VERB", "ADV"];
+/// Parts of speech that the last part of a word with a hyphen keeps: `sur-este` is no determiner
+const HYPHENATED: [&str; 5] = ["NOUN", "ADJ", "VERB", "ADV", "NUM"];
 
 /// The shortest word guessed by its ending and the shortest word after a prefix, in letters: an
 /// ending of a shorter word tells nothing
@@ -42,7 +46,41 @@ impl Dictionary {
         if !prefixed.is_empty() {
             return prefixed;
         }
+        let with_clitics = self.with_guessed_host(word);
+        if !with_clitics.is_empty() {
+            return with_clitics;
+        }
         self.by_ending(word)
+    }
+
+    /// A verb with clitics whose host the dictionary does not have: the guessed analyses of the
+    /// host that are a gerund or an infinitive before `se` or a clitic of the third person. A
+    /// guessed imperative would be too often another word (`zumbete`), as an infinitive before
+    /// other clitics: `compañeros` is no `compañer` + `os`, `imparte` no `impar` + `te`
+    fn with_guessed_host(&self, word: &str) -> Vec<Analysis> {
+        for split in clitics::splits(word) {
+            let infinitive = !matches!(split.clitics[0], "os" | "te" | "me" | "nos");
+            for host in clitics::hosts(split.host, split.clitics[0]) {
+                let mut guessed = self.prefixed(&host);
+                if guessed.is_empty() {
+                    guessed = self.by_ending(&host);
+                }
+                let hosts: Vec<Analysis> = (guessed.into_iter())
+                    .filter(|analysis| {
+                        let form = self
+                            .ud
+                            .get(analysis.ud)
+                            .and_then(|tag| tag.feat("VerbForm"));
+                        self.hosts.get(usize::from(analysis.ud)) == Some(&Host::NonFinite)
+                            && (infinitive || form == Some("Ger"))
+                    })
+                    .collect();
+                if !hosts.is_empty() {
+                    return with_host_source(word, &split, hosts, Source::Guess);
+                }
+            }
+        }
+        Vec::new()
     }
 
     /// A word with a hyphen: the analyses of its last part, whose stem takes the first part
@@ -57,6 +95,11 @@ impl Dictionary {
             .analyze(last)
             .into_iter()
             .filter(|analysis| analysis.entry.is_some() && analysis.words.is_empty())
+            .filter(|analysis| {
+                self.ud
+                    .get(analysis.ud)
+                    .is_some_and(|tag| HYPHENATED.contains(&tag.pos()))
+            })
             .map(|analysis| Analysis {
                 word: format!("{head}-{}", analysis.word),
                 lemma: format!("{head}-{}", analysis.lemma),
@@ -113,7 +156,7 @@ impl Dictionary {
             else {
                 continue;
             };
-            let mut found: Vec<(Analysis, u32)> = Vec::new();
+            let mut found: Vec<(Analysis, u64)> = Vec::new();
             for &[record, count] in forms {
                 let entry = Entry {
                     table: (record >> 16) as u16,
@@ -136,7 +179,7 @@ impl Dictionary {
                     .iter_mut()
                     .find(|(known, _)| known.lemma == lemma && known.ud == ud)
                 {
-                    Some((_, total)) => *total += count,
+                    Some((_, total)) => *total += u64::from(count),
                     None => found.push((
                         Analysis {
                             word: word.to_owned(),
@@ -147,18 +190,18 @@ impl Dictionary {
                             entry: Some(entry),
                             words: Vec::new(),
                         },
-                        count,
+                        u64::from(count),
                     )),
                 }
             }
             if found.is_empty() {
                 continue;
             }
-            let total: f64 = found.iter().map(|&(_, count)| f64::from(count)).sum();
+            let total: f64 = found.iter().map(|&(_, count)| count as f64).sum();
             let mut analyses: Vec<Analysis> = found
                 .into_iter()
                 .map(|(analysis, count)| Analysis {
-                    prob: f64::from(count) / total,
+                    prob: count as f64 / total,
                     ..analysis
                 })
                 .collect();
@@ -275,6 +318,73 @@ mod tests {
     }
 
     #[test]
+    fn the_forms_of_a_guessed_word_are_guessed() {
+        let dictionary = dictionary(Some(10));
+        let zorros = &dictionary.analyze("zorros")[0];
+        let forms = dictionary.forms(zorros);
+        assert!(forms.iter().all(|form| form.source == Source::Guess));
+        assert_eq!(dictionary.inflect(&forms[0], &[]).unwrap().word, "zorro");
+    }
+
+    #[test]
+    fn a_verb_with_clitics_is_guessed_by_its_infinitive() {
+        let dictionary = dictionary(None);
+        let analyses = dictionary.analyze("zorrarlo");
+        assert_eq!(analyses.len(), 1);
+        let analysis = &analyses[0];
+        assert_eq!(
+            (analysis.lemma.as_str(), analysis.source),
+            ("zorrar", Source::Guess)
+        );
+        assert_eq!(analysis.words, ["zorrar", "lo"]);
+        let forms: Vec<String> = (dictionary.forms(analysis).into_iter())
+            .map(|form| form.word)
+            .collect();
+        assert_eq!(forms, ["zorrar", "zorros"]);
+    }
+
+    #[test]
+    fn heavy_weights_neither_overflow_nor_lose_their_order() {
+        let dictionary = dictionary(Some(u32::MAX));
+        let analyses = dictionary.analyze("zorros");
+        assert_eq!(analyses[0].lemma, "zorro");
+        let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+        assert!((total - 1.0).abs() < 1e-9, "{total}");
+    }
+
+    #[test]
+    fn damaged_guesses_never_panic() {
+        let mut builder = Builder::new();
+        for noun in ["gato", "perro", "pato"] {
+            let stem = noun.strip_suffix('o').unwrap();
+            builder.add_form(noun, "NOUN", noun, "Number=Sing").unwrap();
+            builder
+                .add_form(noun, "NOUN", &format!("{stem}os"), "Number=Plur")
+                .unwrap();
+        }
+        let clean = builder.build().unwrap();
+        let layout = crate::format::layout(&clean).unwrap();
+        // The automata are left out: only the checksum catches damage in them
+        let automata = |at: &usize| layout.words.contains(at) || layout.guesses.contains(at);
+        for at in (16..clean.len()).filter(|at| !automata(at)) {
+            for flip in [0x01, 0x10, 0xFF] {
+                let mut damaged = clean.clone();
+                damaged[at] ^= flip;
+                let damaged = crate::format::tests::with_checksum(damaged);
+                let Ok(dictionary) = Dictionary::from_bytes(&damaged) else {
+                    continue;
+                };
+                for word in ["zorros", "supergatos", "gato-perros", "zorro"] {
+                    for analysis in dictionary.analyze(word) {
+                        let _ = dictionary.forms(&analysis);
+                        let _ = dictionary.inflect(&analysis, &[("Number", "Sing")]);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn what_is_not_guessed() {
         let dictionary = dictionary(None);
         // A table of one lexeme gives no guess: `zaos` is not `caos`
@@ -292,5 +402,10 @@ mod tests {
         }
         let long = "a".repeat(70) + "os";
         assert!(dictionary.analyze(&long).is_empty());
+        // The last part of a word with a hyphen is no word of a closed class
+        let mut builder = Builder::new();
+        builder.add_form("este", "DET", "este", "").unwrap();
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        assert!(dictionary.analyze("sur-este").is_empty());
     }
 }

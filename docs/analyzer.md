@@ -97,11 +97,12 @@ A word in capitals that the dictionary knows may be a name too, with its share: 
 
 A lowercase word that neither the dictionary nor the rules know gets guessed analyses, with `source` equal to `"guess"`:
 
-- a word with a hyphen is analyzed by its last part: `palestino-israelíes` is a form of `palestino-israelí`;
+- a word with a hyphen is analyzed by its last part of an open class: `palestino-israelíes` is a form of `palestino-israelí`;
 - a word with a known prefix is analyzed by the dictionary word without it: `supergallos` is a form of `supergallo`, `sobreandan` of `sobreandar`;
+- a verb with clitics is analyzed by its guessed gerund, or by its guessed infinitive before `se` or a clitic of the third person: `autogenerarse` is `autogenerar` + `se`;
 - any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often the treebanks have their features.
 
-A guessed word has its forms: `forms()` and `inflect()` work as for a word of the dictionary. `is_known` stays false for it.
+A guessed word has its forms, guessed too: `forms()` and `inflect()` work as for a word of the dictionary. `is_known` stays false for it.
 
 === "Code"
 

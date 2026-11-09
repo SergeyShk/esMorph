@@ -1105,3 +1105,33 @@ def test_what_is_not_guessed(morph):
     assert morph.analyze("Zumbeábamos")[0].pos == "PROPN"
     assert morph.analyze("zumbe4") == []
     assert morph.analyze("z" * 100) == []
+
+
+def test_forms_of_guessed_words_are_guessed(morph):
+    forms = morph.analyze("zumbeábamos")[0].forms()
+    assert all(form.source == "guess" for form in forms)
+    # Every form keeps the lexeme: its forms and its inflection
+    present = next(form for form in forms if form.word == "zumbeo")
+    assert present.forms() == forms
+    assert present.inflect(Number="Plur") == "zumbeamos"
+    prefixed = morph.analyze("supergallos")[0]
+    assert prefixed.forms()[0].forms() == prefixed.forms()
+
+
+@pytest.mark.parametrize(
+    ("word", "lemma", "words"),
+    [
+        ("autogenerarse", "autogenerar", ("autogenerar", "se")),
+        ("zumbeándose", "zumbear", ("zumbeando", "se")),
+        ("zumbearlo", "zumbear", ("zumbear", "lo")),
+    ],
+)
+def test_guessed_verbs_with_clitics(morph, word, lemma, words):
+    first = morph.analyze(word)[0]
+    assert (first.lemma, first.pos, first.words, first.source) == (lemma, "VERB", words, "guess")
+    assert first.forms()[0].word == lemma
+
+
+def test_the_last_part_after_a_hyphen_is_of_an_open_class(morph):
+    assert morph.analyze("sur-este")[0].pos == "NOUN"
+    assert morph.analyze("post-nosotros") == []

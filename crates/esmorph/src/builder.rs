@@ -436,12 +436,22 @@ fn guess_index(
             forms.values().map(|&(count, _)| count).sum::<u32>() >= MIN_ENDING_COUNT
         })
         .map(|(ending, forms)| {
-            let mut forms: Vec<(u32, u32)> = forms
+            let mut forms: Vec<(u32, u64)> = forms
                 .into_iter()
-                .map(|(record, (_, weight))| (record, u32::try_from(weight).unwrap_or(u32::MAX)))
+                .map(|(record, (_, weight))| (record, weight))
                 .collect();
-            forms.sort_by_key(|&(record, count)| (Reverse(count), record));
+            forms.sort_by_key(|&(record, weight)| (Reverse(weight), record));
             forms.truncate(MAX_GUESSES);
+            // Weights above the numbers of the section go down together: the order stays
+            let largest = forms.first().map_or(0, |&(_, weight)| weight);
+            let scale = largest / u64::from(u32::MAX) + 1;
+            let forms: Vec<(u32, u32)> = forms
+                .into_iter()
+                .map(|(record, weight)| {
+                    let weight = u32::try_from(weight / scale).unwrap_or(u32::MAX);
+                    (record, weight.max(1))
+                })
+                .collect();
             (ending, forms)
         })
         .collect();

@@ -90,26 +90,42 @@ struct Analysis {
     words: Vec<String>,
     /// The analyzer that gave the analysis: its dictionary has the forms of the lexeme
     analyzer: Py<Analyzer>,
+    /// Number of the tag in the dictionary of the analyzer; `None` if it has no such tag
+    ud: Option<u16>,
+    /// The form of the inflection table of the analysis
+    entry: Option<esmorph::Entry>,
 }
 
 impl Analysis {
-    /// The analysis of the dictionary that this one is: the forms of its lexeme come from it
-    fn found(&self) -> Option<esmorph::Analysis> {
-        let analyzer = self.analyzer.get();
-        analyzer
-            .dictionary
-            .analyze(&self.word)
-            .into_iter()
-            .find(|analysis| {
-                analysis.lemma == self.lemma
-                    && analysis.words == self.words
-                    && analysis.source.as_str() == self.source
-                    && analyzer
-                        .tags
-                        .get(usize::from(analysis.ud))
-                        .is_some_and(|tag| **tag == *self.tag)
-            })
+    /// The analysis as the core has it: the forms of its lexeme come from it. An analysis of a
+    /// lexeme that the dictionary does not have (pickled with another one) has none
+    fn core(&self) -> Option<esmorph::Analysis> {
+        let source = source(self.source)?;
+        if self.entry.is_none() && source != esmorph::Source::Rule {
+            return None;
+        }
+        Some(esmorph::Analysis::new(
+            self.word.clone(),
+            self.lemma.clone(),
+            self.ud?,
+            self.prob,
+            source,
+            self.entry,
+            self.words.clone(),
+        ))
     }
+}
+
+/// The source of an analysis by its name
+fn source(name: &str) -> Option<esmorph::Source> {
+    [
+        esmorph::Source::Dictionary,
+        esmorph::Source::Clitics,
+        esmorph::Source::Rule,
+        esmorph::Source::Guess,
+    ]
+    .into_iter()
+    .find(|source| source.as_str() == name)
 }
 
 #[pymethods]
@@ -154,7 +170,7 @@ impl Analysis {
     ///     >>> [form.word for form in Analyzer().analyze("gatos")[0].forms()]
     ///     ['gato', 'gata', 'gatos', 'gatas']
     fn forms(&self, py: Python<'_>) -> Vec<Analysis> {
-        let Some(found) = self.found() else {
+        let Some(found) = self.core() else {
             return Vec::new();
         };
         let analyzer = self.analyzer.get();
@@ -220,7 +236,7 @@ impl Analysis {
             .map(|(name, value)| (name.as_str(), value.as_str()))
             .collect();
         if let Some(form) = self
-            .found()
+            .core()
             .and_then(|found| analyzer.dictionary.inflect(&found, &pairs))
         {
             return Ok(form.word);
@@ -321,16 +337,10 @@ fn _analysis(
     source: &str,
     path: Option<PathBuf>,
 ) -> PyResult<Analysis> {
-    let source = match source {
-        "dictionary" => esmorph::Source::Dictionary.as_str(),
-        "clitics" => esmorph::Source::Clitics.as_str(),
-        "rule" => esmorph::Source::Rule.as_str(),
-        "guess" => esmorph::Source::Guess.as_str(),
-        _ => {
-            return Err(PyValueError::new_err(format!(
-                "Unknown source of an analysis: {source}"
-            )));
-        }
+    let Some(source) = self::source(source).map(esmorph::Source::as_str) else {
+        return Err(PyValueError::new_err(format!(
+            "Unknown source of an analysis: {source}"
+        )));
     };
     let analyzer = match path.map(|path| shared(py, Some(path))) {
         Some(Ok(analyzer)) => analyzer,
@@ -338,10 +348,22 @@ fn _analysis(
         _ => shared(py, None)?,
     };
     // The tag of the dictionary is shared by its analyses
+    let this = analyzer.get();
     let tag = Tag { pos, feats };
-    let tag = (analyzer.get().tags.iter())
-        .find(|known| ***known == tag)
-        .map_or_else(|| Arc::new(tag), Arc::clone);
+    let ud = (this.tags.iter()).position(|known| **known == tag);
+    let tag = ud.map_or_else(|| Arc::new(tag), |ud| Arc::clone(&this.tags[ud]));
+    let ud = ud.and_then(|ud| u16::try_from(ud).ok());
+    // The form of its table is the one of the same analysis in this dictionary
+    let entry = ud.and_then(|ud| {
+        (this.dictionary.analyze(&word).into_iter())
+            .find(|analysis| {
+                analysis.lemma == lemma
+                    && analysis.ud == ud
+                    && analysis.words == words
+                    && analysis.source.as_str() == source
+            })
+            .and_then(|analysis| analysis.entry)
+    });
     Ok(Analysis {
         word,
         lemma,
@@ -350,6 +372,8 @@ fn _analysis(
         tag,
         words,
         analyzer,
+        ud,
+        entry,
     })
 }
 
@@ -602,13 +626,17 @@ impl Analyzer {
         Ok(result)
     }
 
-    /// Whether the word form has analyses
+    /// Whether the dictionary has the word form
+    ///
+    /// Description:
+    ///     The analyses of the rules and the guesses do not count: a name, a number or a guessed
+    ///     word has analyses but is not known
     ///
     /// Arguments:
     ///     word (str): The word form
     ///
     /// Returns:
-    ///     bool: Whether analyze finds the word form in the dictionary or as a verb of it with
+    ///     bool: Whether the dictionary has the word form, as written or as a verb of it with
     ///     clitics
     ///
     /// Raises:
@@ -675,6 +703,8 @@ impl Analyzer {
                     lemma: analysis.lemma,
                     words: analysis.words,
                     analyzer: analyzer.clone_ref(py),
+                    ud: Some(analysis.ud),
+                    entry: analysis.entry,
                 })
             })
             .collect()

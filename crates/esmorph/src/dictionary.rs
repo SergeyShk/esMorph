@@ -78,6 +78,39 @@ pub struct Analysis {
     pub words: Vec<String>,
 }
 
+impl Analysis {
+    /// An analysis from its fields, as `Dictionary::analyze` gave them: for an analysis kept apart
+    /// from the dictionary, whose forms are then asked for
+    pub fn new(
+        word: String,
+        lemma: String,
+        ud: u16,
+        prob: f64,
+        source: Source,
+        entry: Option<Entry>,
+        words: Vec<String>,
+    ) -> Self {
+        Analysis {
+            word,
+            lemma,
+            ud,
+            prob,
+            source,
+            entry,
+            words,
+        }
+    }
+
+    /// Source of the forms of the lexeme of the analysis: the forms of a guessed word are guessed,
+    /// the others are words of the dictionary
+    fn forms_source(&self) -> Source {
+        match self.source {
+            Source::Guess => Source::Guess,
+            _ => Source::Dictionary,
+        }
+    }
+}
+
 /// Dictionary of word forms
 ///
 /// The dictionary file is mapped into memory: processes with one dictionary share its memory, and
@@ -398,8 +431,8 @@ impl Dictionary {
         }
     }
 
-    /// Whether `analyze` finds analyses of the word form: it is in the dictionary or a verb of the
-    /// dictionary with clitics
+    /// Whether the dictionary has the word form, as written or as a verb of the dictionary with
+    /// clitics; the analyses of the rules and the guesses do not count
     pub fn is_known(&self, word: &str) -> bool {
         let word = normalized(word);
         self.lookup(&word).is_some() || !self.with_clitics(&word).is_empty()
@@ -566,7 +599,7 @@ impl Dictionary {
         };
         (0..lexeme.cells.len())
             .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
-            .filter_map(|form| self.form(&lexeme, form))
+            .filter_map(|form| self.form(&lexeme, form, analysis.forms_source()))
             .collect()
     }
 
@@ -673,13 +706,14 @@ impl Dictionary {
             })
             .min()?
             .1;
-        self.form(&lexeme, best)
+        self.form(&lexeme, best, analysis.forms_source())
     }
 
     /// Lexeme of an analysis: of its verb for a verb with clitics
     fn lexeme_of<'a>(&'a self, analysis: &'a Analysis) -> Option<Lexeme<'a>> {
         let word = match analysis.source {
             Source::Clitics => analysis.words.first()?,
+            Source::Guess if !analysis.words.is_empty() => &analysis.words[0],
             _ => &analysis.word,
         };
         self.lexeme(analysis.entry?, word)
@@ -703,7 +737,7 @@ impl Dictionary {
     }
 
     /// Analysis of a form of a lexeme
-    fn form(&self, lexeme: &Lexeme, form: usize) -> Option<Analysis> {
+    fn form(&self, lexeme: &Lexeme, form: usize, source: Source) -> Option<Analysis> {
         let word = lexeme.spell(&self.suffixes, form)?;
         let lemma = lexeme.spell(&self.suffixes, 0)?;
         let words = match clitics::contraction(&word) {
@@ -715,7 +749,7 @@ impl Dictionary {
             lemma,
             ud: lexeme.ud(form)?,
             prob: 1.0,
-            source: Source::Dictionary,
+            source,
             entry: Some(Entry {
                 table: lexeme.table,
                 form: form as u16,
@@ -970,6 +1004,16 @@ fn has(value: Option<&str>, wanted: &str) -> bool {
 
 /// Analyses of a token by the analyses of its host and its clitics
 fn with_clitics(token: &str, split: &clitics::Split, hosts: Vec<Analysis>) -> Vec<Analysis> {
+    with_host_source(token, split, hosts, Source::Clitics)
+}
+
+/// Analyses of a token by the analyses of its host and its clitics, with their source
+fn with_host_source(
+    token: &str,
+    split: &clitics::Split,
+    hosts: Vec<Analysis>,
+    source: Source,
+) -> Vec<Analysis> {
     let total: f64 = hosts.iter().map(|analysis| analysis.prob).sum();
     hosts
         .into_iter()
@@ -982,7 +1026,7 @@ fn with_clitics(token: &str, split: &clitics::Split, hosts: Vec<Analysis>) -> Ve
                 lemma: host.lemma,
                 ud: host.ud,
                 prob: host.prob / total,
-                source: Source::Clitics,
+                source,
                 entry: host.entry,
                 words,
             }
