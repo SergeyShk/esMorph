@@ -13,6 +13,7 @@ use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
     Storage, Strings, UD_BITS, VARIANT, WordValue,
 };
+use crate::rules::{self, CAPS_NAME, Rule, RuleTags, SHORT_CAPS};
 use crate::ud::{UdTag, UdTags};
 
 /// Where an analysis comes from
@@ -23,14 +24,18 @@ pub enum Source {
     Dictionary,
     /// The word form is a verb of the dictionary with enclitic pronouns
     Clitics,
+    /// The token is not in the dictionary, a rule gives its analysis: punctuation, a symbol, a
+    /// number, a Roman numeral, a name; a name of a word in capitals that the dictionary has
+    Rule,
 }
 
 impl Source {
-    /// Name of the source: `dictionary`, `clitics`
+    /// Name of the source: `dictionary`, `clitics`, `rule`
     pub fn as_str(self) -> &'static str {
         match self {
             Source::Dictionary => "dictionary",
             Source::Clitics => "clitics",
+            Source::Rule => "rule",
         }
     }
 }
@@ -86,6 +91,8 @@ pub struct Dictionary {
     word_count: usize,
     /// Which hosts of clitics a UD tag gives, by number
     hosts: Vec<Host>,
+    /// Tags of the analyses by rules; `None` if the table of tags has no room for them
+    rule_tags: Option<RuleTags>,
 }
 
 /// A form that takes clitics
@@ -201,6 +208,7 @@ impl Dictionary {
             table_offsets: Vec::new(),
             word_count: 0,
             hosts: Vec::new(),
+            rule_tags: None,
             layout,
             storage: Arc::clone(&storage),
         };
@@ -208,6 +216,7 @@ impl Dictionary {
         dictionary.table_offsets = dictionary.check_tables()?;
         dictionary.check_records()?;
         dictionary.word_count = dictionary.words.len() + dictionary.check_variants()?;
+        dictionary.rule_tags = RuleTags::add(&mut dictionary.ud);
         dictionary.hosts = dictionary
             .ud
             .iter()
@@ -254,19 +263,99 @@ impl Dictionary {
     /// Analyses of a word form, the most probable first. Case does not matter. A word spelled as in
     /// the dictionary gives the analyses of that spelling; a word absent as written is looked for
     /// without its accents and with a lost diaeresis. A word absent from the dictionary may be a
-    /// verb with clitics (`dámelo`). An unknown word has no analyses
+    /// verb with clitics (`dámelo`). A token that is neither gets the analyses of the rules:
+    /// punctuation, a symbol, a number, a Roman numeral, a name with a capital letter. A word in
+    /// capitals that the dictionary knows is a name too (`ETA`). A lowercase word that is none of
+    /// these has no analyses
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
         let mut analyses = self.found(&word);
         if analyses.is_empty() {
-            return self.with_clitics(&word);
+            // Clitics follow a verb: a token without letters has none
+            let analyses = if word.chars().any(char::is_alphabetic) {
+                self.with_clitics(&word)
+            } else {
+                Vec::new()
+            };
+            return if analyses.is_empty() {
+                self.ruled(&word)
+            } else {
+                analyses
+            };
         }
         if let Some(words) = clitics::contraction(&word) {
             for analysis in analyses.iter_mut().filter(|a| a.lemma == words[0]) {
                 analysis.words = words.iter().map(|&word| word.to_owned()).collect();
             }
         }
+        if rules::caps(&word) {
+            self.add_name(&word, &mut analyses);
+        }
         analyses
+    }
+
+    /// Analyses of a token by the rules
+    fn ruled(&self, token: &str) -> Vec<Analysis> {
+        let Some(tags) = &self.rule_tags else {
+            return Vec::new();
+        };
+        rules::rules(token)
+            .into_iter()
+            .map(|(lemma, rule, share)| Analysis {
+                word: token.to_owned(),
+                lemma,
+                ud: tags.number(rule),
+                prob: share,
+                source: Source::Rule,
+                entry: None,
+                words: Vec::new(),
+            })
+            .collect()
+    }
+
+    /// Adds the analysis of a name to the analyses of a word in capitals that has none, with its
+    /// share: first for a short word, which is mostly an acronym, after the others for a longer
+    /// word and for a word of a closed class, which are mostly words of a headline
+    fn add_name(&self, token: &str, analyses: &mut Vec<Analysis>) {
+        let Some(tags) = &self.rule_tags else {
+            return;
+        };
+        let pos = |analysis: &Analysis| self.ud.get(analysis.ud).map(|tag| tag.pos());
+        if analyses
+            .iter()
+            .any(|analysis| pos(analysis) == Some("PROPN"))
+        {
+            return;
+        }
+        let closed = analyses.iter().any(|analysis| {
+            matches!(
+                pos(analysis),
+                Some("ADP" | "DET" | "CCONJ" | "SCONJ" | "PRON" | "AUX")
+            )
+        });
+        let letters = token.chars().filter(|c| c.is_alphabetic()).count();
+        let share = CAPS_NAME[if closed {
+            2
+        } else {
+            usize::from(letters > SHORT_CAPS)
+        }];
+        for analysis in analyses.iter_mut() {
+            analysis.prob *= 1.0 - share;
+        }
+        let name = Analysis {
+            word: token.to_owned(),
+            lemma: token.to_owned(),
+            ud: tags.number(Rule::Name),
+            prob: share,
+            source: Source::Rule,
+            entry: None,
+            words: Vec::new(),
+        };
+        let at = analyses
+            .iter()
+            .position(|analysis| analysis.prob < share)
+            .unwrap_or(analyses.len());
+        analyses.insert(at, name);
     }
 
     /// Whether `analyze` finds analyses of the word form: it is in the dictionary or a verb of the
@@ -423,8 +512,15 @@ impl Dictionary {
 
     /// Forms of the lexeme of an analysis in the order of its paradigm: the lemma, the main forms by
     /// their features, then the variants; the probability of each is one. A verb with clitics
-    /// gives the forms of its verb, without clitics
+    /// gives the forms of its verb, without clitics; an analysis without a table, of a rule, is
+    /// its only form
     pub fn forms(&self, analysis: &Analysis) -> Vec<Analysis> {
+        if analysis.entry.is_none() {
+            return vec![Analysis {
+                prob: 1.0,
+                ..analysis.clone()
+            }];
+        }
         let Some(lexeme) = self.lexeme_of(analysis) else {
             return Vec::new();
         };
@@ -445,8 +541,18 @@ impl Dictionary {
     /// `hablé`. A form of a noun, an adjective, a determiner or a pronoun without a gender or a
     /// number takes any, though a form that has it goes first: `grande` with `Gender=Fem` is
     /// `grande`. A value of a form may list several (`Case=Acc,Nom`): any of them matches. A verb
-    /// with clitics inflects as its verb, without clitics
+    /// with clitics inflects as its verb, without clitics; an analysis of a rule gives itself if
+    /// it has the features
     pub fn inflect(&self, analysis: &Analysis, feats: &[(&str, &str)]) -> Option<Analysis> {
+        if analysis.entry.is_none() {
+            let tag = self.ud.get(analysis.ud)?;
+            return (feats.iter())
+                .all(|&(name, value)| has(tag.feat(name), value))
+                .then(|| Analysis {
+                    prob: 1.0,
+                    ..analysis.clone()
+                });
+        }
         let lexeme = self.lexeme_of(analysis)?;
         let own_form = usize::from(analysis.entry?.form);
         let own = *lexeme.cells.get(own_form)?;
@@ -1500,8 +1606,67 @@ pub(crate) mod tests {
         analysis.word = "perro".into();
         assert!(dictionary.forms(&analysis).is_empty());
         assert!(dictionary.inflect(&analysis, &[]).is_none());
-        analysis.entry = None;
-        assert!(dictionary.forms(&analysis).is_empty());
+    }
+
+    #[test]
+    fn tokens_out_of_the_dictionary_get_the_analyses_of_the_rules() {
+        let dictionary = dictionary();
+        let summary = |token: &str| -> Vec<(String, String, String, &'static str)> {
+            dictionary
+                .analyze(token)
+                .into_iter()
+                .map(|analysis| {
+                    let tag = dictionary.ud_tag(analysis.ud).unwrap();
+                    let pos = format!("{} {}", tag.pos(), tag.feats_string());
+                    (analysis.word, analysis.lemma, pos, analysis.source.as_str())
+                })
+                .collect()
+        };
+        assert_eq!(
+            summary("¿"),
+            [(
+                "¿".into(),
+                "¿".into(),
+                "PUNCT PunctSide=Ini|PunctType=Qest".into(),
+                "rule"
+            )]
+        );
+        assert_eq!(
+            summary("10.000"),
+            [(
+                "10.000".into(),
+                "10000".into(),
+                "NUM NumForm=Digit|NumType=Card".into(),
+                "rule"
+            )]
+        );
+        assert_eq!(
+            summary("Josep"),
+            [("Josep".into(), "Josep".into(), "PROPN ".into(), "rule")]
+        );
+        assert_eq!(summary("XXI")[0].2, "NUM NumForm=Roman|NumType=Card");
+        assert!(summary("qzxw").is_empty());
+        // The rules give analyses, not words of the dictionary
+        assert!(!dictionary.is_known("Josep") && !dictionary.is_known(","));
+        // A known word in capitals of a closed class is a name last
+        let me = dictionary.analyze("ME");
+        assert_eq!(me.len(), 2);
+        assert_eq!((me[1].lemma.as_str(), me[1].source), ("ME", Source::Rule));
+        let total: f64 = me.iter().map(|analysis| analysis.prob).sum();
+        assert!((total - 1.0).abs() < 1e-9, "{total}");
+    }
+
+    #[test]
+    fn an_analysis_without_a_lexeme_is_its_only_form() {
+        let dictionary = inflection_dictionary();
+        let number = &dictionary.analyze("10.000")[0];
+        assert_eq!(number.entry, None);
+        let forms = dictionary.forms(number);
+        assert_eq!(forms.len(), 1);
+        assert_eq!((forms[0].word.as_str(), forms[0].prob), ("10.000", 1.0));
+        let card = [("NumType", "Card")];
+        assert_eq!(dictionary.inflect(number, &card).unwrap().word, "10.000");
+        assert!(dictionary.inflect(number, &[("Number", "Plur")]).is_none());
     }
 
     #[test]
@@ -1668,11 +1833,14 @@ pub(crate) mod tests {
     #[test]
     fn case_does_not_matter() {
         let dictionary = dictionary();
-        for word in ["CAMIÓN", "Camión", "cAmIóN"] {
+        for word in ["Camión", "cAmIóN"] {
             assert_eq!(lemmas(&dictionary, word), ["camión"], "{word}");
         }
-        assert_eq!(lemmas(&dictionary, "AÑO"), ["año"]);
-        assert_eq!(lemmas(&dictionary, "PINGÜINO"), ["pingüino"]);
+        // A word in capitals may be a name too: after the dictionary for a long word, first for a
+        // short one
+        assert_eq!(lemmas(&dictionary, "CAMIÓN"), ["camión", "CAMIÓN"]);
+        assert_eq!(lemmas(&dictionary, "PINGÜINO"), ["pingüino", "PINGÜINO"]);
+        assert_eq!(lemmas(&dictionary, "AÑO"), ["AÑO", "año"]);
     }
 
     #[test]
@@ -1722,7 +1890,7 @@ pub(crate) mod tests {
         let dictionary = dictionary();
         // Combining marks after the letter, also in capitals
         assert_eq!(lemmas(&dictionary, "camio\u{301}n"), ["camión"]);
-        assert_eq!(lemmas(&dictionary, "CAMIO\u{301}N"), ["camión"]);
+        assert_eq!(lemmas(&dictionary, "CAMIO\u{301}N")[0], "camión");
         assert_eq!(lemmas(&dictionary, "an\u{303}o"), ["año"]);
         assert_eq!(lemmas(&dictionary, "pingu\u{308}ino"), ["pingüino"]);
         // Invisible characters
