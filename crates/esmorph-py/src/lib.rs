@@ -64,7 +64,8 @@ impl Tag {
 ///         contraction, or the word itself; the analysis describes the first of them
 ///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the
 ///         dictionary with clitics, "rule" for a token out of the dictionary (punctuation, a
-///         symbol, a number, a Roman numeral, a name) and the name of a word in capitals
+///         symbol, a number, a Roman numeral, a name) and the name of a word in capitals, "guess"
+///         for a guessed lowercase word
 ///
 /// Example:
 ///     >>> from esmorph import Analyzer
@@ -324,6 +325,7 @@ fn _analysis(
         "dictionary" => esmorph::Source::Dictionary.as_str(),
         "clitics" => esmorph::Source::Clitics.as_str(),
         "rule" => esmorph::Source::Rule.as_str(),
+        "guess" => esmorph::Source::Guess.as_str(),
         _ => {
             return Err(PyValueError::new_err(format!(
                 "Unknown source of an analysis: {source}"
@@ -384,8 +386,9 @@ fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
 ///     matter. A word spelled as in the dictionary gives the analyses of that spelling; a word
 ///     absent as written is looked for without its accents and with a lost diaeresis. A word absent
 ///     from the dictionary may be a verb with clitics (`dámelo`); other tokens get the analyses of
-///     rules: punctuation, symbols, numbers, Roman numerals and names. The dictionary is loaded
-///     once when the analyzer is created; an analyzer can be used from several threads
+///     rules (punctuation, symbols, numbers, Roman numerals and names), and other lowercase words
+///     are guessed. The dictionary is loaded once when the analyzer is created; an analyzer can be
+///     used from several threads
 ///
 /// Arguments:
 ///     path (str | os.PathLike | None): Path to a dictionary file; by default the dictionary of the
@@ -473,7 +476,8 @@ impl Analyzer {
     ///     A token that the dictionary does not have gets the analyses of the rules: punctuation,
     ///     a symbol, a number in digits, a Roman numeral, a name with a capital letter. A word in
     ///     capitals that the dictionary knows may be a name too (`ETA`). A lowercase word out of
-    ///     the dictionary has no analyses
+    ///     the dictionary is guessed: by its last part after a hyphen, by the word without a known
+    ///     prefix or by the dictionary words with its ending
     ///
     /// Arguments:
     ///     word (str): The word form
@@ -491,6 +495,8 @@ impl Analyzer {
     ///     [('camión', 'NOUN')]
     ///     >>> [(analysis.lemma, analysis.pos, analysis.source) for analysis in morph.analyze("10.000")]
     ///     [('10000', 'NUM', 'rule')]
+    ///     >>> [(analysis.lemma, analysis.source) for analysis in morph.analyze("supergallos")]
+    ///     [('supergallo', 'guess')]
     ///     >>> morph.analyze("qzxw")
     ///     []
     fn analyze(slf: &Bound<'_, Self>, word: &Bound<'_, PyAny>) -> PyResult<Vec<Analysis>> {

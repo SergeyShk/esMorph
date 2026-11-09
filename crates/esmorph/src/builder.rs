@@ -6,9 +6,18 @@ use fst::MapBuilder;
 use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
-    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Sections,
-    VARIANT, WordValue,
+    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE,
+    Sections, VARIANT, WordValue,
 };
+
+/// Parts of speech whose forms guess unknown words: the closed classes are in the dictionary
+const GUESSED: [&str; 4] = ["NOUN", "ADJ", "VERB", "ADV"];
+/// A table of fewer lexemes is more an exception than a sample for guessing
+const MIN_TABLE_LEXEMES: usize = 3;
+/// An ending that fewer word forms of the dictionary have is a mark of a word, not a sample
+const MIN_ENDING_COUNT: u32 = 3;
+/// How many of the most frequent forms of tables an ending keeps for guessing
+const MAX_GUESSES: usize = 10;
 
 /// Builder of a dictionary from the forms of lexemes
 ///
@@ -25,6 +34,8 @@ pub struct Builder {
     lexemes: BTreeMap<(String, String), BTreeMap<(String, String), Form>>,
     /// How often texts have a word form
     frequencies: HashMap<String, u32>,
+    /// How often texts have a part of speech with features
+    tag_frequencies: HashMap<(String, String), u32>,
 }
 
 /// Place of an analysis in the list of its word form
@@ -216,6 +227,20 @@ impl Builder {
         self.frequencies.insert(form.to_owned(), frequency);
     }
 
+    /// Sets how often texts have a part of speech with features: a form of a table guesses
+    /// unknown words by the number of its word forms with an ending times this number and one
+    pub fn set_tag_frequency(
+        &mut self,
+        pos: &str,
+        feats: &str,
+        frequency: u32,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        self.tag_frequencies
+            .insert((pos.to_owned(), feats), frequency);
+        Ok(())
+    }
+
     /// Builds the dictionary in the binary format
     pub fn build(&self) -> Result<Vec<u8>, Error> {
         let mut tags = Interned::default();
@@ -223,6 +248,9 @@ impl Builder {
         let mut paradigms: Interned<Vec<u32>> = Interned::default();
         let mut tables: Interned<(u32, Vec<u32>)> = Interned::default();
         let mut words: BTreeMap<&str, Vec<Listed>> = BTreeMap::new();
+        // Forms of the open classes that may guess unknown words, and the lexemes of every table
+        let mut samples: Vec<(&str, u32, u64)> = Vec::new();
+        let mut lexemes_of: HashMap<u32, usize> = HashMap::new();
         for ((lemma, pos), forms) in &self.lexemes {
             let mut rows = Vec::with_capacity(forms.len() + 1);
             for ((form, feats), info) in forms {
@@ -270,15 +298,22 @@ impl Builder {
                 .map(|row| row.flags | u32::from(row.ud))
                 .collect();
             let table = tables.number((paradigm, cells), "inflection tables", u16::MAX)?;
+            *lexemes_of.entry(table).or_default() += 1;
             for (form, row) in rows.iter().enumerate() {
                 if row.flags & LEMMA_ONLY == 0 {
                     words.entry(row.word).or_default().push(Listed {
                         record: table << 16 | form as u32,
                         place: row.place,
                     });
+                    if row.flags & VARIANT == 0 && GUESSED.contains(&pos.as_str()) {
+                        let key = (pos.clone(), row.feats.to_owned());
+                        let weight = self.tag_frequencies.get(&key).copied().unwrap_or(0);
+                        samples.push((row.word, table << 16 | form as u32, u64::from(weight) + 1));
+                    }
                 }
             }
         }
+        let (guesses, guess_records) = guess_index(&samples, &lexemes_of)?;
 
         let alphabet = alphabet(words.keys().copied());
         let letters = Alphabet::new(&alphabet).map_err(|err| match err {
@@ -367,8 +402,70 @@ impl Builder {
             words: automaton.into_inner().map_err(build_error)?,
             records,
             variants,
+            guesses,
+            guess_records,
         }))
     }
+}
+
+/// The index of guessing: an automaton of endings of word forms and the lists of the forms of
+/// tables with each ending, the most frequent first, with their numbers of word forms. An ending
+/// keeps only what its shorter ending does not tell: a list equal to it is left out
+fn guess_index(
+    samples: &[(&str, u32, u64)],
+    lexemes_of: &HashMap<u32, usize>,
+) -> Result<(Vec<u8>, Vec<u32>), Error> {
+    // Number of word forms and their weight by the frequency of the tag
+    let mut counts: BTreeMap<&str, HashMap<u32, (u32, u64)>> = BTreeMap::new();
+    for &(word, record, weight) in samples {
+        if lexemes_of.get(&(record >> 16)).copied().unwrap_or(0) < MIN_TABLE_LEXEMES {
+            continue;
+        }
+        let starts: Vec<usize> = word.char_indices().map(|(at, _)| at).collect();
+        // The stem of a guessed word keeps one letter at least
+        for length in 1..=MAX_ENDING.min(starts.len().saturating_sub(1)) {
+            let ending = &word[starts[starts.len() - length]..];
+            let count = counts.entry(ending).or_default().entry(record).or_default();
+            count.0 += 1;
+            count.1 += weight;
+        }
+    }
+    let lists: BTreeMap<&str, Vec<(u32, u32)>> = counts
+        .into_iter()
+        .filter(|(_, forms)| {
+            forms.values().map(|&(count, _)| count).sum::<u32>() >= MIN_ENDING_COUNT
+        })
+        .map(|(ending, forms)| {
+            let mut forms: Vec<(u32, u32)> = forms
+                .into_iter()
+                .map(|(record, (_, weight))| (record, u32::try_from(weight).unwrap_or(u32::MAX)))
+                .collect();
+            forms.sort_by_key(|&(record, count)| (Reverse(count), record));
+            forms.truncate(MAX_GUESSES);
+            (ending, forms)
+        })
+        .collect();
+    let mut records = Vec::new();
+    let mut offsets: HashMap<&[(u32, u32)], u64> = HashMap::new();
+    let mut automaton = MapBuilder::memory();
+    for (ending, forms) in &lists {
+        let shorter = ending.char_indices().nth(1).map(|(at, _)| &ending[at..]);
+        if shorter.is_some_and(|shorter| lists.get(shorter) == Some(forms)) {
+            continue;
+        }
+        let offset = *offsets.entry(forms).or_insert_with(|| {
+            let offset = records.len() as u64;
+            records.push(forms.len() as u32);
+            for &(record, count) in forms.iter() {
+                records.extend([record, count]);
+            }
+            offset
+        });
+        automaton
+            .insert(ending.as_bytes(), offset)
+            .map_err(build_error)?;
+    }
+    Ok((automaton.into_inner().map_err(build_error)?, records))
 }
 
 /// List of analyses as the section `records` keeps it

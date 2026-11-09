@@ -24,10 +24,12 @@ pub(crate) const VARIANT: u32 = 1 << 16;
 pub(crate) const LEMMA_ONLY: u32 = 1 << 17;
 /// Bits of the UD tag in a form of a table
 pub(crate) const UD_BITS: u32 = 0xFFFF;
-const VERSION: u32 = 3;
+/// The longest ending in letters that guesses an unknown word
+pub(crate) const MAX_ENDING: usize = 5;
+const VERSION: u32 = 4;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
-const SECTIONS: usize = 11;
+const SECTIONS: usize = 13;
 
 /// Contents of a dictionary for writing into a file
 #[cfg(any(test, feature = "build"))]
@@ -59,6 +61,12 @@ pub(crate) struct Sections {
     /// the accent places (two numbers), the start of the list of analyses and the weight among the
     /// spellings, for a query that lost its accents, of each
     pub variants: Vec<u32>,
+    /// Automaton "ending of a word form - start of its list in `guess_records`" for guessing
+    /// unknown words
+    pub guesses: Vec<u8>,
+    /// Lists of the forms of tables for an ending: the length, then `(table << 16) | form` and the
+    /// number of word forms of the dictionary with the ending of each
+    pub guess_records: Vec<u32>,
 }
 
 /// Value of a key in the automaton of word forms
@@ -115,17 +123,20 @@ pub(crate) struct Layout {
     pub words: Range<usize>,
     pub records: Range<usize>,
     pub variants: Range<usize>,
+    pub guesses: Range<usize>,
+    pub guess_records: Range<usize>,
 }
 
 impl Layout {
     /// Sections of numbers read right from the file and the size of their numbers in bytes
-    pub fn numbers(&self) -> [(&Range<usize>, usize); 5] {
+    pub fn numbers(&self) -> [(&Range<usize>, usize); 6] {
         [
             (&self.paradigm_offsets, 4),
             (&self.paradigms, 4),
             (&self.tables, 4),
             (&self.records, 4),
             (&self.variants, 4),
+            (&self.guess_records, 4),
         ]
     }
 }
@@ -151,6 +162,8 @@ pub(crate) fn write(sections: &Sections) -> Vec<u8> {
     section(&sections.words);
     section(&u32_bytes(&sections.records));
     section(&u32_bytes(&sections.variants));
+    section(&sections.guesses);
+    section(&u32_bytes(&sections.guess_records));
     let checksum = crc32fast::hash(&out[HEADER..]);
     out[12..HEADER].copy_from_slice(&checksum.to_le_bytes());
     out
@@ -212,6 +225,8 @@ pub(crate) fn layout(data: &[u8]) -> Result<Layout, Error> {
         words: section(1)?,
         records: section(4)?,
         variants: section(4)?,
+        guesses: section(1)?,
+        guess_records: section(4)?,
     };
     if at != data.len() {
         return Err(extra_data());

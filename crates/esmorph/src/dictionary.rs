@@ -16,6 +16,8 @@ use crate::format::{
 use crate::rules::{self, CAPS_NAME, CLITICS_NAME, Rule, RuleTags, SHORT_CAPS};
 use crate::ud::{UdTag, UdTags};
 
+mod guess;
+
 /// Where an analysis comes from
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -27,6 +29,9 @@ pub enum Source {
     /// The token is not in the dictionary, a rule gives its analysis: punctuation, a symbol, a
     /// number, a Roman numeral, a name; a name of a word in capitals that the dictionary has
     Rule,
+    /// A lowercase word that is not in the dictionary, guessed: by its last part after a hyphen,
+    /// by the word without a known prefix or by the words of the dictionary with its ending
+    Guess,
 }
 
 impl Source {
@@ -36,6 +41,7 @@ impl Source {
             Source::Dictionary => "dictionary",
             Source::Clitics => "clitics",
             Source::Rule => "rule",
+            Source::Guess => "guess",
         }
     }
 }
@@ -88,6 +94,8 @@ pub struct Dictionary {
     /// Start of every inflection table in `tables`
     table_offsets: Vec<u32>,
     words: Map<Slice>,
+    /// Automaton of the endings that guess unknown words
+    guesses: Map<Slice>,
     word_count: usize,
     /// Which hosts of clitics a UD tag gives, by number
     hosts: Vec<Host>,
@@ -205,6 +213,7 @@ impl Dictionary {
             alphabet: Alphabet::new(text(&layout.alphabet)?)?,
             suffixes: Strings::read(bytes(&layout.suffixes))?,
             words: automaton(&storage, &layout.words)?,
+            guesses: automaton(&storage, &layout.guesses)?,
             table_offsets: Vec::new(),
             word_count: 0,
             hosts: Vec::new(),
@@ -216,6 +225,7 @@ impl Dictionary {
         dictionary.table_offsets = dictionary.check_tables()?;
         dictionary.check_records()?;
         dictionary.word_count = dictionary.words.len() + dictionary.check_variants()?;
+        dictionary.check_guesses()?;
         dictionary.rule_tags = RuleTags::add(&mut dictionary.ud);
         dictionary.hosts = dictionary
             .ud
@@ -266,7 +276,8 @@ impl Dictionary {
     /// verb with clitics (`dámelo`). A token that is neither gets the analyses of the rules:
     /// punctuation, a symbol, a number, a Roman numeral, a name with a capital letter. A word in
     /// capitals that the dictionary knows is a name too (`ETA`). A lowercase word that is none of
-    /// these has no analyses
+    /// these is guessed: by its last part after a hyphen, by the word without a known prefix or by
+    /// the dictionary words with its ending
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
         let mut analyses = self.found(&word);
@@ -278,7 +289,12 @@ impl Dictionary {
                 Vec::new()
             };
             if analyses.is_empty() {
-                return self.ruled(&word);
+                let ruled = self.ruled(&word);
+                return if ruled.is_empty() {
+                    self.guess(&word)
+                } else {
+                    ruled
+                };
             }
             // A token with a capital letter that splits as a verb with clitics is mostly a name:
             // `Mandela`, `Portela`
@@ -739,6 +755,10 @@ impl Dictionary {
         self.numbers(&self.layout.variants)
     }
 
+    fn guess_records(&self) -> &[u32] {
+        self.numbers(&self.layout.guess_records)
+    }
+
     /// Paradigms refer only to existing suffixes
     fn check_paradigms(&self) -> Result<(), Error> {
         let (offsets, paradigms) = (self.paradigm_offsets(), self.paradigms());
@@ -871,6 +891,52 @@ impl Dictionary {
         }
         Ok(extra)
     }
+
+    /// Lists of forms for guessing exactly cover their section, are not longer than `MAX_LIST` and
+    /// refer to word forms of existing tables with numbers above zero. An ending of the automaton
+    /// that refers inside a list gives forms that the guessing checks as it reads them
+    fn check_guesses(&self) -> Result<(), Error> {
+        let invalid = |msg: &str| Err(Error::Format(msg.into()));
+        let lists = self.guess_records();
+        let mut start = 0;
+        while start < lists.len() {
+            let Some(list) = guess_list(lists, start as u64) else {
+                return invalid("a list of guesses is truncated");
+            };
+            let fits = |&[record, count]: &[u32; 2]| {
+                let entry = Entry {
+                    table: (record >> 16) as u16,
+                    form: record as u16,
+                };
+                count > 0 && self.cell(entry).is_some_and(|cell| cell & LEMMA_ONLY == 0)
+            };
+            if list.is_empty() || list.len() > MAX_LIST || !list.iter().all(fits) {
+                return invalid("a wrong list of guesses");
+            }
+            start += 1 + 2 * list.len();
+        }
+        Ok(())
+    }
+
+    /// Flags and UD tag of a form of a table
+    fn cell(&self, entry: Entry) -> Option<u32> {
+        let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
+        let tables = self.tables();
+        let paradigm = self.paradigm(*tables.get(start)?)?;
+        if usize::from(entry.form) >= paradigm.len() {
+            return None;
+        }
+        tables.get(start + 1 + usize::from(entry.form)).copied()
+    }
+}
+
+/// List of forms for guessing from the place `offset` of the section: `(table << 16) | form` and
+/// the number of word forms of each
+fn guess_list(lists: &[u32], offset: u64) -> Option<&[[u32; 2]]> {
+    let start = usize::try_from(offset).ok()?;
+    let count = *lists.get(start)? as usize;
+    let list = lists.get(start + 1..)?.get(..2 * count)?;
+    Some(list.as_chunks::<2>().0)
 }
 
 /// Forms of an inflection table with the stem of a word form
@@ -1854,7 +1920,8 @@ pub(crate) mod tests {
         let tag = dictionary.ud_tag(analyses[0].ud).unwrap();
         assert_eq!(tag.pos(), "NOUN");
         assert_eq!(tag.feats_string(), "Gender=Fem|Number=Plur");
-        assert!(dictionary.analyze("perro").is_empty());
+        assert!(dictionary.analyze("qzx").is_empty());
+        assert!(!dictionary.is_known("perro"));
         assert!(dictionary.analyze("").is_empty());
         assert!(!dictionary.is_empty());
         assert_eq!(dictionary.meta(), "{}");
@@ -1911,7 +1978,10 @@ pub(crate) mod tests {
         assert_eq!(lemmas(&dictionary, "camion"), ["camión"]);
         assert_eq!(summary(&dictionary, "camion")[0].0, "camión");
         // A moved accent gives all spellings of the key
-        assert_eq!(lemmas(&dictionary, "pùblico"), Vec::<String>::new());
+        // A grave accent is no accent of Spanish: the word is not in the dictionary
+        assert!(
+            (dictionary.analyze("pùblico").iter()).all(|analysis| analysis.source == Source::Guess)
+        );
         let all: Vec<String> = summary(&dictionary, "públicó")
             .into_iter()
             .map(|row| row.0)
@@ -2015,10 +2085,11 @@ pub(crate) mod tests {
     #[test]
     fn damaged_files_never_panic() {
         // Any byte of any section, with the checksum written anew so the checks of the sections are
-        // reached; the automaton is left out: only the checksum catches damage in it
+        // reached; the automata are left out: only the checksum catches damage in them
         let clean = bytes();
-        let automaton = format::layout(&clean).unwrap().words;
-        for at in (16..clean.len()).filter(|at| !automaton.contains(at)) {
+        let layout = format::layout(&clean).unwrap();
+        let automata = |at: &usize| layout.words.contains(at) || layout.guesses.contains(at);
+        for at in (16..clean.len()).filter(|at| !automata(at)) {
             for flip in [0x01, 0x10, 0xFF] {
                 let mut damaged = clean.clone();
                 damaged[at] ^= flip;

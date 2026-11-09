@@ -106,6 +106,13 @@ impl Counts {
         Ok(counts)
     }
 
+    /// How many times AnCora has every part of speech with features
+    pub fn tags(&self) -> impl Iterator<Item = (&str, &str, u32)> {
+        self.tags
+            .iter()
+            .map(|((pos, feats), &count)| (pos.as_str(), feats.as_str(), count))
+    }
+
     /// How many times the treebanks have a form
     pub fn frequency(&self, form: &str) -> u32 {
         self.forms.get(form).copied().unwrap_or(0)
