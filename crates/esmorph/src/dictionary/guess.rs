@@ -61,6 +61,10 @@ impl Dictionary {
         for split in clitics::splits(word) {
             let infinitive = !matches!(split.clitics[0], "os" | "te" | "me" | "nos");
             for host in clitics::hosts(split.host, split.clitics[0]) {
+                // Only a gerund takes these clitics here: another host is not guessed at all
+                if !infinitive && !host.ends_with("ndo") {
+                    continue;
+                }
                 let mut guessed = self.prefixed(&host);
                 if guessed.is_empty() {
                     guessed = self.by_ending(&host);
