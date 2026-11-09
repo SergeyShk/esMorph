@@ -9,6 +9,7 @@ nav:
       - Installation: installation.md
       - Authors: authors.md
     - Analyzer: analyzer.md
+    - Inflection: inflection.md
 
 theme:
   name: material
@@ -66,6 +67,7 @@ plugins:
             Installation: Instalación
             Authors: Autores
             Analyzer: Analizador
+            Inflection: Flexión
 
 extra:
   social:

@@ -5,6 +5,8 @@ from typing import final
 
 __version__: str
 
+class FormNotFoundError(LookupError): ...
+
 @final
 class Analysis:
     @property
@@ -21,6 +23,8 @@ class Analysis:
     def words(self) -> tuple[str, ...]: ...
     @property
     def source(self) -> str: ...
+    def forms(self) -> list[Analysis]: ...
+    def inflect(self, **feats: str) -> str: ...
 
 @final
 class Analyzer:

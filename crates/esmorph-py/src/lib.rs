@@ -1,18 +1,33 @@
 //! Python module `esmorph._esmorph`
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
-use pyo3::exceptions::{PyOSError, PyTypeError, PyValueError};
+use pyo3::create_exception;
+use pyo3::exceptions::{PyLookupError, PyOSError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString, PyTuple, PyType};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyString, PyTuple, PyWeakrefMethods, PyWeakrefReference};
 
 /// How many words `analyze_many` and `lemmatize` analyze at a time without the GIL: results are
 /// converted and Ctrl+C is checked between the chunks
 const CHUNK: usize = 8192;
+
+/// The analyzer of the dictionary of the package that pickle restores: one for the process
+static PACKAGE: PyOnceLock<Py<Analyzer>> = PyOnceLock::new();
+/// Analyzers of dictionary files that pickle saved or restored, by path; a weak reference lets an
+/// analyzer go with its file
+static FILES: Mutex<BTreeMap<PathBuf, Py<PyWeakrefReference>>> = Mutex::new(BTreeMap::new());
+
+create_exception!(
+    esmorph,
+    FormNotFoundError,
+    PyLookupError,
+    "The lexeme has no form with the requested features"
+);
 
 /// Part of speech and features of a UD tag as text, shared by all analyses with this tag
 #[derive(PartialEq, Eq, Hash)]
@@ -30,6 +45,12 @@ impl Tag {
 }
 
 /// Analysis of a word form
+///
+/// Description:
+///     Analyses are immutable and hashable; they are compared without the probability, so an
+///     analysis equals its form from forms(). An analysis keeps its analyzer; pickle saves the
+///     path of its dictionary, and unpickling takes the analyzer of that path the process has
+///     loaded, or the dictionary of the package if the file is gone
 ///
 /// Attributes:
 ///     word (str): The word form as the dictionary spells it, with its accents; a verb with
@@ -65,6 +86,28 @@ struct Analysis {
     tag: Arc<Tag>,
     /// Words of a token of several; empty for one word
     words: Vec<String>,
+    /// The analyzer that gave the analysis: its dictionary has the forms of the lexeme
+    analyzer: Py<Analyzer>,
+}
+
+impl Analysis {
+    /// The analysis of the dictionary that this one is: the forms of its lexeme come from it
+    fn found(&self) -> Option<esmorph::Analysis> {
+        let analyzer = self.analyzer.get();
+        analyzer
+            .dictionary
+            .analyze(&self.word)
+            .into_iter()
+            .find(|analysis| {
+                analysis.lemma == self.lemma
+                    && analysis.words == self.words
+                    && analysis.source.as_str() == self.source
+                    && analyzer
+                        .tags
+                        .get(usize::from(analysis.ud))
+                        .is_some_and(|tag| **tag == *self.tag)
+            })
+    }
 }
 
 #[pymethods]
@@ -92,6 +135,104 @@ impl Analysis {
         }
     }
 
+    /// Forms of the lexeme
+    ///
+    /// Description:
+    ///     The lemma, then the forms in the order of the paradigm: the infinitive, the gerund,
+    ///     the participles, the finite forms by mood, tense, number and person; for a noun or an
+    ///     adjective by number and gender. The probability of every form is 1. A verb with
+    ///     clitics gives the forms of its verb, without clitics
+    ///
+    /// Returns:
+    ///     list[Analysis]: The forms
+    ///
+    /// Example:
+    ///     >>> from esmorph import Analyzer
+    ///     >>> [form.word for form in Analyzer().analyze("gatos")[0].forms()]
+    ///     ['gato', 'gata', 'gatos', 'gatas']
+    fn forms(&self, py: Python<'_>) -> Vec<Analysis> {
+        let Some(found) = self.found() else {
+            return Vec::new();
+        };
+        let analyzer = self.analyzer.get();
+        analyzer.convert(py, &self.analyzer, analyzer.dictionary.forms(&found))
+    }
+
+    /// The form with the given features
+    ///
+    /// Description:
+    ///     Of the forms of the lexeme with the given UD features, the one that keeps most of the
+    ///     other features of the analysis: "gata" in the plural is "gatas". An infinitive or a
+    ///     gerund asked for a tense, a mood, a person or a number gives a finite form. A variant
+    ///     (a form of vos, an old spelling) comes only from a variant
+    ///
+    /// Arguments:
+    ///     **feats (str): UD features and their values: Number="Plur", Tense="Past"
+    ///
+    /// Returns:
+    ///     str: The word form as the dictionary spells it
+    ///
+    /// Raises:
+    ///     FormNotFoundError: If the lexeme has no form with these features
+    ///     ValueError: If the dictionary has no such feature or value
+    ///     TypeError: If a value is not a string
+    ///
+    /// Example:
+    ///     >>> from esmorph import Analyzer
+    ///     >>> morph = Analyzer()
+    ///     >>> morph.analyze("gata")[0].inflect(Number="Plur")
+    ///     'gatas'
+    ///     >>> morph.analyze("hablar")[0].inflect(Tense="Past", Person="3", Number="Plur")
+    ///     'hablaron'
+    #[pyo3(signature = (**feats))]
+    fn inflect(&self, py: Python<'_>, feats: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
+        let analyzer = self.analyzer.get();
+        let mut requested: Vec<(String, String)> = Vec::new();
+        for (name, value) in feats.into_iter().flatten() {
+            let name: String = name.extract()?;
+            let Ok(value) = value.cast::<PyString>() else {
+                return Err(type_error(
+                    &format!("The value of the feature {name} must be a string"),
+                    &value,
+                ));
+            };
+            let value = value.to_str()?.to_owned();
+            let Some(values) = analyzer.features.get(&name) else {
+                return Err(PyValueError::new_err(format!(
+                    "Unknown UD feature {name}; the dictionary has {}",
+                    listed(analyzer.features.keys())
+                )));
+            };
+            if !values.contains(&value) {
+                return Err(PyValueError::new_err(format!(
+                    "Unknown value of the feature {name}: {value}; the dictionary has {}",
+                    listed(values)
+                )));
+            }
+            requested.push((name, value));
+        }
+        requested.sort();
+        let pairs: Vec<(&str, &str)> = requested
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+        if let Some(form) = self
+            .found()
+            .and_then(|found| analyzer.dictionary.inflect(&found, &pairs))
+        {
+            return Ok(form.word);
+        }
+        let feats: Vec<String> = requested
+            .iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect();
+        Err(FormNotFoundError::new_err(format!(
+            "The lexeme of {} has no form {}",
+            py_repr(py, &self.word)?,
+            feats.join("|")
+        )))
+    }
+
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
             "Analysis(word={}, lemma={}, pos={}, feats={}, prob={:.6}, words={}, source={})",
@@ -110,23 +251,22 @@ impl Analysis {
         self.word == other.word
             && self.lemma == other.lemma
             && self.tag == other.tag
-            && self.prob == other.prob
             && self.words == other.words
             && self.source == other.source
     }
 
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        (
-            &self.word,
-            &self.lemma,
-            &self.tag,
-            self.prob.to_bits(),
-            &self.words,
-            self.source,
-        )
-            .hash(&mut hasher);
+        (&self.word, &self.lemma, &self.tag, &self.words, self.source).hash(&mut hasher);
         hasher.finish()
+    }
+
+    fn __copy__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf
+    }
+
+    fn __deepcopy__<'py>(slf: Bound<'py, Self>, _memo: &Bound<'py, PyAny>) -> Bound<'py, Self> {
+        slf
     }
 
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, AnalysisState)> {
@@ -141,17 +281,34 @@ impl Analysis {
                 self.prob,
                 self.words.clone(),
                 self.source.to_owned(),
+                Analyzer::saved_path(self.analyzer.bind(py))?,
             ),
         ))
     }
 }
 
-/// Arguments of `_analysis`: the fields of an analysis for pickle
-type AnalysisState = (String, String, String, String, f64, Vec<String>, String);
+/// The path of a dictionary that pickle saves: `None` for the dictionary of the package
+type SavedPath = Option<Py<PyAny>>;
 
-/// Restores an analysis from pickle
+/// Arguments of `_analysis`: the fields of an analysis and the path of its dictionary for pickle
+type AnalysisState = (
+    String,
+    String,
+    String,
+    String,
+    f64,
+    Vec<String>,
+    String,
+    SavedPath,
+);
+
+/// Restores an analysis from pickle with the analyzer of `path` (`None` for the dictionary of the
+/// package); if that file cannot be read, with the dictionary of the package
 #[pyfunction]
+#[pyo3(signature = (word, lemma, pos, feats, prob, words, source, path=None))]
+#[allow(clippy::too_many_arguments)]
 fn _analysis(
+    py: Python<'_>,
     word: String,
     lemma: String,
     pos: String,
@@ -159,6 +316,7 @@ fn _analysis(
     prob: f64,
     words: Vec<String>,
     source: &str,
+    path: Option<PathBuf>,
 ) -> PyResult<Analysis> {
     let source = match source {
         "dictionary" => esmorph::Source::Dictionary.as_str(),
@@ -169,14 +327,51 @@ fn _analysis(
             )));
         }
     };
+    let analyzer = match path.map(|path| shared(py, Some(path))) {
+        Some(Ok(analyzer)) => analyzer,
+        Some(Err(err)) if !err.is_instance_of::<PyOSError>(py) => return Err(err),
+        _ => shared(py, None)?,
+    };
+    // The tag of the dictionary is shared by its analyses
+    let tag = Tag { pos, feats };
+    let tag = (analyzer.get().tags.iter())
+        .find(|known| ***known == tag)
+        .map_or_else(|| Arc::new(tag), Arc::clone);
     Ok(Analysis {
         word,
         lemma,
         prob,
         source,
-        tag: Arc::new(Tag { pos, feats }),
+        tag,
         words,
+        analyzer,
     })
+}
+
+/// Restores an analyzer from pickle: the analyzer of the dictionary of the package or of the file
+/// at `path` that the process has, otherwise a new one
+#[pyfunction]
+#[pyo3(signature = (path=None))]
+fn _analyzer(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
+    shared(py, path)
+}
+
+/// The analyzer of the dictionary of the package, or of the file at `path`, shared in the process
+fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
+    let Some(path) = path else {
+        let analyzer = PACKAGE.get_or_try_init(py, || Py::new(py, Analyzer::new(py, None)?))?;
+        return Ok(analyzer.clone_ref(py));
+    };
+    let known = (FILES.lock().unwrap_or_else(PoisonError::into_inner))
+        .get(&path)
+        .and_then(|reference| reference.bind(py).upgrade());
+    if let Some(analyzer) = known {
+        return Ok(analyzer.cast_into::<Analyzer>()?.unbind());
+    }
+    // The dictionary is loaded without the lock: the loading lets other threads run
+    let analyzer = Bound::new(py, Analyzer::new(py, Some(path))?)?;
+    Analyzer::saved_path(&analyzer)?;
+    Ok(analyzer.unbind())
 }
 
 /// Morphological analyzer of Spanish
@@ -202,14 +397,19 @@ fn _analysis(
 ///     >>> morph = Analyzer()
 ///     >>> sorted({analysis.lemma for analysis in morph.analyze("hablamos")})
 ///     ['hablar']
-#[pyclass(frozen, module = "esmorph")]
+#[pyclass(frozen, weakref, module = "esmorph")]
 struct Analyzer {
     dictionary: Arc<esmorph::Dictionary>,
     tags: Vec<Arc<Tag>>,
+    /// Values of every feature of the dictionary; a value that lists several (`Acc,Nom`) gives
+    /// each of them too
+    features: BTreeMap<String, BTreeSet<String>>,
     path: PathBuf,
     /// The path was given: otherwise pickle does not keep it, and another environment takes the
     /// dictionary of its own package
     explicit: bool,
+    /// The path that pickle saves, made once: one object for all analyses of a list
+    saved: PyOnceLock<Option<Py<PyAny>>>,
 }
 
 #[pymethods]
@@ -234,18 +434,27 @@ impl Analyzer {
                 })
             })
             .collect();
+        let mut features: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for tag in dictionary.ud_tags() {
+            for (name, value) in tag.feats() {
+                let values = features.entry(name.to_owned()).or_default();
+                values.insert(value.to_owned());
+                values.extend(value.split(',').map(str::to_owned));
+            }
+        }
         Ok(Analyzer {
             dictionary: Arc::new(dictionary),
             tags,
+            features,
             path,
             explicit,
+            saved: PyOnceLock::new(),
         })
     }
 
-    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> (Bound<'py, PyType>, (Option<PathBuf>,)) {
-        let analyzer = slf.get();
-        let path = analyzer.explicit.then(|| analyzer.path.clone());
-        (slf.get_type(), (path,))
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<(Bound<'py, PyAny>, (SavedPath,))> {
+        let restore = slf.py().import("esmorph._esmorph")?.getattr("_analyzer")?;
+        Ok((restore, (Analyzer::saved_path(slf)?,)))
     }
 
     /// Path to the dictionary file
@@ -275,9 +484,10 @@ impl Analyzer {
     ///     [('camión', 'NOUN')]
     ///     >>> morph.analyze("qzxw")
     ///     []
-    fn analyze(&self, word: &Bound<'_, PyAny>) -> PyResult<Vec<Analysis>> {
+    fn analyze(slf: &Bound<'_, Self>, word: &Bound<'_, PyAny>) -> PyResult<Vec<Analysis>> {
         let word = text(word)?;
-        Ok(self.convert(self.dictionary.analyze(&word)))
+        let this = slf.get();
+        Ok(this.convert(slf.py(), slf.as_unbound(), this.dictionary.analyze(&word)))
     }
 
     /// Analyses of a list of word forms
@@ -301,20 +511,25 @@ impl Analyzer {
     ///     >>> [analysis.lemma for analysis in analyses[0]], analyses[1]
     ///     (['camión'], [])
     fn analyze_many(
-        &self,
-        py: Python<'_>,
+        slf: &Bound<'_, Self>,
         words: &Bound<'_, PyAny>,
     ) -> PyResult<Vec<Vec<Analysis>>> {
+        let py = slf.py();
+        let this = slf.get();
         let words = collect_words(words)?;
         let mut result = Vec::with_capacity(words.len());
         for chunk in words.chunks(CHUNK) {
             let analyses = py.detach(|| {
                 chunk
                     .iter()
-                    .map(|word| self.dictionary.analyze(word))
+                    .map(|word| this.dictionary.analyze(word))
                     .collect::<Vec<_>>()
             });
-            result.extend(analyses.into_iter().map(|analyses| self.convert(analyses)));
+            result.extend(
+                analyses
+                    .into_iter()
+                    .map(|analyses| this.convert(py, slf.as_unbound(), analyses)),
+            );
             py.check_signals()?;
         }
         Ok(result)
@@ -407,7 +622,33 @@ impl Analyzer {
 }
 
 impl Analyzer {
-    fn convert(&self, analyses: Vec<esmorph::Analysis>) -> Vec<Analysis> {
+    /// The path that pickle saves for an analyzer: `None` for the dictionary of the package. An
+    /// analyzer of a file becomes the one that unpickling in this process takes for its path
+    fn saved_path(analyzer: &Bound<'_, Analyzer>) -> PyResult<SavedPath> {
+        let py = analyzer.py();
+        let this = analyzer.get();
+        let saved = this.saved.get_or_try_init(py, || -> PyResult<_> {
+            if !this.explicit {
+                return Ok(None);
+            }
+            let reference = PyWeakrefReference::new(analyzer)?.unbind();
+            let mut files = FILES.lock().unwrap_or_else(PoisonError::into_inner);
+            files.retain(|_, known| known.bind(py).upgrade().is_some());
+            files.insert(this.path.clone(), reference);
+            Ok(Some(
+                this.path.clone().into_pyobject(py)?.into_any().unbind(),
+            ))
+        })?;
+        Ok(saved.as_ref().map(|path| path.clone_ref(py)))
+    }
+
+    /// Analyses for Python; `analyzer` is this analyzer
+    fn convert(
+        &self,
+        py: Python<'_>,
+        analyzer: &Py<Analyzer>,
+        analyses: Vec<esmorph::Analysis>,
+    ) -> Vec<Analysis> {
         analyses
             .into_iter()
             .filter_map(|analysis| {
@@ -418,10 +659,20 @@ impl Analyzer {
                     word: analysis.word,
                     lemma: analysis.lemma,
                     words: analysis.words,
+                    analyzer: analyzer.clone_ref(py),
                 })
             })
             .collect()
     }
+}
+
+/// Names or values for a message: in order, separated by commas
+fn listed<'a>(items: impl IntoIterator<Item = &'a String>) -> String {
+    items
+        .into_iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Version of the crate as PEP 440 writes it: `0.1.0-dev.12` is `0.1.0.dev12`
@@ -528,7 +779,9 @@ fn type_error(message: &str, value: &Bound<'_, PyAny>) -> PyErr {
 fn _esmorph(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Analyzer>()?;
     m.add_class::<Analysis>()?;
+    m.add("FormNotFoundError", m.py().get_type::<FormNotFoundError>())?;
     m.add_function(wrap_pyfunction!(_analysis, m)?)?;
+    m.add_function(wrap_pyfunction!(_analyzer, m)?)?;
     m.add("__version__", package_version())?;
     Ok(())
 }

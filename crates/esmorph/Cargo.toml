@@ -22,7 +22,7 @@ build = []
 [dependencies]
 bytemuck = "1.25.2"
 crc32fast = "1.5.3"
-esmorph-dict-es = { version = "=0.1.0-dev.4", path = "../esmorph-dict-es", optional = true }
+esmorph-dict-es = { version = "=0.1.0-dev.5", path = "../esmorph-dict-es", optional = true }
 fst = "0.4.7"
 memmap2 = "0.9.11"
 

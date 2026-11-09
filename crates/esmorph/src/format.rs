@@ -17,7 +17,14 @@ pub(crate) const MAX_LIST: usize = 255;
 pub(crate) const HAS_PROBABILITIES: u32 = 1 << 8;
 /// A probability is kept in millionths
 pub(crate) const PROBABILITY_SCALE: u32 = 1_000_000;
-const VERSION: u32 = 2;
+/// The flag of a form of a table: a variant of another form with the same features (`hablás` of
+/// `hablas`, `fablar` of `hablar`), which inflection takes only for a variant
+pub(crate) const VARIANT: u32 = 1 << 16;
+/// The flag of a form of a table: only the lemma, no word form of the dictionary
+pub(crate) const LEMMA_ONLY: u32 = 1 << 17;
+/// Bits of the UD tag in a form of a table
+pub(crate) const UD_BITS: u32 = 0xFFFF;
+const VERSION: u32 = 3;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
 const SECTIONS: usize = 11;
@@ -40,8 +47,8 @@ pub(crate) struct Sections {
     pub paradigm_offsets: Vec<u32>,
     /// Paradigms in a row: the numbers of the suffixes of their forms
     pub paradigms: Vec<u32>,
-    /// Inflection tables in a row: the number of the paradigm, then `(lemma form << 16) | UD tag`
-    /// of each of its forms
+    /// Inflection tables in a row: the number of the paradigm, then the flags (`VARIANT`,
+    /// `LEMMA_ONLY`) and the UD tag of each of its forms; the first form is the lemma
     pub tables: Vec<u32>,
     /// Automaton "word form with plain vowels - `WordValue`"
     pub words: Vec<u8>,

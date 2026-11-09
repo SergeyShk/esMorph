@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
@@ -9,8 +10,8 @@ use crate::Error;
 use crate::alphabet::{Alphabet, Key};
 use crate::clitics;
 use crate::format::{
-    self, HAS_PROBABILITIES, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice, Storage,
-    Strings, WordValue,
+    self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
+    Storage, Strings, UD_BITS, VARIANT, WordValue,
 };
 use crate::ud::{UdTag, UdTags};
 
@@ -279,72 +280,66 @@ impl Dictionary {
     /// clitics first, whose host is an infinitive, a gerund or an imperative of the dictionary
     fn with_clitics(&self, word: &str) -> Vec<Analysis> {
         let token = word.to_lowercase();
-        let splits = clitics::splits(&token);
         // The accent that clitics put on a host marks its stressed vowel: in `piénselo` the host
         // is `piense`, not `píen`; without such a host the accent is not looked at
         let accent = token.chars().position(|c| "áéíóú".contains(c));
-        let strict = accent.map(|at| {
-            splits
-                .iter()
-                .find_map(|split| self.split_analyses(&token, split, Some(at)))
-        });
-        match strict.flatten() {
-            Some(analyses) => analyses,
-            None => splits
-                .iter()
-                .find_map(|split| self.split_analyses(&token, split, None))
-                .unwrap_or_default(),
+        let mut fallback = None;
+        for split in clitics::splits(&token) {
+            let (stressed, any) = self.host_analyses(&split, accent, fallback.is_none());
+            if let Some(hosts) = stressed {
+                return with_clitics(&token, &split, hosts);
+            }
+            if let Some(hosts) = any {
+                if accent.is_none() {
+                    return with_clitics(&token, &split, hosts);
+                }
+                fallback = Some((split, hosts));
+            }
         }
+        fallback
+            .map(|(split, hosts)| with_clitics(&token, &split, hosts))
+            .unwrap_or_default()
     }
 
-    /// Analyses of a token by a split into a host and clitics, if the host is an infinitive, a
-    /// gerund or an imperative of the dictionary, stressed on the vowel `accent` if it is given
-    fn split_analyses(
+    /// Analyses of the host of a split that is an infinitive, a gerund or an imperative of the
+    /// dictionary: of the first spelling of the host stressed on the vowel `accent` and, if `any`
+    /// is asked for, of the first spelling with any stress
+    fn host_analyses(
         &self,
-        token: &str,
         split: &clitics::Split,
         accent: Option<usize>,
-    ) -> Option<Vec<Analysis>> {
+        any: bool,
+    ) -> (Option<Vec<Analysis>>, Option<Vec<Analysis>>) {
         let first = split.clitics[0];
-        let mut found = Vec::new();
+        let mut unstressed = None;
         for host in clitics::hosts(split.host, first) {
-            found.extend(self.found(&host).into_iter().filter(|analysis| {
-                let kind = match self.hosts.get(usize::from(analysis.ud)) {
+            let found: Vec<Analysis> = (self.found(&host).into_iter())
+                .filter(|analysis| match self.hosts.get(usize::from(analysis.ud)) {
                     Some(Host::NonFinite) => true,
                     // `os` follows only the imperative of `vosotros`, which loses its `d`:
                     // `cuéntenos` is `cuente` + `nos`, not `cuenten` + `os`
                     Some(Host::Imperative) => first != "os" || host.ends_with('d'),
                     _ => false,
-                };
-                kind && accent.is_none_or(|at| clitics::stressed(&analysis.word) == Some(at))
-            }));
-            if !found.is_empty() {
-                break;
+                })
+                .collect();
+            if found.is_empty() {
+                continue;
+            }
+            let Some(at) = accent else {
+                return (None, Some(found));
+            };
+            let stressed: Vec<Analysis> = (found.iter())
+                .filter(|analysis| clitics::stressed(&analysis.word) == Some(at))
+                .cloned()
+                .collect();
+            if !stressed.is_empty() {
+                return (Some(stressed), unstressed);
+            }
+            if any && unstressed.is_none() {
+                unstressed = Some(found);
             }
         }
-        if found.is_empty() {
-            return None;
-        }
-        let total: f64 = found.iter().map(|analysis| analysis.prob).sum();
-        Some(
-            found
-                .into_iter()
-                .map(|host| {
-                    let mut words = Vec::with_capacity(1 + split.clitics.len());
-                    words.push(host.word);
-                    words.extend(split.clitics.iter().map(|&clitic| clitic.to_owned()));
-                    Analysis {
-                        word: token.to_owned(),
-                        lemma: host.lemma,
-                        ud: host.ud,
-                        prob: host.prob / total,
-                        source: Source::Clitics,
-                        entry: host.entry,
-                        words,
-                    }
-                })
-                .collect(),
-        )
+        (None, unstressed)
     }
 
     /// Analyses of a word form in the dictionary
@@ -412,31 +407,174 @@ impl Dictionary {
         })
     }
 
-    /// Analysis of a spelling by a form of a table: the stem of the spelling and the suffix of the
-    /// lemma form
+    /// Analysis of a spelling by a form of a table
     fn analysis(&self, spelling: &str, entry: Entry, prob: f64) -> Option<Analysis> {
-        let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
-        let tables = self.tables();
-        let paradigm = self.paradigm(*tables.get(start)?)?;
-        let cell = *tables.get(start + 1 + usize::from(entry.form))?;
-        let suffix = self
-            .suffixes
-            .get(*paradigm.get(usize::from(entry.form))? as usize)?;
-        let stem = spelling.strip_suffix(suffix)?;
-        let lemma_suffix = self
-            .suffixes
-            .get(*paradigm.get((cell >> 16) as usize)? as usize)?;
-        let mut lemma = String::with_capacity(stem.len() + lemma_suffix.len());
-        lemma.push_str(stem);
-        lemma.push_str(lemma_suffix);
+        let lexeme = self.lexeme(entry, spelling)?;
         Some(Analysis {
             word: spelling.to_owned(),
-            lemma,
-            ud: cell as u16,
+            lemma: lexeme.spell(&self.suffixes, 0)?,
+            ud: lexeme.ud(usize::from(entry.form))?,
             prob,
             source: Source::Dictionary,
             entry: Some(entry),
             words: Vec::new(),
+        })
+    }
+
+    /// Forms of the lexeme of an analysis in the order of its paradigm: the lemma, the main forms by
+    /// their features, then the variants; the probability of each is one. A verb with clitics
+    /// gives the forms of its verb, without clitics
+    pub fn forms(&self, analysis: &Analysis) -> Vec<Analysis> {
+        let Some(lexeme) = self.lexeme_of(analysis) else {
+            return Vec::new();
+        };
+        (0..lexeme.cells.len())
+            .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
+            .filter_map(|form| self.form(&lexeme, form))
+            .collect()
+    }
+
+    /// The form of the lexeme of an analysis with the features `feats` ("name", "value"): of the
+    /// forms that have them, the one that keeps most of the other features of the analysis and,
+    /// for a noun, an adjective, a determiner or a pronoun, has fewest features more, then a
+    /// variant only for a variant, then a form of the tag of the analysis, then the first in the
+    /// paradigm; of the forms with equal
+    /// features, the closest in spelling to the analysis if it has such forms too, as `hablase`
+    /// and `hablara`. An infinitive and a gerund
+    /// asked for features they have not become finite forms: `hablar` with `Tense=Past` is
+    /// `hablé`. A form of a noun, an adjective, a determiner or a pronoun without a gender or a
+    /// number takes any, though a form that has it goes first: `grande` with `Gender=Fem` is
+    /// `grande`. A value of a form may list several (`Case=Acc,Nom`): any of them matches. A verb
+    /// with clitics inflects as its verb, without clitics
+    pub fn inflect(&self, analysis: &Analysis, feats: &[(&str, &str)]) -> Option<Analysis> {
+        let lexeme = self.lexeme_of(analysis)?;
+        let own_form = usize::from(analysis.entry?.form);
+        let own = *lexeme.cells.get(own_form)?;
+        let tag = self.ud.get(analysis.ud)?;
+        let mut wanted: Vec<(&str, &str)> = tag.feats().collect();
+        let mut want = |name, value| match wanted.iter_mut().find(|(known, _)| *known == name) {
+            Some(feat) => feat.1 = value,
+            None => wanted.push((name, value)),
+        };
+        if matches!(tag.feat("VerbForm"), Some("Inf" | "Ger"))
+            && feats.iter().all(|&(name, _)| name != "VerbForm")
+            && feats
+                .iter()
+                .any(|&(name, value)| !has(tag.feat(name), value))
+        {
+            want("VerbForm", "Fin");
+        }
+        for &(name, value) in feats {
+            want(name, value);
+        }
+        // Of the forms of one tag the closest in spelling to the analysis, if its own tag has
+        // several: `hablase` with `Person=3` is `hablase`, `elegido` with `Gender=Fem` is
+        // `elegida`, not `electa`; of equally close ones the analysis itself: `paga` stays `paga`,
+        // not `pagada`, and `ha` stays `ha`, not `hay`
+        let several = lexeme.cells.iter().filter(|&&cell| cell == own).count() > 1;
+        let own_word = lexeme.spell(&self.suffixes, own_form)?;
+        let closeness = |form: usize| {
+            if !several {
+                return (0, 0);
+            }
+            let word = lexeme.spell(&self.suffixes, form).unwrap_or_default();
+            let common = |same: fn(char, char) -> bool| {
+                (own_word.chars().zip(word.chars()))
+                    .take_while(|&(a, b)| same(a, b))
+                    .count()
+            };
+            let plain = common(|a, b| clitics::without_acute(a) == clitics::without_acute(b));
+            (plain, common(|a, b| a == b))
+        };
+        // Forms of one tag are one group in the place of its first form
+        let group = |form: usize| {
+            (lexeme.cells.iter())
+                .position(|&cell| cell == lexeme.cells[form])
+                .unwrap_or(form)
+        };
+        let best = (0..lexeme.cells.len())
+            .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
+            .filter_map(|form| {
+                let tag = self.ud.get((lexeme.cells[form] & UD_BITS) as u16)?;
+                let nominal =
+                    matches!(tag.pos(), "NOUN" | "PROPN" | "ADJ" | "DET" | "PRON" | "NUM");
+                let fits = feats.iter().all(|&(name, value)| {
+                    has(tag.feat(name), value)
+                        || (nominal
+                            && matches!(name, "Gender" | "Number")
+                            && tag.feat(name).is_none())
+                });
+                let missed = (wanted.iter())
+                    .filter(|&&(name, value)| !has(tag.feat(name), value))
+                    .count();
+                // A pronoun with a feature more is another word: `vos` is not `usted`
+                let extra = (tag.feats())
+                    .filter(|&(name, _)| nominal && !matches!(name, "Gender" | "Number"))
+                    .filter(|&(name, _)| wanted.iter().all(|&(known, _)| known != name))
+                    .count();
+                let variant = (lexeme.cells[form] ^ own) & VARIANT != 0;
+                let key = (
+                    missed,
+                    extra,
+                    variant,
+                    lexeme.cells[form] != own,
+                    group(form),
+                    Reverse(closeness(form)),
+                    form != own_form,
+                    form,
+                );
+                fits.then_some((key, form))
+            })
+            .min()?
+            .1;
+        self.form(&lexeme, best)
+    }
+
+    /// Lexeme of an analysis: of its verb for a verb with clitics
+    fn lexeme_of<'a>(&'a self, analysis: &'a Analysis) -> Option<Lexeme<'a>> {
+        let word = match analysis.source {
+            Source::Clitics => analysis.words.first()?,
+            _ => &analysis.word,
+        };
+        self.lexeme(analysis.entry?, word)
+    }
+
+    /// Lexeme of the word form `word`, the form `entry` of a table
+    fn lexeme<'a>(&'a self, entry: Entry, word: &'a str) -> Option<Lexeme<'a>> {
+        let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
+        let tables = self.tables();
+        let paradigm = self.paradigm(*tables.get(start)?)?;
+        let cells = tables.get(start + 1..start + 1 + paradigm.len())?;
+        let suffix = self
+            .suffixes
+            .get(*paradigm.get(usize::from(entry.form))? as usize)?;
+        Some(Lexeme {
+            table: entry.table,
+            stem: word.strip_suffix(suffix)?,
+            paradigm,
+            cells,
+        })
+    }
+
+    /// Analysis of a form of a lexeme
+    fn form(&self, lexeme: &Lexeme, form: usize) -> Option<Analysis> {
+        let word = lexeme.spell(&self.suffixes, form)?;
+        let lemma = lexeme.spell(&self.suffixes, 0)?;
+        let words = match clitics::contraction(&word) {
+            Some(words) if words[0] == lemma => words.iter().map(|&word| word.to_owned()).collect(),
+            _ => Vec::new(),
+        };
+        Some(Analysis {
+            word,
+            lemma,
+            ud: lexeme.ud(form)?,
+            prob: 1.0,
+            source: Source::Dictionary,
+            entry: Some(Entry {
+                table: lexeme.table,
+                form: form as u16,
+            }),
+            words,
         })
     }
 
@@ -514,9 +652,10 @@ impl Dictionary {
                 return invalid("an inflection table is truncated");
             };
             if cells.iter().any(|&cell| {
-                (cell >> 16) as usize >= count || (cell & 0xFFFF) as usize >= self.ud.len()
+                cell & !(UD_BITS | VARIANT | LEMMA_ONLY) != 0
+                    || (cell & UD_BITS) as usize >= self.ud.len()
             }) {
-                return invalid("a table refers to a missing form or UD tag");
+                return invalid("a table refers to a missing UD tag or has unknown flags");
             }
             starts.push(start as u32);
             start += 1 + count;
@@ -525,16 +664,19 @@ impl Dictionary {
     }
 
     /// Lists of analyses exactly cover their section, are not longer than `MAX_LIST`, their tables
-    /// and forms exist and their probabilities are no more than one
+    /// and forms exist and are word forms, not only lemmas, and their probabilities are no more
+    /// than one
     fn check_records(&self) -> Result<(), Error> {
         let (tables, offsets) = (self.tables(), self.paradigm_offsets());
-        // Number of forms of every table: tables and paradigms are checked already
-        let form_counts: Vec<usize> = self
+        // Forms of every table: tables and paradigms are checked already
+        let table_forms: Vec<&[u32]> = self
             .table_offsets
             .iter()
             .map(|&start| {
-                let paradigm = tables[start as usize] as usize;
-                (offsets[paradigm + 1] - offsets[paradigm]) as usize
+                let start = start as usize;
+                let paradigm = tables[start] as usize;
+                let count = (offsets[paradigm + 1] - offsets[paradigm]) as usize;
+                &tables[start + 1..start + 1 + count]
             })
             .collect();
         let lists = self.records();
@@ -562,12 +704,13 @@ impl Dictionary {
                 return invalid("a probability is greater than one");
             }
             let exists = |&record: &u32| {
-                form_counts
+                table_forms
                     .get((record >> 16) as usize)
-                    .is_some_and(|&forms| ((record & 0xFFFF) as usize) < forms)
+                    .and_then(|cells| cells.get((record & 0xFFFF) as usize))
+                    .is_some_and(|&cell| cell & LEMMA_ONLY == 0)
             };
             if !items.iter().all(exists) {
-                return invalid("a list refers to a missing table or form");
+                return invalid("a list refers to a missing table or form or to a lemma");
             }
             start = end;
         }
@@ -598,6 +741,57 @@ impl Dictionary {
         }
         Ok(extra)
     }
+}
+
+/// Forms of an inflection table with the stem of a word form
+struct Lexeme<'a> {
+    table: u16,
+    stem: &'a str,
+    /// Numbers of the suffixes of the forms
+    paradigm: &'a [u32],
+    /// Flags and UD tags of the forms
+    cells: &'a [u32],
+}
+
+impl Lexeme<'_> {
+    fn spell(&self, suffixes: &Strings, form: usize) -> Option<String> {
+        let suffix = suffixes.get(*self.paradigm.get(form)? as usize)?;
+        let mut word = String::with_capacity(self.stem.len() + suffix.len());
+        word.push_str(self.stem);
+        word.push_str(suffix);
+        Some(word)
+    }
+
+    fn ud(&self, form: usize) -> Option<u16> {
+        Some((*self.cells.get(form)? & UD_BITS) as u16)
+    }
+}
+
+/// Whether a value of a feature is `wanted` or lists it: `Acc,Nom` has `Acc`
+fn has(value: Option<&str>, wanted: &str) -> bool {
+    value.is_some_and(|value| value == wanted || value.split(',').any(|part| part == wanted))
+}
+
+/// Analyses of a token by the analyses of its host and its clitics
+fn with_clitics(token: &str, split: &clitics::Split, hosts: Vec<Analysis>) -> Vec<Analysis> {
+    let total: f64 = hosts.iter().map(|analysis| analysis.prob).sum();
+    hosts
+        .into_iter()
+        .map(|host| {
+            let mut words = Vec::with_capacity(1 + split.clitics.len());
+            words.push(host.word);
+            words.extend(split.clitics.iter().map(|&clitic| clitic.to_owned()));
+            Analysis {
+                word: token.to_owned(),
+                lemma: host.lemma,
+                ud: host.ud,
+                prob: host.prob / total,
+                source: Source::Clitics,
+                entry: host.entry,
+                words,
+            }
+        })
+        .collect()
 }
 
 /// List of analyses from the place `offset` of the section: the analyses and their probabilities,
@@ -871,6 +1065,443 @@ pub(crate) mod tests {
         // No host: a noun takes no clitics
         assert!(dictionary.analyze("casalo").is_empty());
         assert!(!dictionary.is_known("casalo"));
+    }
+
+    fn inflection_dictionary() -> Dictionary {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let fin = |mood: &str, tense: &str, person: &str, number: &str| {
+            let tense = if tense.is_empty() {
+                String::new()
+            } else {
+                format!("|Tense={tense}")
+            };
+            format!("Mood={mood}|Number={number}|Person={person}{tense}|VerbForm=Fin")
+        };
+        let verb = [
+            ("hablar", "VerbForm=Inf".to_owned()),
+            ("hablando", "VerbForm=Ger".to_owned()),
+            (
+                "hablado",
+                "Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part".to_owned(),
+            ),
+            (
+                "habladas",
+                "Gender=Fem|Number=Plur|Tense=Past|VerbForm=Part".to_owned(),
+            ),
+            ("hablo", fin("Ind", "Pres", "1", "Sing")),
+            ("hablas", fin("Ind", "Pres", "2", "Sing")),
+            ("hablás", fin("Ind", "Pres", "2", "Sing")),
+            ("habla", fin("Ind", "Pres", "3", "Sing")),
+            ("hablamos", fin("Ind", "Pres", "1", "Plur")),
+            ("hablé", fin("Ind", "Past", "1", "Sing")),
+            ("habló", fin("Ind", "Past", "3", "Sing")),
+            ("hablara", fin("Sub", "Imp", "1", "Sing")),
+            ("hablase", fin("Sub", "Imp", "1", "Sing")),
+            ("hablara", fin("Sub", "Imp", "3", "Sing")),
+            ("hablase", fin("Sub", "Imp", "3", "Sing")),
+            ("habla", fin("Imp", "", "2", "Sing")),
+            ("hablá", fin("Imp", "", "2", "Sing")),
+            ("hablad", fin("Imp", "", "2", "Plur")),
+            ("fablar", "VerbForm=Inf".to_owned()),
+        ];
+        for (form, feats) in &verb {
+            builder.add_form("hablar", "VERB", form, feats).unwrap();
+        }
+        for (form, feats) in [
+            ("hablás", fin("Ind", "Pres", "2", "Sing")),
+            ("hablá", fin("Imp", "", "2", "Sing")),
+            ("fablar", "VerbForm=Inf".to_owned()),
+        ] {
+            builder
+                .mark_variant("hablar", "VERB", form, &feats)
+                .unwrap();
+        }
+        for (form, feats) in [
+            ("gatos", "Gender=Masc|Number=Plur"),
+            ("gata", "Gender=Fem|Number=Sing"),
+            ("gato", "Gender=Masc|Number=Sing"),
+            ("gatas", "Gender=Fem|Number=Plur"),
+        ] {
+            builder.add_form("gato", "NOUN", form, feats).unwrap();
+        }
+        for (form, feats) in [
+            ("yo", "Case=Nom|Number=Sing|Person=1"),
+            ("me", "Case=Acc|Number=Sing|Person=1"),
+            ("nosotros", "Case=Acc,Nom|Number=Plur|Person=1"),
+        ] {
+            builder.add_form("yo", "PRON", form, feats).unwrap();
+        }
+        builder
+            .add_form("guión", "NOUN", "guiones", "Number=Plur")
+            .unwrap();
+        builder.add_form("a", "ADP", "a", "").unwrap();
+        builder.add_form("a", "ADP", "al", "").unwrap();
+        Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+    }
+
+    fn analysis_of(dictionary: &Dictionary, word: &str, feats: &str) -> Analysis {
+        dictionary
+            .analyze(word)
+            .into_iter()
+            .find(|a| dictionary.ud_tag(a.ud).unwrap().feats_string() == feats)
+            .unwrap()
+    }
+
+    fn inflected(dictionary: &Dictionary, analysis: &Analysis, feats: &[(&str, &str)]) -> String {
+        dictionary.inflect(analysis, feats).unwrap().word
+    }
+
+    #[test]
+    fn forms_go_in_the_order_of_the_paradigm() {
+        let dictionary = inflection_dictionary();
+        let forms: Vec<String> = dictionary
+            .forms(&dictionary.analyze("habló")[0])
+            .into_iter()
+            .map(|form| form.word)
+            .collect();
+        assert_eq!(
+            forms,
+            [
+                "hablar", "hablando", "hablado", "habladas", "hablo", "hablas", "habla",
+                "hablamos", "hablé", "habló", "hablara", "hablase", "hablara", "hablase", "habla",
+                "hablad", "fablar", "hablás", "hablá"
+            ]
+        );
+        let gato = dictionary.forms(&dictionary.analyze("gatas")[0]);
+        let words: Vec<&str> = gato.iter().map(|form| form.word.as_str()).collect();
+        assert_eq!(words, ["gato", "gata", "gatos", "gatas"]);
+        assert!(
+            gato.iter()
+                .all(|form| form.lemma == "gato" && form.prob == 1.0)
+        );
+        assert_eq!(
+            gato[1],
+            analysis_of(&dictionary, "gata", "Gender=Fem|Number=Sing")
+        );
+    }
+
+    #[test]
+    fn the_more_frequent_of_equal_forms_goes_first() {
+        let present = "Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin";
+        let build = |counts: &[(&str, u32)]| {
+            let mut builder = Builder::new();
+            for form in ["haber", "ha", "hay"] {
+                let feats = if form == "haber" {
+                    "VerbForm=Inf"
+                } else {
+                    present
+                };
+                builder.add_form("haber", "VERB", form, feats).unwrap();
+            }
+            for &(form, count) in counts {
+                builder
+                    .set_count("haber", "VERB", form, present, count)
+                    .unwrap();
+            }
+            let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+            let haber = &dictionary.analyze("haber")[0];
+            let ha = &dictionary.analyze("ha")[0];
+            (
+                inflected(&dictionary, haber, &[("Tense", "Pres"), ("Person", "3")]),
+                // The analysis that starts the more frequent form stays itself
+                inflected(&dictionary, ha, &[]),
+                inflected(&dictionary, ha, &[("Person", "3")]),
+            )
+        };
+        let ha = ("ha".to_owned(), "ha".to_owned(), "ha".to_owned());
+        assert_eq!(build(&[]), ha);
+        assert_eq!(
+            build(&[("hay", 7), ("ha", 2)]),
+            ("hay".to_owned(), ha.1.clone(), ha.2.clone())
+        );
+        assert_eq!(build(&[("ha", 2)]), ha);
+    }
+
+    #[test]
+    fn equal_forms_keep_the_spelling_of_the_analysis() {
+        let mut builder = Builder::new();
+        let part = |gender: &str| format!("Gender={gender}|Number=Sing|Tense=Past|VerbForm=Part");
+        builder
+            .add_form("elegir", "VERB", "elegir", "VerbForm=Inf")
+            .unwrap();
+        for (form, gender) in [
+            ("elegido", "Masc"),
+            ("electo", "Masc"),
+            ("elegida", "Fem"),
+            ("electa", "Fem"),
+        ] {
+            builder
+                .add_form("elegir", "VERB", form, &part(gender))
+                .unwrap();
+        }
+        // Only the masculine has a count: the feminine goes in the order of letters
+        builder
+            .set_count("elegir", "VERB", "elegido", &part("Masc"), 18)
+            .unwrap();
+        let pronoun = "Case=Nom|Number=Sing|Person=3";
+        builder.add_form("él", "PRON", "él", pronoun).unwrap();
+        builder
+            .add_form(
+                "él",
+                "PRON",
+                "ella",
+                "Case=Nom|Gender=Fem|Number=Sing|Person=3",
+            )
+            .unwrap();
+        builder.add_form("él", "PRON", "ello", pronoun).unwrap();
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let fem = [("Gender", "Fem")];
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("elegido")[0], &fem),
+            "elegida"
+        );
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("electo")[0], &fem),
+            "electa"
+        );
+        // Without a form of its own tag to keep, the first form of the paradigm
+        let elegir = &dictionary.analyze("elegir")[0];
+        assert_eq!(
+            inflected(&dictionary, elegir, &[("VerbForm", "Part")]),
+            "elegido"
+        );
+        // The lemma first in the table is still one of its group
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("ello")[0], &[]),
+            "ello"
+        );
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("él")[0], &[]),
+            "él"
+        );
+    }
+
+    #[test]
+    fn a_pronoun_with_a_feature_more_is_another_word() {
+        let mut builder = Builder::new();
+        for (form, feats) in [
+            ("tú", "Case=Nom|Number=Sing|Person=2"),
+            ("usted", "Case=Nom|Number=Sing|Person=2|Polite=Form"),
+            ("vos", "Case=Nom|Number=Sing|Person=2"),
+            ("vosotros", "Case=Nom|Number=Plur|Person=2"),
+            ("ustedes", "Case=Nom|Number=Plur|Person=2|Polite=Form"),
+        ] {
+            builder.add_form("tú", "PRON", form, feats).unwrap();
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let plural = [("Number", "Plur")];
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("tú")[0], &plural),
+            "vosotros"
+        );
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("vos")[0], &[]),
+            "vos"
+        );
+        let usted = &dictionary.analyze("usted")[0];
+        assert_eq!(inflected(&dictionary, usted, &plural), "ustedes");
+    }
+
+    #[test]
+    fn marks_need_an_added_form() {
+        let mut builder = Builder::new();
+        builder.add_form("a", "X", "a", "").unwrap();
+        assert!(builder.mark_variant("a", "X", "b", "").is_err());
+        assert!(builder.set_count("a", "Y", "a", "", 1).is_err());
+        assert!(builder.mark_variant("a", "X", "a", "Number").is_err());
+        assert!(builder.set_count("a", "X", "a", "", 1).is_ok());
+    }
+
+    #[test]
+    fn unknown_flags_of_a_table_are_an_error() {
+        let clean = bytes();
+        let tables = format::layout(&clean).unwrap().tables;
+        // The second form of the first table, `ambigúes` of `ambigú`: its UD tag and no flags
+        let at = tables.start + 8;
+        let mut damaged = clean.clone();
+        damaged[at + 2] |= 0x04;
+        let error = Dictionary::from_bytes(&with_checksum(damaged)).unwrap_err();
+        assert!(error.to_string().contains("flags"), "{error}");
+        let mut lemma_only = clean.clone();
+        lemma_only[at + 2] |= 0x02;
+        let error = Dictionary::from_bytes(&with_checksum(lemma_only)).unwrap_err();
+        assert!(error.to_string().contains("lemma"), "{error}");
+    }
+
+    #[test]
+    fn a_lemma_that_is_no_form_is_left_out() {
+        let dictionary = inflection_dictionary();
+        let forms = dictionary.forms(&dictionary.analyze("guiones")[0]);
+        assert_eq!(forms.len(), 1);
+        assert_eq!(
+            (forms[0].word.as_str(), forms[0].lemma.as_str()),
+            ("guiones", "guión")
+        );
+        let analysis = &dictionary.analyze("guiones")[0];
+        assert!(
+            dictionary
+                .inflect(analysis, &[("Number", "Sing")])
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn inflect_keeps_the_other_features() {
+        let dictionary = inflection_dictionary();
+        let gata = &dictionary.analyze("gata")[0];
+        assert_eq!(inflected(&dictionary, gata, &[("Number", "Plur")]), "gatas");
+        assert_eq!(inflected(&dictionary, gata, &[("Gender", "Masc")]), "gato");
+        assert_eq!(inflected(&dictionary, gata, &[]), "gata");
+        assert!(dictionary.inflect(gata, &[("Number", "Dual")]).is_none());
+        assert!(dictionary.inflect(gata, &[("Tense", "Past")]).is_none());
+        // A form without a gender takes any gender, but not any tense
+        let yo = &dictionary.analyze("yo")[0];
+        assert_eq!(inflected(&dictionary, yo, &[("Gender", "Fem")]), "yo");
+        assert!(dictionary.inflect(yo, &[("Tense", "Past")]).is_none());
+        // A form with the gender goes first; a verb has no form without a gender
+        assert_eq!(inflected(&dictionary, gata, &[("Number", "Sing")]), "gata");
+        let hablar = &dictionary.analyze("hablar")[0];
+        assert_eq!(
+            inflected(&dictionary, hablar, &[("Gender", "Fem")]),
+            "habladas"
+        );
+        let hablamos = analysis_of(
+            &dictionary,
+            "hablamos",
+            "Mood=Ind|Number=Plur|Person=1|Tense=Pres|VerbForm=Fin",
+        );
+        assert_eq!(
+            inflected(&dictionary, &hablamos, &[("Number", "Sing")]),
+            "hablo"
+        );
+        assert_eq!(
+            inflected(
+                &dictionary,
+                &hablamos,
+                &[("Tense", "Past"), ("Number", "Sing")]
+            ),
+            "hablé"
+        );
+        let participle = &dictionary.analyze("hablado")[0];
+        assert_eq!(
+            inflected(
+                &dictionary,
+                participle,
+                &[("Gender", "Fem"), ("Number", "Plur")]
+            ),
+            "habladas"
+        );
+    }
+
+    #[test]
+    fn an_infinitive_becomes_a_finite_form() {
+        let dictionary = inflection_dictionary();
+        let hablar = &dictionary.analyze("hablar")[0];
+        assert_eq!(
+            inflected(&dictionary, hablar, &[("Tense", "Past")]),
+            "hablé"
+        );
+        assert_eq!(
+            inflected(&dictionary, hablar, &[("Person", "3"), ("Tense", "Past")]),
+            "habló"
+        );
+        assert_eq!(inflected(&dictionary, hablar, &[("Mood", "Imp")]), "habla");
+        assert_eq!(
+            inflected(&dictionary, hablar, &[("VerbForm", "Ger")]),
+            "hablando"
+        );
+        assert_eq!(
+            inflected(&dictionary, hablar, &[("VerbForm", "Inf")]),
+            "hablar"
+        );
+        let gerund = &dictionary.analyze("hablando")[0];
+        assert_eq!(
+            inflected(&dictionary, gerund, &[("Number", "Plur")]),
+            "hablamos"
+        );
+    }
+
+    #[test]
+    fn inflect_keeps_variants_and_the_place_among_equal_forms() {
+        let dictionary = inflection_dictionary();
+        let main = analysis_of(
+            &dictionary,
+            "hablas",
+            "Mood=Ind|Number=Sing|Person=2|Tense=Pres|VerbForm=Fin",
+        );
+        let vos = &dictionary.analyze("hablás")[0];
+        assert_eq!(inflected(&dictionary, &main, &[("Mood", "Imp")]), "habla");
+        assert_eq!(inflected(&dictionary, vos, &[("Mood", "Imp")]), "hablá");
+        assert_eq!(inflected(&dictionary, vos, &[("Person", "1")]), "hablo");
+        assert_eq!(
+            inflected(&dictionary, &dictionary.analyze("fablar")[0], &[]),
+            "fablar"
+        );
+        let se = analysis_of(
+            &dictionary,
+            "hablase",
+            "Mood=Sub|Number=Sing|Person=1|Tense=Imp|VerbForm=Fin",
+        );
+        assert_eq!(inflected(&dictionary, &se, &[("Person", "3")]), "hablase");
+        let ra = analysis_of(
+            &dictionary,
+            "hablara",
+            "Mood=Sub|Number=Sing|Person=1|Tense=Imp|VerbForm=Fin",
+        );
+        assert_eq!(inflected(&dictionary, &ra, &[("Person", "3")]), "hablara");
+    }
+
+    #[test]
+    fn a_value_may_list_several() {
+        let dictionary = inflection_dictionary();
+        let yo = &dictionary.analyze("yo")[0];
+        assert_eq!(
+            inflected(&dictionary, yo, &[("Number", "Plur")]),
+            "nosotros"
+        );
+        assert_eq!(inflected(&dictionary, yo, &[("Case", "Acc")]), "me");
+        let we = &dictionary.analyze("nosotros")[0];
+        assert_eq!(inflected(&dictionary, we, &[("Number", "Sing")]), "yo");
+    }
+
+    #[test]
+    fn a_verb_with_clitics_inflects_as_its_verb() {
+        let dictionary = clitic_dictionary();
+        let token = &dictionary.analyze("dámelo")[0];
+        let forms: Vec<String> = (dictionary.forms(token).into_iter())
+            .map(|form| form.word)
+            .collect();
+        assert!(forms.contains(&"dar".to_owned()) && forms.contains(&"da".to_owned()));
+        let infinitive = dictionary.inflect(token, &[("VerbForm", "Inf")]).unwrap();
+        assert_eq!(infinitive.word, "dar");
+        assert_eq!(infinitive.source, Source::Dictionary);
+        assert!(infinitive.words.is_empty());
+    }
+
+    #[test]
+    fn a_form_of_a_contraction_has_its_words() {
+        let dictionary = inflection_dictionary();
+        let forms = dictionary.forms(&dictionary.analyze("a")[0]);
+        let words: Vec<(&str, Vec<String>)> = forms
+            .iter()
+            .map(|form| (form.word.as_str(), form.words.clone()))
+            .collect();
+        assert_eq!(
+            words,
+            [("a", vec![]), ("al", vec!["a".into(), "el".into()])]
+        );
+    }
+
+    #[test]
+    fn an_analysis_without_its_table_has_no_forms() {
+        let dictionary = inflection_dictionary();
+        let mut analysis = dictionary.analyze("gata")[0].clone();
+        analysis.word = "perro".into();
+        assert!(dictionary.forms(&analysis).is_empty());
+        assert!(dictionary.inflect(&analysis, &[]).is_none());
+        analysis.entry = None;
+        assert!(dictionary.forms(&analysis).is_empty());
     }
 
     #[test]

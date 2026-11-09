@@ -781,3 +781,168 @@ def test_dictionary_covers_common_words(morph):
         "esto",
     ]
     assert [word for word in words if not morph.is_known(word)] == []
+
+
+def verb(morph, word):
+    return next(analysis for analysis in morph.analyze(word) if analysis.pos == "VERB")
+
+
+def test_forms_of_a_lexeme(morph):
+    gato = morph.analyze("gatos")[0]
+    forms = gato.forms()
+    assert [form.word for form in forms] == ["gato", "gata", "gatos", "gatas"]
+    assert all(form.lemma == "gato" and form.pos == "NOUN" for form in forms)
+    assert all(form.prob == 1.0 and form.source == "dictionary" for form in forms)
+    assert forms[3].feats == {"Gender": "Fem", "Number": "Plur"}
+    # An analysis equals its form: the probability takes no part in the comparison
+    assert gato in forms
+    assert [form.word for form in morph.analyze("bonitas")[0].forms()] == [
+        "bonito",
+        "bonita",
+        "bonitos",
+        "bonitas",
+    ]
+
+
+def test_forms_of_a_verb_go_in_the_order_of_the_paradigm(morph):
+    forms = verb(morph, "hablamos").forms()
+    words = [form.word for form in forms]
+    assert words[:8] == [
+        "hablar",
+        "hablando",
+        "hablado",
+        "hablada",
+        "hablados",
+        "habladas",
+        "hablo",
+        "hablas",
+    ]
+    # The variants follow the main paradigm: the forms of vos and old spellings
+    main = forms[: words.index("fablar")]
+    order = {"Inf": 0, "Ger": 1, "Part": 2, "Fin": 3}
+    places = [order[form.feats["VerbForm"]] for form in main]
+    assert places == sorted(places)
+    moods = [form.feats["Mood"] for form in main if "Mood" in form.feats]
+    assert moods.index("Sub") > moods.index("Cnd") > moods.index("Ind")
+    assert moods[-1] == "Imp"
+    present = [
+        form.word
+        for form in main
+        if form.feats.get("Tense") == "Pres" and form.feats.get("Mood") == "Ind"
+    ]
+    assert present == ["hablo", "hablas", "habla", "hablamos", "habláis", "hablan"]
+    assert {"fablar", "hablás", "hablá"} <= set(words[len(main) :])
+
+
+def test_inflect_keeps_the_other_features(morph):
+    assert morph.analyze("gata")[0].inflect(Number="Plur") == "gatas"
+    assert morph.analyze("bonita")[0].inflect(Gender="Masc") == "bonito"
+    assert morph.analyze("el")[0].inflect(Gender="Fem", Number="Plur") == "las"
+    hablamos = next(a for a in morph.analyze("hablamos") if a.feats.get("Tense") == "Pres")
+    assert hablamos.inflect(Number="Sing") == "hablo"
+    assert hablamos.inflect(Mood="Sub") == "hablemos"
+    assert hablamos.inflect() == "hablamos"
+    # An adjective of both genders agrees with a noun of either
+    assert morph.analyze("grande")[0].inflect(Gender="Fem", Number="Plur") == "grandes"
+    assert morph.analyze("nacional")[0].inflect(Gender="Masc") == "nacional"
+
+
+def test_inflect_from_the_infinitive(morph):
+    hablar = verb(morph, "hablar")
+    assert hablar.inflect(Tense="Past", Person="3", Number="Plur") == "hablaron"
+    assert hablar.inflect(Tense="Past") == "hablé"
+    assert hablar.inflect(Mood="Sub", Tense="Pres", Person="1", Number="Plur") == "hablemos"
+    assert hablar.inflect(Mood="Imp") == "habla"
+    assert hablar.inflect(VerbForm="Ger") == "hablando"
+    assert hablar.inflect(VerbForm="Part", Gender="Fem", Number="Plur") == "habladas"
+
+
+@pytest.mark.parametrize(
+    ("word", "lemma", "feats", "form"),
+    [
+        ("es", "ser", {"Tense": "Past"}, "fue"),
+        ("fue", "ir", {"Tense": "Imp"}, "iba"),
+        ("puse", "poner", {"Tense": "Fut"}, "pondré"),
+        ("tengo", "tener", {"Mood": "Sub"}, "tenga"),
+        ("dijo", "decir", {"VerbForm": "Part"}, "dicho"),
+        ("pienso", "pensar", {"Number": "Plur"}, "pensamos"),
+        ("juego", "jugar", {"Mood": "Sub", "Person": "3"}, "juegue"),
+        ("yo", "yo", {"Number": "Plur"}, "nosotros"),
+        ("él", "él", {"Gender": "Fem"}, "ella"),
+    ],
+)
+def test_inflect_irregular_words(morph, word, lemma, feats, form):
+    analysis = next(a for a in morph.analyze(word) if a.lemma == lemma and a.pos != "AUX")
+    assert analysis.inflect(**feats) == form
+
+
+def test_inflect_gives_a_variant_only_for_a_variant(morph):
+    assert verb(morph, "hablas").inflect(Mood="Imp") == "habla"
+    assert verb(morph, "hablás").inflect(Mood="Imp") == "hablá"
+    assert morph.analyze("grandes")[0].inflect(Number="Sing") == "grande"
+    # Of the two forms of the imperfect subjunctive the analysis keeps its own
+    hablase = verb(morph, "hablase")
+    assert hablase.inflect(Person="1", Number="Plur") == "hablásemos"
+    assert verb(morph, "hablara").inflect(Person="1", Number="Plur") == "habláramos"
+
+
+def test_a_verb_with_clitics_inflects_as_its_verb(morph):
+    token = morph.analyze("dámelo")[0]
+    assert token.forms()[0].word == "dar"
+    assert all(form.words == (form.word,) for form in token.forms())
+    assert token.inflect(Number="Plur") == "dad"
+
+
+def test_inflect_errors(morph):
+    gato = morph.analyze("gato")[0]
+    with pytest.raises(esmorph.FormNotFoundError, match="'gato' has no form Tense=Past"):
+        gato.inflect(Tense="Past")
+    assert issubclass(esmorph.FormNotFoundError, LookupError)
+    with pytest.raises(
+        ValueError, match=r"Unknown value of the feature Number: Dual; .*Plur, Sing"
+    ):
+        gato.inflect(Number="Dual")
+    with pytest.raises(ValueError, match=r"Unknown UD feature Animacy; .*Gender"):
+        gato.inflect(Animacy="Anim")
+    with pytest.raises(TypeError, match="Number must be a string, not int"):
+        gato.inflect(Number=1)
+
+
+def test_pickle_keeps_the_analyzer(morph):
+    analyses = morph.analyze("gatos") + morph.analyze("hablamos")
+    restored = pickle.loads(pickle.dumps(analyses))
+    assert restored == analyses
+    assert [form.word for form in restored[0].forms()][:2] == ["gato", "gata"]
+    assert restored[-1].inflect(Number="Sing") == analyses[-1].inflect(Number="Sing")
+    # Analyses unpickled one by one share the analyzer of the package
+    singles = [pickle.loads(pickle.dumps(analysis)) for analysis in analyses]
+    assert singles == analyses
+    assert pickle.loads(pickle.dumps(morph)) is pickle.loads(pickle.dumps(Analyzer()))
+
+
+def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
+    path = tmp_path / "es.dict"
+    path.write_bytes(morph.path.read_bytes())
+    own = Analyzer(path)
+    assert pickle.loads(pickle.dumps(own)) is own
+    analysis = pickle.loads(pickle.dumps(own.analyze("gatos")[0]))
+    assert analysis.inflect(Gender="Fem") == "gatas"
+    # The analyses of a file that is gone come with the dictionary of the package
+    gone = esmorph._esmorph._analysis(
+        "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary", tmp_path / "x"
+    )
+    assert gone.inflect(Number="Sing") == "gato"
+    with pytest.raises(FileNotFoundError):
+        esmorph._esmorph._analyzer(tmp_path / "x")
+
+
+def test_an_analysis_of_another_dictionary_has_no_forms(morph):
+    lost = esmorph._esmorph._analysis("gatox", "gato", "NOUN", "", 1.0, [], "dictionary")
+    assert lost.forms() == []
+    with pytest.raises(esmorph.FormNotFoundError):
+        lost.inflect(Number="Plur")
+    # Without an analyzer the dictionary of the package is taken
+    found = esmorph._esmorph._analysis(
+        "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary"
+    )
+    assert found.inflect(Number="Sing") == "gato"

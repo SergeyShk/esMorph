@@ -78,7 +78,7 @@ Las mayúsculas no importan. Una palabra escrita como en el diccionario da los a
 | `lemmatize(words)` | El lema del primer análisis de cada palabra; una palabra desconocida en minúsculas, sin el GIL |
 | `is_known(word)` | Si `analyze` encuentra análisis de la palabra |
 
-`Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob`, `words` y `source`. Es inmutable y se puede usar como clave, y tanto el analizador como el análisis se pueden serializar con pickle.
+`Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob`, `words` y `source` y los métodos `forms()` e `inflect()` - véase [Flexión](inflection.md). Es inmutable, se puede usar como clave y se compara sin la probabilidad. El analizador y el análisis se pueden serializar con pickle: al deserializarlos se toma el analizador del mismo diccionario que el proceso ya tiene, así que los análisis deserializados uno a uno lo comparten, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete.
 
 !!! note "En desarrollo"
     Las palabras desconocidas aún no tienen análisis: llegarán en próximas versiones.

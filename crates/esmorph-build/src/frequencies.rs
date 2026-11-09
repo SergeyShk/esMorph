@@ -111,6 +111,17 @@ impl Counts {
         self.forms.get(form).copied().unwrap_or(0)
     }
 
+    /// How many times AnCora has an analysis of a form
+    pub fn count(&self, form: &str, row: Row) -> u32 {
+        let key = (
+            form.to_owned(),
+            row.pos.to_owned(),
+            row.lemma.to_owned(),
+            row.feats.to_owned(),
+        );
+        self.analyses.get(&key).copied().unwrap_or(0)
+    }
+
     fn part(&self, form: &str, pos: &str) -> f64 {
         let key = (form.to_owned(), pos.to_owned());
         f64::from(self.parts.get(&key).copied().unwrap_or(0))
@@ -122,13 +133,7 @@ impl Counts {
     }
 
     fn analysis(&self, form: &str, row: Row) -> f64 {
-        let key = (
-            form.to_owned(),
-            row.pos.to_owned(),
-            row.lemma.to_owned(),
-            row.feats.to_owned(),
-        );
-        f64::from(self.analyses.get(&key).copied().unwrap_or(0))
+        f64::from(self.count(form, row))
     }
 
     fn ending(&self, form: &str, pos: &str) -> f64 {
