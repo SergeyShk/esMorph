@@ -93,17 +93,39 @@ Una palabra en mayúsculas que el diccionario conoce también puede ser un nombr
     [('ETA', 'PROPN', 0.82), ('eta', 'NOUN', 0.18)]
     ```
 
+## Palabras desconocidas { #guess }
+
+Una palabra en minúsculas que ni el diccionario ni las reglas conocen recibe análisis estimados, con `source` igual a `"guess"`:
+
+- una palabra con guion se analiza por su última parte de una clase abierta: `palestino-israelíes` es una forma de `palestino-israelí`;
+- una palabra con un prefijo conocido se analiza por la palabra del diccionario sin él: `supergallos` es una forma de `supergallo`, `sobreandan` de `sobreandar`;
+- un verbo con clíticos se analiza por su gerundio estimado, o por su infinitivo estimado ante `se` o un clítico de tercera persona: `autogenerarse` es `autogenerar` + `se`;
+- cualquier otra palabra se analiza por las palabras del diccionario con la misma terminación de hasta cinco letras: sus categorías, rasgos y flexión, según cuántas palabras los tienen y con qué frecuencia los treebanks tienen sus rasgos.
+
+Una palabra estimada tiene sus formas, también estimadas: `forms()` e `inflect()` funcionan como con una palabra del diccionario. `is_known` sigue siendo falso para ella.
+
+=== "Código"
+
+    ``` python
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("zumbeábamos")]
+    morph.analyze("zumbeábamos")[0].inflect(Tense="Pres", Person="1", Number="Sing")
+    ```
+
+=== "Resultado"
+
+    ```
+    [('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
+    'zumbeo'
+    ```
+
 ## Métodos { #methods }
 
 | Método | Resultado |
 | :-- | :-- |
 | `Analyzer(path=None)` | Un analizador con el diccionario del paquete o de un archivo |
-| `analyze(word)` | La lista de `Analysis`; vacía para una palabra en minúsculas fuera del diccionario |
+| `analyze(word)` | La lista de `Analysis`; vacía para un token que nada analiza, como `qzxw` |
 | `analyze_many(words)` | Lo mismo para una colección de palabras, sin el GIL |
 | `lemmatize(words)` | El lema del primer análisis de cada palabra; una palabra sin análisis en minúsculas, sin el GIL |
 | `is_known(word)` | Si el diccionario tiene la palabra, tal como está escrita o como un verbo con clíticos |
 
 `Analysis` tiene los campos `word`, `lemma`, `pos`, `feats`, `prob`, `words` y `source` y los métodos `forms()` e `inflect()` - véase [Flexión](inflection.md). Es inmutable, se puede usar como clave y se compara sin la probabilidad. El analizador y el análisis se pueden serializar con pickle: al deserializarlos se toma el analizador del mismo diccionario que el proceso ya tiene, así que los análisis deserializados uno a uno lo comparten, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete.
-
-!!! note "En desarrollo"
-    Una palabra en minúsculas fuera del diccionario aún no tiene análisis: la estimación llegará en próximas versiones.

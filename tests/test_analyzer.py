@@ -576,7 +576,7 @@ def test_table_of_closed_classes():
 
 def test_canonical_rows_are_the_word_itself(morph):
     assert morph.analyze("www.rae.es") == []
-    assert morph.analyze("tdhle") == []
+    assert not morph.is_known("tdhle")
 
 
 @pytest.mark.parametrize("word", ["", " ", "qzxw", "­", "a b", "\x00", "\ud83d", "1 000"])
@@ -1061,3 +1061,77 @@ def test_known_roman_numerals_and_names_with_clitics(morph):
     # Case does not matter for the words of the verb, which is the second analysis
     verb = morph.analyze("Dámelo")[1]
     assert (verb.lemma, verb.word, verb.words) == ("dar", "dámelo", ("da", "me", "lo"))
+
+
+def test_guessed_words(morph):
+    analyses = morph.analyze("zumbeábamos")
+    first = analyses[0]
+    assert (first.lemma, first.pos, first.source) == ("zumbear", "VERB", "guess")
+    assert first.feats == {
+        "Mood": "Ind",
+        "Number": "Plur",
+        "Person": "1",
+        "Tense": "Imp",
+        "VerbForm": "Fin",
+    }
+    assert sum(a.prob for a in analyses) == pytest.approx(1.0)
+    assert not morph.is_known("zumbeábamos")
+    # A guessed word has the forms of its sample
+    assert first.inflect(Tense="Pres", Person="1", Number="Sing") == "zumbeo"
+    assert [form.word for form in first.forms()][:3] == ["zumbear", "zumbeando", "zumbeado"]
+    assert pickle.loads(pickle.dumps(first)) == first
+    assert morph.lemmatize(["zumbeábamos"]) == ["zumbear"]
+
+
+@pytest.mark.parametrize(
+    ("word", "lemma", "pos"),
+    [
+        ("supergallos", "supergallo", "NOUN"),
+        ("sobreandan", "sobreandar", "VERB"),
+        ("antimundialización", "antimundialización", "NOUN"),
+        ("palestino-israelíes", "palestino-israelí", "NOUN"),
+        ("ciencia-ficción", "ciencia-ficción", "NOUN"),
+        ("decretorios", "decretorio", "NOUN"),
+    ],
+)
+def test_guessed_by_parts_and_endings(morph, word, lemma, pos):
+    first = morph.analyze(word)[0]
+    assert (first.word, first.lemma, first.pos, first.source) == (word, lemma, pos, "guess")
+
+
+def test_what_is_not_guessed(morph):
+    # No sample has the ending, a word in capitals is a name, a mixed token is not a word
+    assert morph.analyze("qzxw") == []
+    assert morph.analyze("Zumbeábamos")[0].pos == "PROPN"
+    assert morph.analyze("zumbe4") == []
+    assert morph.analyze("z" * 100) == []
+
+
+def test_forms_of_guessed_words_are_guessed(morph):
+    forms = morph.analyze("zumbeábamos")[0].forms()
+    assert all(form.source == "guess" for form in forms)
+    # Every form keeps the lexeme: its forms and its inflection
+    present = next(form for form in forms if form.word == "zumbeo")
+    assert present.forms() == forms
+    assert present.inflect(Number="Plur") == "zumbeamos"
+    prefixed = morph.analyze("supergallos")[0]
+    assert prefixed.forms()[0].forms() == prefixed.forms()
+
+
+@pytest.mark.parametrize(
+    ("word", "lemma", "words"),
+    [
+        ("autogenerarse", "autogenerar", ("autogenerar", "se")),
+        ("zumbeándose", "zumbear", ("zumbeando", "se")),
+        ("zumbearlo", "zumbear", ("zumbear", "lo")),
+    ],
+)
+def test_guessed_verbs_with_clitics(morph, word, lemma, words):
+    first = morph.analyze(word)[0]
+    assert (first.lemma, first.pos, first.words, first.source) == (lemma, "VERB", words, "guess")
+    assert first.forms()[0].word == lemma
+
+
+def test_the_last_part_after_a_hyphen_is_of_an_open_class(morph):
+    assert morph.analyze("sur-este")[0].pos == "NOUN"
+    assert morph.analyze("post-nosotros") == []

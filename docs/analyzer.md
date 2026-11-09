@@ -93,17 +93,39 @@ A word in capitals that the dictionary knows may be a name too, with its share: 
     [('ETA', 'PROPN', 0.82), ('eta', 'NOUN', 0.18)]
     ```
 
+## Unknown words { #guess }
+
+A lowercase word that neither the dictionary nor the rules know gets guessed analyses, with `source` equal to `"guess"`:
+
+- a word with a hyphen is analyzed by its last part of an open class: `palestino-israelíes` is a form of `palestino-israelí`;
+- a word with a known prefix is analyzed by the dictionary word without it: `supergallos` is a form of `supergallo`, `sobreandan` of `sobreandar`;
+- a verb with clitics is analyzed by its guessed gerund, or by its guessed infinitive before `se` or a clitic of the third person: `autogenerarse` is `autogenerar` + `se`;
+- any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often the treebanks have their features.
+
+A guessed word has its forms, guessed too: `forms()` and `inflect()` work as for a word of the dictionary. `is_known` stays false for it.
+
+=== "Code"
+
+    ``` python
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("zumbeábamos")]
+    morph.analyze("zumbeábamos")[0].inflect(Tense="Pres", Person="1", Number="Sing")
+    ```
+
+=== "Result"
+
+    ```
+    [('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
+    'zumbeo'
+    ```
+
 ## Methods { #methods }
 
 | Method | Result |
 | :-- | :-- |
 | `Analyzer(path=None)` | An analyzer with the dictionary of the package or from a file |
-| `analyze(word)` | The list of `Analysis`; empty for a lowercase word out of the dictionary |
+| `analyze(word)` | The list of `Analysis`; empty for a token that nothing analyzes, as `qzxw` |
 | `analyze_many(words)` | The same for a collection of words, without the GIL |
 | `lemmatize(words)` | The lemma of the first analysis of every word; a word without analyses in lower case, without the GIL |
 | `is_known(word)` | Whether the dictionary has the word, as written or as a verb with clitics |
 
 `Analysis` has the fields `word`, `lemma`, `pos`, `feats`, `prob`, `words` and `source` and the methods `forms()` and `inflect()` - see [Inflection](inflection.md). It is immutable and hashable and is compared without the probability. An analyzer and an analysis can be pickled: unpickling takes the analyzer of the same dictionary that the process already has, so analyses unpickled one by one share it, and an analysis whose dictionary file is gone takes the dictionary of the package.
-
-!!! note "Work in progress"
-    A lowercase word out of the dictionary has no analyses yet: guessing comes in later versions.

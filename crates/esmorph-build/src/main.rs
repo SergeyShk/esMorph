@@ -71,6 +71,9 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
         &read(&counts.join("analyses.tsv"))?,
         &read(&counts.join("pos.tsv"))?,
     )?;
+    for (pos, feats, count) in counts.tags() {
+        builder.set_tag_frequency(pos, plain(feats), count)?;
+    }
     for (form, rows) in &forms {
         builder.set_frequency(form, counts.frequency(form));
         for &row in rows {
