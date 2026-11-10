@@ -1159,8 +1159,17 @@ def test_more_tokens_out_of_the_dictionary(morph):
 
 
 def test_inflection_keeps_the_features_of_the_analysis(morph):
-    pronoun = next(a for a in morph.analyze("lo") if a.pos == "PRON")
-    assert pronoun.inflect(Case="Dat") == "le"
+    def pronoun(word):
+        return next(a for a in morph.analyze(word) if a.pos == "PRON")
+
+    assert pronoun("lo").inflect(Case="Dat") == "le"
+    # A pronoun without a gender or a number keeps its other features
+    assert pronoun("ustedes").inflect(Gender="Fem") == "ustedes"
+    assert pronoun("se").inflect(Number="Plur") == "se"
+    assert pronoun("os").inflect(Gender="Fem") == "os"
+    # A value that shares a part is no other value
+    assert pronoun("él").inflect(PrepCase="Npr") == "lo"
+    assert pronoun("nosotros").inflect(Number="Sing") == "yo"
     assert morph.analyze("chulitos")[0].inflect(Number="Sing") == "chulito"
     # A value of several parts in any order, a rule analysis without number
     el = morph.analyze("él")[0]

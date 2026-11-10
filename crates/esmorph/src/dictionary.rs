@@ -872,6 +872,8 @@ impl Dictionary {
                 .position(|&cell| cell == lexeme.cells[form])
                 .unwrap_or(form)
         };
+        // Whether the analysis has a feature itself
+        let kept = |name: &str| tag.feat(name).is_some();
         let candidates = (0..lexeme.cells.len())
             .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
             .filter_map(|form| {
@@ -888,19 +890,22 @@ impl Dictionary {
                 }
                 // A form with another value of a kept feature is worse than one without it
                 // (`chulitos` in the singular is `chulito`, not `chulita`); of equally fitting
-                // forms the one with the gender and number goes first (`lo` in the dative is `le`,
-                // not `se`)
+                // forms the one with the gender and number that the analysis has goes first:
+                // `lo` in the dative is `le`, not `se`, while `ustedes` in the feminine stays
+                // `ustedes`
                 let (mut contradicted, mut missed, mut absent) = (0, 0, 0);
                 for &(name, value) in &wanted {
                     match tag.feat(name) {
                         Some(known) if has(Some(known), value) => {}
+                        // A value of several parts shares one: `Acc` of `Acc,Nom`
+                        Some(known) if shares_part(known, value) => missed += 1,
                         Some(_) => {
                             contradicted += 1;
                             missed += 1;
                         }
                         None => {
                             missed += 1;
-                            if nominal && matches!(name, "Gender" | "Number") {
+                            if nominal && matches!(name, "Gender" | "Number") && kept(name) {
                                 absent += 1;
                             }
                         }
@@ -913,8 +918,8 @@ impl Dictionary {
                     .count();
                 let variant = (lexeme.cells[form] ^ own) & VARIANT != 0;
                 let key = (
-                    contradicted,
                     missed,
+                    contradicted,
                     extra,
                     absent,
                     variant,
@@ -1270,6 +1275,11 @@ fn with_lemma(mut form: Analysis, lemma: &str) -> Analysis {
 /// Whether a value of a feature is `wanted` or lists it: `Acc,Nom` has `Acc`
 fn has(value: Option<&str>, wanted: &str) -> bool {
     value.is_some_and(|value| value == wanted || value.split(',').any(|part| part == wanted))
+}
+
+/// Whether two values of a feature share a part: `Acc` and `Acc,Nom`
+fn shares_part(value: &str, other: &str) -> bool {
+    (value.split(',')).any(|part| other.split(',').any(|known| known == part))
 }
 
 /// Analyses of a token by the analyses of its host and its clitics

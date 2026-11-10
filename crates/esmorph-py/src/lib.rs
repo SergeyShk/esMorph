@@ -192,7 +192,8 @@ impl Analysis {
     ///     str: The word form as the dictionary spells it
     ///
     /// Raises:
-    ///     FormNotFoundError: If the lexeme has no form with these features
+    ///     FormNotFoundError: If the lexeme has no form with these features, or the dictionary has
+    ///         no lexeme of the analysis
     ///     ValueError: If the dictionary has no such feature or value
     ///     TypeError: If a value is not a string
     ///
@@ -216,7 +217,8 @@ impl Analysis {
                 ));
             };
             // The parts of a value with several are in the order of letters: `Acc,Nom`
-            let mut parts: Vec<&str> = value.to_str()?.split(',').collect();
+            let given = value.to_str()?;
+            let mut parts: Vec<&str> = given.split(',').collect();
             parts.sort_unstable();
             let value = parts.join(",");
             let Some(values) = analyzer.features.get(&name) else {
@@ -227,7 +229,7 @@ impl Analysis {
             };
             if !values.contains(&value) {
                 return Err(PyValueError::new_err(format!(
-                    "Unknown value of the feature {name}: {value}; the dictionary has {}",
+                    "Unknown value of the feature {name}: {given}; the dictionary has {}",
                     listed(values)
                 )));
             }
@@ -372,6 +374,9 @@ fn _analysis(
             .and_then(|analysis| analysis.entry)
             // A guessed form is a guess of its lexeme, not of its word: `blorpeás` of `blorpear`
             .or_else(|| {
+                if source != esmorph::Source::Guess.as_str() {
+                    return None;
+                }
                 (this.dictionary.analyze(&lemma).into_iter())
                     .flat_map(|analysis| this.dictionary.forms(&analysis))
                     .find(|form| {
