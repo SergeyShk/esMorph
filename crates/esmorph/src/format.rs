@@ -125,6 +125,8 @@ pub(crate) struct Layout {
     pub variants: Range<usize>,
     pub guesses: Range<usize>,
     pub guess_records: Range<usize>,
+    /// CRC32 of the file after its header
+    pub checksum: u32,
 }
 
 impl Layout {
@@ -213,7 +215,7 @@ pub(crate) fn layout(data: &[u8]) -> Result<Layout, Error> {
         }
         Ok(start..end)
     };
-    let layout = Layout {
+    let mut layout = Layout {
         meta: section(1)?,
         ud_strings: section(1)?,
         ud_tags: section(2)?,
@@ -227,6 +229,7 @@ pub(crate) fn layout(data: &[u8]) -> Result<Layout, Error> {
         variants: section(4)?,
         guesses: section(1)?,
         guess_records: section(4)?,
+        checksum: 0,
     };
     if at != data.len() {
         return Err(extra_data());
@@ -238,6 +241,7 @@ pub(crate) fn layout(data: &[u8]) -> Result<Layout, Error> {
             "checksum mismatch: the file is damaged".into(),
         ));
     }
+    layout.checksum = checksum;
     Ok(layout)
 }
 

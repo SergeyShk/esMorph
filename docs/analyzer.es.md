@@ -9,8 +9,8 @@ Analizador morfológico: para una forma de palabra busca todos sus [análisis](a
 Excepciones:
 
 - `FileNotFoundError` - el archivo del diccionario no existe;
-- `OSError` - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio;
-- `ValueError` - el archivo no es un diccionario de esMorph o está dañado;
+- `OSError` - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio, una tubería o un dispositivo;
+- `ValueError` - el archivo no es un diccionario de esMorph o está dañado, la ruta tiene un carácter NUL;
 - `TypeError` - una ruta que no es una cadena ni `PathLike`.
 
 === "Código"
@@ -34,7 +34,7 @@ Excepciones:
 | :-------- | :--- | :---------- | :---------- |
 | `path` | `str` / `PathLike` | `None` | Ruta al archivo del diccionario; por defecto, el diccionario del paquete |
 
-El objeto guarda la ruta del diccionario en `path`, de tipo `Path` y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, así que no se deben cargar diccionarios de fuentes no fiables.
+El objeto guarda la ruta absoluta del diccionario en `path`, de tipo `Path` y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, así que no se deben cargar diccionarios de fuentes no fiables.
 
 ## Métodos
 
@@ -94,7 +94,7 @@ Los análisis de cada forma de palabra, como con [`analyze`](#analyze).
 
 Excepciones:
 
-- `TypeError` - una cadena en lugar de una colección de palabras, una palabra que no es una cadena.
+- `TypeError` - una cadena o bytes en lugar de una colección de palabras, una palabra que no es una cadena.
 
 === "Código"
 
@@ -129,7 +129,7 @@ Los lemas de los análisis más probables de las formas de palabra; un token sin
 
 Excepciones:
 
-- `TypeError` - una cadena en lugar de una colección de palabras, una palabra que no es una cadena.
+- `TypeError` - una cadena o bytes en lugar de una colección de palabras, una palabra que no es una cadena.
 
 === "Código"
 
@@ -186,7 +186,7 @@ El diccionario del paquete se crea a partir del [Wiktionary](https://en.wiktiona
 
 ## Hilos y procesos { #parallel }
 
-Un mismo analizador se puede usar desde varios hilos. `lemmatize` libera el GIL, así que los hilos lo aceleran; `analyze_many` crea los análisis con el GIL, así que con él los hilos lo aceleran poco, y en Python 3.14t sin GIL, que tiene su propio paquete precompilado, sí lo aceleran. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Pickle guarda la ruta del archivo del diccionario (ninguna para el diccionario del paquete): al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, y un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
+Un mismo analizador se puede usar desde varios hilos. `lemmatize` libera el GIL, así que los hilos lo aceleran. `analyze_many` crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, `lemmatize` o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza `ValueError`. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
 
 === "Código"
 

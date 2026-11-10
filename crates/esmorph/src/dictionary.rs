@@ -312,6 +312,12 @@ impl Dictionary {
         &self.meta
     }
 
+    /// Checksum of the dictionary file: dictionaries with one checksum are one dictionary, so the
+    /// numbers of the tags and the forms of their analyses agree
+    pub fn checksum(&self) -> u32 {
+        self.layout.checksum
+    }
+
     /// Number of word forms in the dictionary
     pub fn len(&self) -> usize {
         self.word_count
@@ -730,6 +736,13 @@ impl Dictionary {
                 if let Some(analysis) = self.analysis(&spelling, entry, share) {
                     analyses.push(analysis);
                 }
+            }
+        }
+        // Shares are stored in millionths: their sum may miss 1 by a few of them
+        let sum: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+        if sum > 0.0 {
+            for analysis in &mut analyses {
+                analysis.prob /= sum;
             }
         }
         if count > 1 {

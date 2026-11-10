@@ -1,6 +1,8 @@
 import copy
 import errno
+import gc
 import json
+import os
 import pickle
 import threading
 from pathlib import Path
@@ -556,10 +558,11 @@ def test_most_common_features_are_first(morph):
 
 
 def test_probabilities(morph):
-    for word in ["casa", "la", "que", "como", "fue", "publico", "se"]:
+    for word in ["casa", "la", "que", "como", "fue", "publico", "se", "sí", "madrina", "Doble"]:
         probs = [a.prob for a in morph.analyze(word)]
         assert probs == sorted(probs, reverse=True), word
-        assert sum(probs) == pytest.approx(1, abs=1e-3), word
+        # The shares are stored in millionths, but the sum is 1
+        assert sum(probs) == pytest.approx(1, abs=1e-12), word
     assert morph.analyze("camión")[0].prob == 1
     # No treebank has this word: its analyses are equal and still ordered
     probs = {round(a.prob, 6) for a in morph.analyze("ababillamos")}
@@ -624,7 +627,7 @@ def test_lemmatize(morph):
     assert words[0] is words[-1]
 
 
-@pytest.mark.parametrize("words", ["casa", 7, None])
+@pytest.mark.parametrize("words", ["casa", b"casa", bytearray(b"casa"), 7, None])
 @pytest.mark.parametrize("method", ["analyze_many", "lemmatize"])
 def test_collections_of_words(morph, method, words):
     with pytest.raises(TypeError, match="collection of words"):
@@ -636,6 +639,53 @@ def test_words_must_be_strings(morph, method):
     with pytest.raises(TypeError, match="item 1 is int"):
         getattr(morph, method)(["casa", 7])
 
+    # Words are read in chunks: the number counts from the start of the input
+    def words():
+        yield from ["casa"] * 10_000
+        yield 7
+
+    with pytest.raises(TypeError, match="item 10000 is int"):
+        getattr(morph, method)(words())
+
+
+@pytest.mark.parametrize("method", ["analyze_many", "lemmatize"])
+def test_an_ended_input_is_not_asked_again(morph, method):
+    class Words:
+        calls = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            self.calls += 1
+            if self.calls > 3:
+                raise StopIteration
+            return "casa"
+
+    words = Words()
+    assert len(getattr(morph, method)(words)) == 3
+    assert words.calls == 4
+
+
+def test_pickled_analyses_keep_their_tables(morph):
+    forms = morph.analyze("zumbeábamos")[0].forms()
+    assert all(pickle.loads(pickle.dumps(form)).forms() == forms for form in forms)
+    # A pickle without the table, or with the table of another dictionary, finds it on first use
+    state = forms[0].__reduce__()[1]
+    other = state[8] ^ (1 << 32)
+    for restored in [state[:8], (*state[:8], other)]:
+        assert esmorph._esmorph._analysis(*restored).forms() == forms
+
+
+def test_analyses_are_not_tracked_by_the_garbage_collector(morph):
+    analyses = [
+        *morph.analyze("casa"),
+        *morph.analyze_many(["gatos"])[0],
+        *morph.analyze("gatos")[0].forms(),
+        pickle.loads(pickle.dumps(morph.analyze("casa")[0])),
+    ]
+    assert not any(gc.is_tracked(analysis) for analysis in analyses)
+
 
 @pytest.mark.parametrize("word", [7, None, b"casa", ["casa"]])
 @pytest.mark.parametrize("method", ["analyze", "is_known"])
@@ -646,7 +696,8 @@ def test_a_word_must_be_a_string(morph, method, word):
 
 def test_surrogates(morph):
     assert morph.analyze("casa\udc80") == []
-    assert morph.lemmatize(["casa\udc80"]) == ["casa�"]
+    # A token without analyses comes back in lower case as it is, with its lone surrogates
+    assert morph.lemmatize(["casa\udc80", "CA\udcffSA"]) == ["casa\udc80", "ca\udcffsa"]
     assert morph.analyze_many(["\ud83d"]) == [[]]
 
 
@@ -671,9 +722,12 @@ def test_analysis_equality_and_hash(morph):
 def test_analysis_repr(morph):
     assert repr(morph.analyze("camión")[0]) == (
         "Analysis(word='camión', lemma='camión', pos='NOUN', "
-        "feats={'Gender': 'Masc', 'Number': 'Sing'}, prob=1.000000, words=('camión',), "
+        "feats={'Gender': 'Masc', 'Number': 'Sing'}, prob=1.0, words=('camión',), "
         "source='dictionary')"
     )
+    # Six significant digits, so a tiny probability is not zero
+    tiny = esmorph._esmorph._analysis("a", "a", "NOUN", "", 1.234567e-7, [], "rule")
+    assert "prob=1.23457e-07," in repr(tiny)
 
 
 def test_analysis_pickle_and_copy(morph):
@@ -718,6 +772,26 @@ def test_dictionary_description(morph):
     assert meta["counts"]["release"] == "r2.18"
     assert set(meta["counts"]["treebanks"]) == {"UD_Spanish-AnCora", "UD_Spanish-GSD"}
     assert meta["license"] == "CC BY-SA 4.0"
+
+
+def test_dictionary_paths(morph, tmp_path, monkeypatch):
+    path = tmp_path / "es.dict"
+    path.write_bytes(morph.path.read_bytes())
+    monkeypatch.chdir(tmp_path)
+    # A relative path is kept absolute, so pickle restores the analyzer from any directory
+    relative = Analyzer("es.dict")
+    assert relative.path == Path.cwd() / "es.dict"
+    analysis = relative.analyze("gatos")[0]
+    monkeypatch.chdir(ROOT)
+    assert pickle.loads(pickle.dumps(relative)).path == relative.path
+    assert pickle.loads(pickle.dumps(analysis)).inflect(Number="Sing") == "gato"
+    with pytest.raises(ValueError, match="NUL"):
+        Analyzer("es\0.dict")
+    if hasattr(os, "mkfifo"):
+        os.mkfifo(tmp_path / "pipe")
+        with pytest.raises(OSError, match="not a file") as error:
+            Analyzer(tmp_path / "pipe")
+        assert (error.value.errno, error.value.filename) == (errno.EINVAL, str(tmp_path / "pipe"))
 
 
 def test_load_errors(morph, tmp_path):
