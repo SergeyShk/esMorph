@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/SergeyShk/esMorph/master/docs/img/esmorph.png" alt="esMorph" width="480">
+</p>
+
 <h1 align="center">esMorph</h1>
 
 <p align="center">

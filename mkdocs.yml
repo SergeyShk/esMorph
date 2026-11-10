@@ -20,15 +20,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: blue
-      accent: blue
+      primary: red
+      accent: red
       toggle:
         icon: material/weather-night
         name: Dark theme
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: blue
-      accent: blue
+      primary: red
+      accent: red
       toggle:
         icon: material/weather-sunny
         name: Light theme
