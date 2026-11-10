@@ -64,8 +64,8 @@ impl Tag {
 ///         contraction, or the word itself; the analysis describes the first of them
 ///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the
 ///         dictionary with clitics, "rule" for a token out of the dictionary (punctuation, a
-///         symbol, a number, a Roman numeral, a name) and the name of a word in capitals, "guess"
-///         for a guessed lowercase word
+///         symbol, a number, a Roman numeral, a name) and for the name or the Roman numeral of a
+///         word with a capital letter that the dictionary has, "guess" for a guessed lowercase word
 ///
 /// Example:
 ///     >>> from esmorph import Analyzer
@@ -357,7 +357,8 @@ fn _analysis(
     let entry = ud.and_then(|ud| {
         (this.dictionary.analyze(&word).into_iter())
             .find(|analysis| {
-                analysis.lemma == lemma
+                // The lemma of a name may differ in case: `Madrid` of the token `madrid`
+                analysis.lemma.to_lowercase() == lemma.to_lowercase()
                     && analysis.ud == ud
                     && analysis.words == words
                     && analysis.source.as_str() == source
@@ -498,8 +499,9 @@ impl Analyzer {
     ///
     /// Description:
     ///     A token that the dictionary does not have gets the analyses of the rules: punctuation,
-    ///     a symbol, a number in digits, a Roman numeral, a name with a capital letter. A word in
-    ///     capitals that the dictionary knows may be a name too (`ETA`). A lowercase word out of
+    ///     a symbol, a number in digits, a Roman numeral, a name with a capital letter. A word with
+    ///     a capital letter that the dictionary knows may be a name too (`ETA`, `Angel`), and a name
+    ///     of the dictionary has a lemma with a capital letter (`Madrid`). A lowercase word out of
     ///     the dictionary is guessed: by its last part after a hyphen, by the word without a known
     ///     prefix or by the dictionary words with its ending
     ///
@@ -515,7 +517,7 @@ impl Analyzer {
     /// Example:
     ///     >>> from esmorph import Analyzer
     ///     >>> morph = Analyzer()
-    ///     >>> [(analysis.lemma, analysis.pos) for analysis in morph.analyze("Camiones")]
+    ///     >>> [(analysis.lemma, analysis.pos) for analysis in morph.analyze("camiones")]
     ///     [('camión', 'NOUN')]
     ///     >>> [(analysis.lemma, analysis.pos, analysis.source) for analysis in morph.analyze("10.000")]
     ///     [('10000', 'NUM', 'rule')]

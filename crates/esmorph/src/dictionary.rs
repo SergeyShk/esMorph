@@ -13,7 +13,10 @@ use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
     Storage, Strings, UD_BITS, VARIANT, WordValue,
 };
-use crate::rules::{self, CAPS_NAME, CLITICS_NAME, Rule, RuleTags, SHORT_CAPS};
+use crate::rules::{
+    self, CAPS_NAME, CLITICS_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule, RuleTags,
+    SHORT_CAPS,
+};
 use crate::ud::{UdTag, UdTags};
 
 mod guess;
@@ -26,8 +29,9 @@ pub enum Source {
     Dictionary,
     /// The word form is a verb of the dictionary with enclitic pronouns
     Clitics,
-    /// The token is not in the dictionary, a rule gives its analysis: punctuation, a symbol, a
-    /// number, a Roman numeral, a name; a name of a word in capitals that the dictionary has
+    /// A rule gives the analysis: of a token that is not in the dictionary (punctuation, a symbol,
+    /// a number, a Roman numeral, a name) or the name and the Roman numeral of a word with a
+    /// capital letter that the dictionary has (`Estados`, `ETA`, `X`)
     Rule,
     /// A lowercase word that is not in the dictionary, guessed: by its last part after a hyphen,
     /// by the word without a known prefix or by the words of the dictionary with its ending
@@ -132,8 +136,19 @@ pub struct Dictionary {
     word_count: usize,
     /// Which hosts of clitics a UD tag gives, by number
     hosts: Vec<Host>,
+    /// Whether a UD tag is of a name, by number
+    names: Vec<bool>,
     /// Tags of the analyses by rules; `None` if the table of tags has no room for them
     rule_tags: Option<RuleTags>,
+}
+
+/// Analyses of one spelling of the host of a split
+struct HostAnalyses {
+    found: Vec<Analysis>,
+    /// The analyses whose form the token stresses where its accent is
+    stressed: Vec<Analysis>,
+    /// Whether the dictionary has the spelling as written
+    written: bool,
 }
 
 /// A form that takes clitics
@@ -143,6 +158,9 @@ enum Host {
     /// An infinitive or a gerund
     NonFinite,
     Imperative,
+    /// A finite form of the indicative, the subjunctive or the conditional: it takes enclitics
+    /// in older and literary writing (`díjole`, `levantóse`)
+    Finite,
 }
 
 impl std::fmt::Debug for Dictionary {
@@ -250,6 +268,7 @@ impl Dictionary {
             table_offsets: Vec::new(),
             word_count: 0,
             hosts: Vec::new(),
+            names: Vec::new(),
             rule_tags: None,
             layout,
             storage: Arc::clone(&storage),
@@ -260,6 +279,9 @@ impl Dictionary {
         dictionary.word_count = dictionary.words.len() + dictionary.check_variants()?;
         dictionary.check_guesses()?;
         dictionary.rule_tags = RuleTags::add(&mut dictionary.ud);
+        dictionary.names = (dictionary.ud.iter())
+            .map(|tag| tag.pos() == "PROPN")
+            .collect();
         dictionary.hosts = dictionary
             .ud
             .iter()
@@ -270,6 +292,8 @@ impl Dictionary {
                     Host::NonFinite
                 } else if tag.feat("Mood") == Some("Imp") {
                     Host::Imperative
+                } else if matches!(tag.feat("Mood"), Some("Ind" | "Sub" | "Cnd")) {
+                    Host::Finite
                 } else {
                     Host::No
                 }
@@ -303,39 +327,55 @@ impl Dictionary {
         self.ud.iter()
     }
 
-    /// Analyses of a word form, the most probable first. Case does not matter. A word spelled as in
-    /// the dictionary gives the analyses of that spelling; a word absent as written is looked for
-    /// without its accents and with a lost diaeresis. A word absent from the dictionary may be a
-    /// verb with clitics (`dámelo`). A token that is neither gets the analyses of the rules:
-    /// punctuation, a symbol, a number, a Roman numeral, a name with a capital letter. A word in
-    /// capitals that the dictionary knows is a name too (`ETA`). A lowercase word that is none of
-    /// these is guessed: by its last part after a hyphen, by the word without a known prefix or by
-    /// the dictionary words with its ending
+    /// Analyses of a word form, the most probable first. Case does not matter for finding the word,
+    /// though a token with a capital letter may also be a name. A word spelled as in the dictionary
+    /// gives the analyses of that spelling; a word absent as written is a verb with clitics
+    /// (`dámelo`) or is looked for without its accents and with a lost diaeresis. A token that is
+    /// neither gets the analyses of the rules: punctuation, a symbol, a number, a Roman numeral, a
+    /// name with a capital letter. A lowercase word that is none of these is guessed: by its last
+    /// part after a hyphen, by the word without a known prefix or by the dictionary words with its
+    /// ending
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
-        let mut analyses = self.found(&word);
+        let (found, exact) = self.spelled(&word);
+        // A word absent as written is a verb with clitics before it is a word with other accents:
+        // `verte` is `ver` + `te`, not `verté`; a few words of the dictionary are such verbs
+        // mostly (`verse`). Clitics follow a verb: a token without letters has none
+        let homonym = exact && clitics::homonym(&word);
+        if (!exact || homonym) && word.chars().any(char::is_alphabetic) {
+            let mut analyses = self.with_clitics(&word);
+            if !analyses.is_empty() {
+                // A word the dictionary has is a name as rarely as any other: `Vete`, `Trátase`
+                let known = !found.is_empty();
+                if homonym {
+                    for analysis in &mut analyses {
+                        analysis.prob *= clitics::HOMONYM_SHARE;
+                    }
+                    analyses.extend(found.into_iter().map(|analysis| Analysis {
+                        prob: analysis.prob * (1.0 - clitics::HOMONYM_SHARE),
+                        ..analysis
+                    }));
+                    analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
+                }
+                if word.chars().any(char::is_uppercase) {
+                    let share = if known {
+                        CAPS_NAME[2]
+                    } else {
+                        self.clitics_name(&word, &analyses)
+                    };
+                    self.add_rules(&word, &[(Rule::Name, share)], &mut analyses);
+                }
+                return analyses;
+            }
+        }
+        let mut analyses = found;
         if analyses.is_empty() {
-            // Clitics follow a verb: a token without letters has none
-            let analyses = if word.chars().any(char::is_alphabetic) {
-                self.with_clitics(&word)
+            let ruled = self.ruled(&word);
+            return if ruled.is_empty() {
+                self.guess(&word)
             } else {
-                Vec::new()
+                ruled
             };
-            if analyses.is_empty() {
-                let ruled = self.ruled(&word);
-                return if ruled.is_empty() {
-                    self.guess(&word)
-                } else {
-                    ruled
-                };
-            }
-            // A token with a capital letter that splits as a verb with clitics is mostly a name:
-            // `Mandela`, `Portela`
-            let mut analyses = analyses;
-            if word.chars().any(char::is_uppercase) {
-                self.add_rules(&word, &[(Rule::Name, CLITICS_NAME)], &mut analyses);
-            }
-            return analyses;
         }
         if let Some(words) = clitics::contraction(&word) {
             for analysis in analyses.iter_mut().filter(|a| a.lemma == words[0]) {
@@ -344,8 +384,85 @@ impl Dictionary {
         }
         if rules::caps(&word) {
             self.add_name(&word, &mut analyses);
+        } else if word.len() == 1 && rules::roman(&word) {
+            // A Roman numeral of one letter that the dictionary knows (`I`, `X`)
+            let [number, name] = ROMAN_LETTER;
+            let rules = [(Rule::Roman, number), (Rule::Name, name)];
+            self.add_rules(&word, &rules, &mut analyses);
+        } else if word.chars().any(char::is_uppercase) {
+            self.add_capital_name(&word, &mut analyses);
+        } else {
+            self.lower_names(&mut analyses);
+        }
+        for analysis in &mut analyses {
+            if analysis.source == Source::Dictionary && self.is_name(analysis) {
+                analysis.lemma = name_lemma(&word, &analysis.lemma);
+            }
         }
         analyses
+    }
+
+    fn is_name(&self, analysis: &Analysis) -> bool {
+        self.names
+            .get(usize::from(analysis.ud))
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Share of a name among the analyses of a token with a capital letter that splits as a verb
+    /// with clitics: an imperative without an accent mostly is a name (`Mandela`, `Portela`), an
+    /// infinitive, a gerund, an imperative with an accent and a finite form mostly are verbs
+    /// (`Hacerlo`, `Déjame`, `Levantóse`)
+    fn clitics_name(&self, token: &str, analyses: &[Analysis]) -> f64 {
+        let host = analyses
+            .first()
+            .and_then(|analysis| self.hosts.get(usize::from(analysis.ud)));
+        let accented =
+            (token.chars().flat_map(char::to_lowercase)).any(|c| clitics::without_acute(c) != c);
+        match host {
+            Some(Host::Imperative) if !accented => CLITICS_NAME[0],
+            _ => CLITICS_NAME[1],
+        }
+    }
+
+    /// Adds the analysis of a name to the analyses of a word with a capital letter that the
+    /// dictionary knows without a name of its spelling: a word without accents that the dictionary
+    /// has only with them is mostly a name (`Angel`, `Perez`), another word only sometimes
+    /// (`Estados`, `Comisión`), so its name usually goes after the analyses of the dictionary
+    fn add_capital_name(&self, token: &str, analyses: &mut Vec<Analysis>) {
+        let written = |analysis: &Analysis| lower_eq(token, &analysis.word);
+        if (analyses.iter()).any(|analysis| written(analysis) && self.is_name(analysis)) {
+            return;
+        }
+        let restored = !(token.chars().flat_map(char::to_lowercase))
+            .any(|c| c != clitics::without_acute(c) || c == 'ü')
+            && !analyses.iter().any(written);
+        let share = if restored {
+            RESTORED_NAME
+        } else {
+            CAPS_NAME[2]
+        };
+        self.add_rules(token, &[(Rule::Name, share)], analyses);
+    }
+
+    /// Lowers the names among the analyses of a lowercase token: the counts of the dictionary do
+    /// not tell `Miró` from `miró`, while a lowercase token is a name rarely
+    fn lower_names(&self, analyses: &mut [Analysis]) {
+        if !analyses.iter().any(|analysis| self.is_name(analysis)) {
+            return;
+        }
+        for analysis in analyses.iter_mut() {
+            if self.is_name(analysis) {
+                analysis.prob *= LOWER_NAME;
+            }
+        }
+        let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+        if total > 0.0 {
+            for analysis in analyses.iter_mut() {
+                analysis.prob /= total;
+            }
+        }
+        analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
     }
 
     /// Analyses of a token by the rules
@@ -439,76 +556,114 @@ impl Dictionary {
     }
 
     /// Analyses of a verb with clitics: of the first split into a host and clitics, the most
-    /// clitics first, whose host is an infinitive, a gerund or an imperative of the dictionary
+    /// clitics first, whose host is an infinitive, a gerund or an imperative of the dictionary. A
+    /// finite form is a host only of a token that has no other one and stresses it where its accent
+    /// is: enclitics after it belong to older and literary writing (`díjole`, `levantóse`)
     fn with_clitics(&self, word: &str) -> Vec<Analysis> {
         let token = word.to_lowercase();
         // The accent that clitics put on a host marks its stressed vowel: in `piénselo` the host
-        // is `piense`, not `píen`; without such a host the accent is not looked at
+        // is `piense`, not `píen`. Without an accent, a host as written goes before one with an
+        // accent restored: `alientelo` is `aliente` + `lo`, not `alíen` + `te` + `lo`
         let accent = token.chars().position(|c| "áéíóú".contains(c));
+        let splits = clitics::splits(&token);
         let mut fallback = None;
-        for split in clitics::splits(&token) {
-            let (stressed, any) = self.host_analyses(&split, accent, fallback.is_none());
-            if let Some(hosts) = stressed {
-                return with_clitics(&token, &split, hosts);
-            }
-            if let Some(hosts) = any {
-                if accent.is_none() {
-                    return with_clitics(&token, &split, hosts);
+        for split in &splits {
+            for host in self.host_analyses(split, accent, false) {
+                if accent.is_some() && !host.stressed.is_empty() {
+                    return with_clitics(&token, split, host.stressed);
                 }
-                fallback = Some((split, hosts));
+                if accent.is_none() && host.written {
+                    return with_clitics(&token, split, host.found);
+                }
+                if fallback.is_none() {
+                    fallback = Some((split, host.found));
+                }
             }
         }
-        fallback
-            .map(|(split, hosts)| with_clitics(&token, &split, hosts))
-            .unwrap_or_default()
+        if let Some((split, hosts)) = fallback {
+            return with_clitics(&token, split, hosts);
+        }
+        if accent.is_some() {
+            for split in &splits {
+                for host in self.host_analyses(split, accent, true) {
+                    if !host.stressed.is_empty() {
+                        return with_clitics(&token, split, host.stressed);
+                    }
+                }
+            }
+        }
+        Vec::new()
     }
 
-    /// Analyses of the host of a split that is an infinitive, a gerund or an imperative of the
-    /// dictionary: of the first spelling of the host stressed on the vowel `accent` and, if `any`
-    /// is asked for, of the first spelling with any stress
+    /// Analyses of the host of a split by the spellings of the host that are hosts of the clitics:
+    /// those the token stresses on the vowel `accent`, and whether the dictionary has the spelling
+    /// as written; finite forms only if `finite` is asked for
     fn host_analyses(
         &self,
         split: &clitics::Split,
         accent: Option<usize>,
-        any: bool,
-    ) -> (Option<Vec<Analysis>>, Option<Vec<Analysis>>) {
-        let first = split.clitics[0];
-        let mut unstressed = None;
-        for host in clitics::hosts(split.host, first) {
+        finite: bool,
+    ) -> Vec<HostAnalyses> {
+        let mut result = Vec::new();
+        for host in clitics::hosts(split.host, split.clitics[0]) {
             let found: Vec<Analysis> = (self.found(&host).into_iter())
-                .filter(|analysis| match self.hosts.get(usize::from(analysis.ud)) {
-                    Some(Host::NonFinite) => true,
-                    // `os` follows only the imperative of `vosotros`, which loses its `d`:
-                    // `cuéntenos` is `cuente` + `nos`, not `cuenten` + `os`
-                    Some(Host::Imperative) => first != "os" || host.ends_with('d'),
-                    _ => false,
-                })
+                .filter(|analysis| self.takes(analysis, split, finite))
                 .collect();
             if found.is_empty() {
                 continue;
             }
-            let Some(at) = accent else {
-                return (None, Some(found));
+            let stressed = match accent {
+                Some(at) => (found.iter())
+                    .filter(|analysis| clitics::stressed(&analysis.word) == Some(at))
+                    .cloned()
+                    .collect(),
+                None => Vec::new(),
             };
-            let stressed: Vec<Analysis> = (found.iter())
-                .filter(|analysis| clitics::stressed(&analysis.word) == Some(at))
-                .cloned()
-                .collect();
-            if !stressed.is_empty() {
-                return (Some(stressed), unstressed);
-            }
-            if any && unstressed.is_none() {
-                unstressed = Some(found);
-            }
+            result.push(HostAnalyses {
+                written: found.iter().any(|analysis| analysis.word == host),
+                stressed,
+                found,
+            });
         }
-        (None, unstressed)
+        result
+    }
+
+    /// Whether the form of an analysis takes the clitics of a split
+    fn takes(&self, analysis: &Analysis, split: &clitics::Split, finite: bool) -> bool {
+        let first = split.clitics[0];
+        match self.hosts.get(usize::from(analysis.ud)) {
+            Some(Host::NonFinite) => true,
+            Some(Host::Imperative) => {
+                let feat = |name| self.ud.get(analysis.ud).and_then(|tag| tag.feat(name));
+                if first == "os" {
+                    // `os` follows only the imperative of `vosotros`, which loses its `d`:
+                    // `cuéntenos` is `cuente` + `nos`, `distribuídos` is no imperative at all
+                    analysis.word.ends_with('d') && !split.host.ends_with('d')
+                } else if first == "te" {
+                    // `te` follows the imperative of `tú`: `siéntate` is of `sentar`, not `sentir`
+                    feat("Person") == Some("2") && feat("Number") == Some("Sing")
+                } else if split.clitics == ["se"] {
+                    feat("Person") != Some("2")
+                } else {
+                    true
+                }
+            }
+            Some(Host::Finite) => finite,
+            _ => false,
+        }
     }
 
     /// Analyses of a word form in the dictionary
     fn found(&self, word: &str) -> Vec<Analysis> {
-        let Some((key, spellings)) = self.lookup(word) else {
-            return Vec::new();
+        self.spelled(word).0
+    }
+
+    /// Analyses of a word form in the dictionary and whether the dictionary has it as written
+    fn spelled(&self, word: &str) -> (Vec<Analysis>, bool) {
+        let Some((key, spellings, as_written)) = self.lookup(word) else {
+            return (Vec::new(), false);
         };
+        let exact = as_written && spellings.iter().any(|(marks, ..)| marks == key.marks);
         let (count, total) = spellings
             .matching(key.marks)
             .fold((0, 0.0), |(count, total), (.., weight)| {
@@ -541,21 +696,22 @@ impl Dictionary {
         if count > 1 {
             analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
         }
-        analyses
+        (analyses, exact)
     }
 
-    /// The key of a word and its spellings: the key as written, then with a lost diaeresis restored
-    fn lookup(&self, word: &str) -> Option<(Key, Spellings<'_>)> {
+    /// The key of a word, its spellings and whether the key is as written: the key as written,
+    /// then with a lost diaeresis restored
+    fn lookup(&self, word: &str) -> Option<(Key, Spellings<'_>, bool)> {
         let key = self.alphabet.input_key(word)?;
         if let Some(spellings) = self.spellings(&key) {
-            return Some((key, spellings));
+            return Some((key, spellings, true));
         }
         self.alphabet
             .diaeresis_keys(&key)
             .into_iter()
             .find_map(|key| {
                 let spellings = self.spellings(&key)?;
-                Some((key, spellings))
+                Some((key, spellings, false))
             })
     }
 
@@ -600,6 +756,7 @@ impl Dictionary {
         (0..lexeme.cells.len())
             .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
             .filter_map(|form| self.form(&lexeme, form, analysis.forms_source()))
+            .map(|form| with_lemma(form, &analysis.lemma))
             .collect()
     }
 
@@ -706,7 +863,8 @@ impl Dictionary {
             })
             .min()?
             .1;
-        self.form(&lexeme, best, analysis.forms_source())
+        let form = self.form(&lexeme, best, analysis.forms_source())?;
+        Some(with_lemma(form, &analysis.lemma))
     }
 
     /// Lexeme of an analysis: of its verb for a verb with clitics
@@ -997,6 +1155,33 @@ impl Lexeme<'_> {
     }
 }
 
+/// The lemma of a name of the dictionary for a token: the token if it is the lemma in another case
+/// (`PSOE`, `EE.UU.`), otherwise the lemma with a capital letter (`Madrid`)
+fn name_lemma(token: &str, lemma: &str) -> String {
+    if token.chars().any(char::is_uppercase) && lower_eq(token, lemma) {
+        return token.to_owned();
+    }
+    let mut chars = lemma.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+/// Whether a token in lower case is `lower`
+fn lower_eq(token: &str, lower: &str) -> bool {
+    token.chars().flat_map(char::to_lowercase).eq(lower.chars())
+}
+
+/// A form with the lemma of the analysis it comes from, which may be the lemma of the table in
+/// another case: the forms of `Madrid` have the lemma `Madrid`
+fn with_lemma(mut form: Analysis, lemma: &str) -> Analysis {
+    if form.lemma != lemma && form.lemma == lemma.to_lowercase() {
+        form.lemma = lemma.to_owned();
+    }
+    form
+}
+
 /// Whether a value of a feature is `wanted` or lists it: `Acc,Nom` has `Acc`
 fn has(value: Option<&str>, wanted: &str) -> bool {
     value.is_some_and(|value| value == wanted || value.split(',').any(|part| part == wanted))
@@ -1276,6 +1461,31 @@ pub(crate) mod tests {
             .unwrap();
         builder.add_form("de", "ADP", "del", "").unwrap();
         builder.add_form("casa", "NOUN", "casa", "").unwrap();
+        let past = "Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin";
+        builder.add_form("decir", "VERB", "dijo", past).unwrap();
+        builder
+            .add_form("sentar", "VERB", "sienta", imperative)
+            .unwrap();
+        let polite = "Mood=Imp|Number=Sing|Person=3|VerbForm=Fin";
+        builder
+            .add_form("sentir", "VERB", "sienta", polite)
+            .unwrap();
+        builder
+            .add_form("ver", "VERB", "ver", "VerbForm=Inf")
+            .unwrap();
+        builder
+            .add_form("verter", "VERB", "verté", imperative)
+            .unwrap();
+        builder.add_form("versar", "VERB", "verse", polite).unwrap();
+        builder
+            .add_form("alentar", "VERB", "aliente", polite)
+            .unwrap();
+        let plural = "Mood=Imp|Number=Plur|Person=3|VerbForm=Fin";
+        builder.add_form("aliar", "VERB", "alíen", plural).unwrap();
+        let vosotros = "Mood=Imp|Number=Plur|Person=2|VerbForm=Fin";
+        (builder.add_form("distribuir", "VERB", "distribuid", vosotros)).unwrap();
+        let participle = "Gender=Masc|Number=Plur|Tense=Past|VerbForm=Part";
+        (builder.add_form("distribuir", "VERB", "distribuidos", participle)).unwrap();
         Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
     }
 
@@ -1299,19 +1509,82 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_token_with_a_capital_that_splits_is_mostly_a_name() {
+    fn a_token_with_a_capital_that_splits_may_be_a_name() {
         let dictionary = clitic_dictionary();
-        let analyses = dictionary.analyze("Dámelo");
-        let summary: Vec<(&str, Source)> = (analyses.iter())
-            .map(|analysis| (analysis.lemma.as_str(), analysis.source))
-            .collect();
+        let sources = |word| {
+            let analyses = dictionary.analyze(word);
+            let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+            assert!((total - 1.0).abs() < 1e-9, "{word}: {total}");
+            (analyses.into_iter())
+                .map(|analysis| (analysis.lemma, analysis.source))
+                .collect::<Vec<_>>()
+        };
+        // An imperative without an accent is mostly a name (`Mandela`), an imperative with one
+        // and an infinitive mostly a verb
         assert_eq!(
-            summary,
-            [("Dámelo", Source::Rule), ("dar", Source::Clitics)]
+            sources("Dame"),
+            [
+                ("Dame".into(), Source::Rule),
+                ("dar".into(), Source::Clitics)
+            ]
         );
-        assert!(analyses[0].prob > 0.9);
+        for word in ["Dámelo", "Darlo"] {
+            assert_eq!(
+                sources(word),
+                [("dar".into(), Source::Clitics), (word.into(), Source::Rule)]
+            );
+        }
+        assert_eq!(dictionary.analyze("Díjole")[0].source, Source::Clitics);
+        assert_eq!(dictionary.analyze("DÁMELO")[0].source, Source::Clitics);
+    }
+
+    #[test]
+    fn a_finite_form_takes_clitics_with_its_accent() {
+        let dictionary = clitic_dictionary();
+        let analyses = dictionary.analyze("díjole");
+        assert_eq!(analyses[0].lemma, "decir");
+        assert_eq!(analyses[0].words, ["dijo", "le"]);
+        assert_eq!(analyses[0].source, Source::Clitics);
+        assert!(dictionary.is_known("díjole"));
+        // Without the accent of the token it takes none
+        assert!(dictionary.analyze("dijole").is_empty());
+    }
+
+    #[test]
+    fn clitics_agree_with_the_person_of_the_imperative() {
+        let dictionary = clitic_dictionary();
+        let lemmas: Vec<String> = (dictionary.analyze("siéntate").into_iter())
+            .map(|analysis| analysis.lemma)
+            .collect();
+        assert_eq!(lemmas, ["sentar"]);
+        let lemmas: Vec<String> = (dictionary.analyze("siéntase").into_iter())
+            .map(|analysis| analysis.lemma)
+            .collect();
+        assert_eq!(lemmas, ["sentir"]);
+    }
+
+    #[test]
+    fn a_verb_with_clitics_goes_before_other_accents() {
+        let dictionary = clitic_dictionary();
+        // `verte` is `ver` + `te`, not the imperative `verté`
+        assert_eq!(dictionary.analyze("verte")[0].words, ["ver", "te"]);
+        // `verse` is mostly `ver` + `se`, though the dictionary has it
+        let analyses = dictionary.analyze("verse");
+        assert_eq!(analyses[0].words, ["ver", "se"]);
+        assert_eq!(analyses[1].lemma, "versar");
+        assert!(analyses.windows(2).all(|pair| pair[0].prob >= pair[1].prob));
+        // A word the dictionary has is no more a name for its clitics
+        let capital = dictionary.analyze("Verse");
+        assert_eq!(capital[0].words, ["ver", "se"]);
+        assert!(capital.windows(2).all(|pair| pair[0].prob >= pair[1].prob));
         let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
         assert!((total - 1.0).abs() < 1e-9, "{total}");
+        // Without an accent, a host as written goes first
+        assert_eq!(dictionary.analyze("alientelo")[0].lemma, "alentar");
+        // The `d` of the imperative does not stay before `os`
+        let analyses = dictionary.analyze("distribuídos");
+        assert!(analyses.iter().all(|analysis| analysis.words.is_empty()));
+        assert_eq!(analyses[0].lemma, "distribuir");
     }
 
     #[test]
@@ -1995,14 +2268,67 @@ pub(crate) mod tests {
     #[test]
     fn case_does_not_matter() {
         let dictionary = dictionary();
+        // A word with a capital letter may be a name too, after the dictionary
         for word in ["Camión", "cAmIóN"] {
-            assert_eq!(lemmas(&dictionary, word), ["camión"], "{word}");
+            assert_eq!(lemmas(&dictionary, word), ["camión", word], "{word}");
         }
         // A word in capitals may be a name too: after the dictionary for a long word, first for a
         // short one
         assert_eq!(lemmas(&dictionary, "CAMIÓN"), ["camión", "CAMIÓN"]);
         assert_eq!(lemmas(&dictionary, "PINGÜINO"), ["pingüino", "PINGÜINO"]);
         assert_eq!(lemmas(&dictionary, "AÑO"), ["AÑO", "año"]);
+    }
+
+    fn name_dictionary() -> Dictionary {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        builder.add_form("madrid", "PROPN", "madrid", "").unwrap();
+        builder.add_form("psoe", "PROPN", "psoe", "").unwrap();
+        let noun = "Gender=Fem|Number=Sing";
+        builder.add_form("rosa", "NOUN", "rosa", noun).unwrap();
+        builder.add_form("rosa", "PROPN", "rosa", "").unwrap();
+        let noun = "Gender=Masc|Number=Sing";
+        builder.add_form("ángel", "NOUN", "ángel", noun).unwrap();
+        builder.add_form("x", "PRON", "x", "").unwrap();
+        Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn names_keep_their_case() {
+        let dictionary = name_dictionary();
+        assert_eq!(lemmas(&dictionary, "Madrid"), ["Madrid"]);
+        assert_eq!(lemmas(&dictionary, "madrid"), ["Madrid"]);
+        assert_eq!(lemmas(&dictionary, "PSOE"), ["PSOE"]);
+        let analysis = &dictionary.analyze("Madrid")[0];
+        assert_eq!(dictionary.forms(analysis)[0].lemma, "Madrid");
+        assert_eq!(dictionary.inflect(analysis, &[]).unwrap().lemma, "Madrid");
+    }
+
+    #[test]
+    fn a_word_with_a_capital_may_be_a_name() {
+        let dictionary = name_dictionary();
+        // A word without accents that the dictionary has only with them is mostly a name
+        assert_eq!(
+            summary(&dictionary, "Angel"),
+            [
+                ("Angel".into(), "Angel".into(), "PROPN".into()),
+                ("ángel".into(), "ángel".into(), "NOUN".into())
+            ]
+        );
+        // A word with a name of its spelling gets no other
+        assert_eq!(dictionary.analyze("Rosa").len(), 2);
+        // A lowercase word is a name rarely
+        assert_eq!(summary(&dictionary, "rosa")[0].2, "NOUN");
+    }
+
+    #[test]
+    fn a_roman_letter_of_the_dictionary_is_a_number_too() {
+        let dictionary = name_dictionary();
+        let poses: Vec<String> = (summary(&dictionary, "X").into_iter())
+            .map(|row| row.2)
+            .collect();
+        assert_eq!(poses, ["NUM", "PRON", "PROPN"]);
+        assert_eq!(summary(&dictionary, "x")[0].2, "PRON");
     }
 
     #[test]

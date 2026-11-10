@@ -92,7 +92,11 @@ def test_irregular_verbs(morph):
 def test_case_does_not_matter(morph):
     for word in ["CAMIÓN", "Camión", "cAmIóN"]:
         assert morph.analyze(word)[0].lemma == "camión"
-    assert lemmas(morph, "Camión") == ["camión"]
+    # A word with a capital letter may also be a name, after the analyses of the dictionary
+    assert [(a.lemma, a.source) for a in morph.analyze("Camión")] == [
+        ("camión", "dictionary"),
+        ("Camión", "rule"),
+    ]
     assert morph.analyze("Camión")[0].word == "camión"
 
 
@@ -122,7 +126,7 @@ def test_lost_diaeresis(morph):
 
 
 def test_tilde_is_no_accent(morph):
-    assert lemmas(morph, "año") == ["año"]
+    assert morph.analyze("año")[0].lemma == "año"
     assert "ano" in lemmas(morph, "ano")
     assert "año" not in lemmas(morph, "ano")
 
@@ -130,7 +134,7 @@ def test_tilde_is_no_accent(morph):
 def test_normalized_queries(morph):
     assert lemmas(morph, "camión") == ["camión"]
     assert morph.analyze("CAMIÓN")[0].lemma == "camión"
-    assert lemmas(morph, "año") == ["año"]
+    assert morph.analyze("año")[0].lemma == "año"
     assert lemmas(morph, "ca­mión") == ["camión"]
     assert lemmas(morph, "﻿camión​") == ["camión"]
 
@@ -1058,9 +1062,47 @@ def test_known_roman_numerals_and_names_with_clitics(morph):
         ("mandar", "VERB", "clitics"),
     ]
     assert morph.analyze("mandela")[0].source == "clitics"
-    # Case does not matter for the words of the verb, which is the second analysis
-    verb = morph.analyze("Dámelo")[1]
+    # An imperative with an accent is mostly a verb, and case does not matter for its words
+    verb = morph.analyze("Dámelo")[0]
     assert (verb.lemma, verb.word, verb.words) == ("dar", "dámelo", ("da", "me", "lo"))
+    assert morph.analyze("Hacerlo")[0].lemma == "hacer"
+
+
+def test_names_of_the_dictionary(morph):
+    # A name keeps its case, and its forms keep the lemma
+    assert morph.lemmatize(["Madrid", "madrid", "PSOE", "EE.UU."]) == [
+        "Madrid",
+        "Madrid",
+        "PSOE",
+        "EE.UU.",
+    ]
+    madrid = morph.analyze("Madrid")[0]
+    assert {form.lemma for form in madrid.forms()} == {"Madrid"}
+    assert pickle.loads(pickle.dumps(madrid)).forms() == madrid.forms()
+    # A word without accents that the dictionary has only with them is mostly a name
+    assert [(a.lemma, a.pos) for a in morph.analyze("Angel")][:1] == [("Angel", "PROPN")]
+    # A word of the dictionary with a capital letter may be a name, after the dictionary
+    estados = morph.analyze("Estados")
+    assert estados[0].lemma == "estado"
+    assert ("Estados", "PROPN") in [(a.lemma, a.pos) for a in estados]
+    # A lowercase word is a name rarely
+    assert morph.analyze("miró")[0].lemma == "mirar"
+    assert morph.analyze("Miró")[0].pos == "PROPN"
+    # A Roman numeral of one letter that the dictionary knows is a number first
+    assert [(a.pos, a.feats.get("NumForm")) for a in morph.analyze("X")][:1] == [("NUM", "Roman")]
+
+
+def test_clitics_in_literary_writing(morph):
+    # A finite form takes enclitics with the accent of the token
+    dijole = morph.analyze("díjole")[0]
+    assert (dijole.lemma, dijole.words, dijole.source) == ("decir", ("dijo", "le"), "clitics")
+    assert morph.is_known("levantóse")
+    # `te` follows only the imperative of `tú`
+    assert {a.lemma for a in morph.analyze("siéntate")} == {"sentar"}
+    # A verb with clitics goes before a word with other accents, and a host as written first
+    assert morph.analyze("verte")[0].words == ("ver", "te")
+    assert morph.analyze("verse")[0].words == ("ver", "se")
+    assert morph.analyze("alientelo")[0].lemma == "alentar"
 
 
 def test_guessed_words(morph):

@@ -36,9 +36,23 @@ const ROMAN: [(f64, f64); 2] = [(363.0, 24.0), (32.0, 27.0)];
 /// The longest Roman numeral below 4000: `MMMDCCCLXXXVIII`
 const LONGEST_ROMAN: usize = 15;
 
-/// Share of a name among the analyses of a token with a capital letter that splits as a verb with
-/// clitics: `Mandela`, `Portela`, by AnCora and GSD train (49 of 53)
-pub(crate) const CLITICS_NAME: f64 = 49.0 / 53.0;
+/// Shares of a name among the analyses of a token with a capital letter that splits as a verb with
+/// clitics, by AnCora and GSD train: of an imperative without an accent (`Mandela`, `Portela`: 45 of
+/// 48) and of an infinitive, a gerund or an imperative with an accent (`Hacerlo`, `Déjame`: 4 of
+/// 36), taken for a finite form too (`Levantóse`), which the treebanks of news hardly have
+pub(crate) const CLITICS_NAME: [f64; 2] = [45.0 / 48.0, 4.0 / 36.0];
+
+/// Share of a name among the analyses of a word with a capital letter and without accents that the
+/// dictionary has only with them (`Angel`, `Perez`), by AnCora and GSD train (882 of 933)
+pub(crate) const RESTORED_NAME: f64 = 882.0 / 933.0;
+
+/// Shares of a number and of a name among the analyses of a Roman numeral of one letter that the
+/// dictionary knows (`I`, `X`), by AnCora and GSD train: 62 and 14 of 108
+pub(crate) const ROMAN_LETTER: [f64; 2] = [62.0 / 108.0, 14.0 / 108.0];
+
+/// Weight of the names among the analyses of a lowercase token: such a token is a name in 142 of
+/// 21 442 in AnCora and GSD train, while the counts of the dictionary do not tell its case
+pub(crate) const LOWER_NAME: f64 = 142.0 / 21442.0;
 
 /// Shares of a name among the analyses of a word in capitals that the dictionary knows without
 /// one, by AnCora and GSD train: a word of up to `SHORT_CAPS` letters is mostly an acronym (`ETA`,

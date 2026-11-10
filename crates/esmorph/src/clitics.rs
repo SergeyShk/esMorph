@@ -21,6 +21,18 @@ const MAX_CLITICS: usize = 3;
 /// Letters of the shortest host: `di`, `ve`, `id`
 const MIN_HOST: usize = 2;
 
+/// Words of the dictionary that are mostly a verb with clitics: in AnCora and GSD train and dev 26
+/// tokens of 26 (`verse` is `ver` + `se`)
+const HOMONYMS: [&str; 4] = ["verme", "verse", "verte", "vete"];
+/// Share of the verb with clitics among the analyses of such a word: the words of the dictionary
+/// keep one in 27
+pub(crate) const HOMONYM_SHARE: f64 = 26.0 / 27.0;
+
+/// Whether a word of the dictionary is mostly a verb with clitics
+pub(crate) fn homonym(token: &str) -> bool {
+    HOMONYMS.iter().any(|word| token.eq_ignore_ascii_case(word))
+}
+
 /// A split of a token: the host as written and its clitics
 pub(crate) struct Split<'a> {
     pub host: &'a str,
