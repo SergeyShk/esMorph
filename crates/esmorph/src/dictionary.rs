@@ -800,13 +800,13 @@ impl Dictionary {
     }
 
     /// The form of the lexeme of an analysis with the features `feats` ("name", "value"): of the
-    /// forms that have them, the one that changes fewest other features of the analysis (`chulitos`
-    /// in the singular is `chulito`, not `chulita`), then keeps most of them and, for a noun, a
-    /// name, an adjective, a determiner, a pronoun or a numeral, has fewest features more and lacks
-    /// no gender or number of the analysis (`lo` in the dative is `le`, not `se`), then a variant
-    /// only for a variant, unless a main form of such a word is closer in spelling, then a form of
-    /// the tag of the analysis, then the first in the paradigm; of the forms with equal features,
-    /// the closest in spelling to the analysis if it has such forms too, as `hablase` and
+    /// forms that have them, the one that keeps most of the other features of the analysis, then
+    /// changes fewest of them (`chulitos` in the singular is `chulito`, not `chulita`) and, for a
+    /// noun, a name, an adjective, a determiner, a pronoun or a numeral, has fewest features more
+    /// and lacks no gender or number of the analysis (`lo` in the dative is `le`, not `se`), then a
+    /// variant only for a variant, unless a main form of such a word is closer in spelling, then a
+    /// form of the tag of the analysis, then the first in the paradigm; of the forms with equal
+    /// features, the closest in spelling to the analysis if it has such forms too, as `hablase` and
     /// `hablara`. An infinitive and a gerund asked for features they have not become finite forms:
     /// `hablar` with `Tense=Past` is `hablé`. A form of such a part of speech without a gender or a
     /// number takes any, though a form that has it goes first: `grande` with `Gender=Fem` is
