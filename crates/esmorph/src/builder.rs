@@ -45,16 +45,17 @@ struct Place {
     probability: Option<u32>,
 }
 
-/// An added form: its place among the analyses of its word, whether it is a variant and how
-/// often texts have it
+/// An added form: its place among the analyses of its word, whether it is a variant, how often
+/// texts have it and its place in the table of its source
 #[derive(Clone, Copy, Default)]
 struct Form {
     place: Place,
     variant: bool,
     count: u32,
+    rank: Option<u32>,
 }
 
-/// A form of a lexeme in its table: its word, features and UD tag, its flags and count
+/// A form of a lexeme in its table: its word, features and UD tag, its flags, count and rank
 struct Row<'a> {
     word: &'a str,
     feats: &'a str,
@@ -62,25 +63,65 @@ struct Row<'a> {
     place: Place,
     flags: u32,
     count: u32,
+    rank: Option<u32>,
 }
 
 impl<'a> Row<'a> {
-    /// Place in a table: the main forms before the variants, then by the features, the more
-    /// frequent of equal forms first, then in the order of letters
+    /// Place in a table: the main forms before the variants, then by the features; forms of equal
+    /// features by their place in the table of the source, then in the order of letters
     fn order(
         &self,
     ) -> (
         u32,
         ([usize; FEATURE_ORDER.len()], &'a str),
-        Reverse<u32>,
+        Reverse<bool>,
+        u32,
         &'a str,
     ) {
         (
             self.flags,
             paradigm_key(self.feats),
-            Reverse(self.count),
+            Reverse(self.rank.is_some()),
+            self.rank.unwrap_or(0),
             self.word,
         )
+    }
+
+    /// Whether two rows are one cell of a table: the same features and kind
+    fn same_cell(&self, other: &Row) -> bool {
+        self.flags == other.flags && self.feats == other.feats
+    }
+}
+
+/// Whether a form that texts have `more` times is more frequent than one they have `less` times
+/// beyond chance: by more than twice the square root of their sum, as `hay` (286) of `ha` in the
+/// verb `haber`, while 3 against 1 is no difference
+fn more_frequent(more: u32, less: u32) -> bool {
+    let (more, less) = (f64::from(more), f64::from(less));
+    more - less > 2.0 * (more + less).sqrt()
+}
+
+/// Puts first in every cell of a table the form that texts have more often than every other form
+/// of the cell beyond chance
+fn frequent_first(rows: &mut [Row]) {
+    let mut start = 0;
+    while start < rows.len() {
+        let end = start
+            + rows[start..]
+                .iter()
+                .take_while(|row| row.same_cell(&rows[start]))
+                .count();
+        let cell = &mut rows[start..end];
+        if let Some(best) = (0..cell.len()).max_by_key(|&at| (cell[at].count, Reverse(at))) {
+            let others = (0..cell.len()).filter(|&at| at != best);
+            if others
+                .clone()
+                .all(|at| more_frequent(cell[best].count, cell[at].count))
+            {
+                cell[..=best].rotate_right(1);
+            }
+        }
+        start = end;
     }
 }
 
@@ -192,8 +233,8 @@ impl Builder {
     }
 
     /// Sets how often texts have an added form with its lemma and features: of the forms of a
-    /// lexeme with the same features the more frequent goes first, as `hay` before `ha` in the verb
-    /// `haber`; forms without a count go in the order of letters
+    /// lexeme with the same features one that texts have more often than the others beyond chance
+    /// goes first, as `hay` before `ha` in the verb `haber`
     pub fn set_count(
         &mut self,
         lemma: &str,
@@ -204,6 +245,23 @@ impl Builder {
     ) -> Result<(), Error> {
         let feats = normalized(feats)?;
         self.form(lemma, pos, form, feats)?.count = count;
+        Ok(())
+    }
+
+    /// Sets the place of an added form in the table of its source: of the forms of a lexeme with
+    /// the same features that texts do not tell apart, the one with the lower place goes first, and
+    /// a form with a place before a form without one, as `soy` before `seigo`; the others go in the
+    /// order of letters
+    pub fn set_rank(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: &str,
+        rank: u32,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        self.form(lemma, pos, form, feats)?.rank = Some(rank);
         Ok(())
     }
 
@@ -261,9 +319,11 @@ impl Builder {
                     place: info.place,
                     flags: if info.variant { VARIANT } else { 0 },
                     count: info.count,
+                    rank: info.rank,
                 });
             }
             rows.sort_by(|a, b| a.order().cmp(&b.order()));
+            frequent_first(&mut rows);
             // The lemma is the first form of a table; a lemma that is no form of its lexeme stays a
             // form only for analyses
             match rows.iter().position(|row| row.word == lemma) {
@@ -280,6 +340,7 @@ impl Builder {
                         place: Place::default(),
                         flags: LEMMA_ONLY,
                         count: 0,
+                        rank: None,
                     },
                 ),
             }

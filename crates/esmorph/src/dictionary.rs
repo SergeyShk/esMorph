@@ -1747,10 +1747,38 @@ pub(crate) mod tests {
         let ha = ("ha".to_owned(), "ha".to_owned(), "ha".to_owned());
         assert_eq!(build(&[]), ha);
         assert_eq!(
-            build(&[("hay", 7), ("ha", 2)]),
+            build(&[("hay", 30), ("ha", 2)]),
             ("hay".to_owned(), ha.1.clone(), ha.2.clone())
         );
+        // A difference within chance does not count
+        assert_eq!(build(&[("hay", 3), ("ha", 1)]), ha);
         assert_eq!(build(&[("ha", 2)]), ha);
+    }
+
+    #[test]
+    fn equal_forms_go_by_their_place_in_the_source() {
+        let present = "Mood=Ind|Number=Sing|Person=1|Tense=Pres|VerbForm=Fin";
+        let build = |ranks: &[(&str, u32)]| {
+            let mut builder = Builder::new();
+            builder
+                .add_form("ser", "VERB", "ser", "VerbForm=Inf")
+                .unwrap();
+            for form in ["seigo", "soy"] {
+                builder.add_form("ser", "VERB", form, present).unwrap();
+            }
+            for &(form, rank) in ranks {
+                builder
+                    .set_rank("ser", "VERB", form, present, rank)
+                    .unwrap();
+            }
+            let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+            let ser = &dictionary.analyze("ser")[0];
+            inflected(&dictionary, ser, &[("Mood", "Ind"), ("Person", "1")])
+        };
+        // Without places the letters decide; a form with a place goes before one without
+        assert_eq!(build(&[]), "seigo");
+        assert_eq!(build(&[("soy", 5)]), "soy");
+        assert_eq!(build(&[("soy", 5), ("seigo", 2)]), "seigo");
     }
 
     #[test]
