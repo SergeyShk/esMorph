@@ -26,6 +26,8 @@ pub(crate) const LEMMA_ONLY: u32 = 1 << 17;
 pub(crate) const UD_BITS: u32 = 0xFFFF;
 /// The longest ending in letters that guesses an unknown word
 pub(crate) const MAX_ENDING: usize = 5;
+/// Largest dictionary file: offsets into records and variants are of 32 bits
+pub(crate) const MAX_FILE: u64 = 1 << 31;
 const VERSION: u32 = 4;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
@@ -194,6 +196,9 @@ fn check_header(data: &[u8]) -> Result<(), Error> {
 /// the checksum are checked
 pub(crate) fn layout(data: &[u8]) -> Result<Layout, Error> {
     check_header(data)?;
+    if data.len() as u64 > MAX_FILE {
+        return Err(too_large());
+    }
     let mut at = HEADER;
     let mut section = |width: usize| -> Result<Range<usize>, Error> {
         let len = data.get(at..at + 8).ok_or_else(truncated)?;
@@ -264,6 +269,10 @@ pub(crate) fn read(mut input: impl Read) -> Result<Storage, Error> {
         let padded = len
             .checked_next_multiple_of(ALIGN as u64)
             .ok_or_else(truncated)?;
+        // A crafted length is not read from an endless stream
+        if (buffer.len as u64).saturating_add(padded) > MAX_FILE {
+            return Err(too_large());
+        }
         if buffer.fill(&mut input, padded)? < padded {
             return Err(truncated());
         }
@@ -312,6 +321,10 @@ impl Buffer {
 
 fn truncated() -> Error {
     Error::Format("the file is truncated".into())
+}
+
+fn too_large() -> Error {
+    Error::Format(format!("the file is larger than {MAX_FILE} bytes"))
 }
 
 fn extra_data() -> Error {
@@ -641,6 +654,11 @@ pub(crate) mod tests {
         let mut header = data[..HEADER].to_vec();
         header.extend_from_slice(&u64::MAX.to_le_bytes());
         assert!(read(&header[..]).is_err());
+        // An endless stream with a long section stops at the limit of a dictionary before reading it
+        let mut header = data[..HEADER].to_vec();
+        header.extend_from_slice(&(1u64 << 40).to_le_bytes());
+        let endless = header.as_slice().chain(std::io::repeat(0));
+        assert!(matches!(read(endless), Err(Error::Format(text)) if text.contains("larger")));
     }
 
     #[test]

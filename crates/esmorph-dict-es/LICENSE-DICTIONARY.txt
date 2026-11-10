@@ -1,4 +1,4 @@
-The dictionary bundled with esMorph (esmorph/data/es.dict) is built from:
+The dictionary of esMorph (es.dict) is built from:
 
 - the Spanish entries of the English Wiktionary (https://en.wiktionary.org), by the Wiktionary
   contributors, from the dump of 2026-10-01 as extracted by wiktextract (https://kaikki.org;

@@ -18,6 +18,15 @@ fn read(path: &Path) -> Result<String, Error> {
     fs::read_to_string(path).map_err(|err| Error::Build(format!("{}: {err}", path.display())))
 }
 
+/// An error of a line of a file with its place: `lexemes.tsv:2: word "Casa" is not in lower case`
+fn at_line(path: &Path, number: usize, err: Error) -> Error {
+    let message = match err {
+        Error::Build(message) | Error::Format(message) => message,
+        err => err.to_string(),
+    };
+    Error::Build(format!("{}:{}: {message}", path.display(), number + 1))
+}
+
 /// Description of the dictionary: the description of its export with the sources of the counts
 fn joined(meta: &str, sources: &str) -> Result<String, Error> {
     let fields = meta
@@ -41,40 +50,45 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
         &read(&export.join("meta.json"))?,
         &read(&counts.join("sources.json"))?,
     )?);
-    let table = read(&export.join("lexemes.tsv"))?;
+    let lexemes = export.join("lexemes.tsv");
+    let table = read(&lexemes)?;
     let mut forms: BTreeMap<&str, Vec<Row>> = BTreeMap::new();
     // Lexemes with a main form: the others only spell other words
     let mut main: HashSet<(&str, &str)> = HashSet::new();
     for (number, line) in table.lines().enumerate() {
+        let at = |err| at_line(&lexemes, number, err);
         let fields: Vec<&str> = line.split('\t').collect();
         let &[lemma, pos, form, feats, kind, rank] = fields.as_slice() else {
-            return Err(Error::Build(format!(
-                "line {}: expected 6 fields, got {}",
-                number + 1,
+            return Err(at(Error::Build(format!(
+                "expected 6 fields, got {}",
                 fields.len()
-            )));
+            ))));
         };
-        builder.add_form(lemma, pos, form, plain(feats))?;
+        builder
+            .add_form(lemma, pos, form, plain(feats))
+            .map_err(at)?;
         match kind {
             "_" => {
                 main.insert((lemma, pos));
             }
-            "variant" => builder.mark_variant(lemma, pos, form, plain(feats))?,
+            "variant" => builder
+                .mark_variant(lemma, pos, form, plain(feats))
+                .map_err(at)?,
             _ => {
-                return Err(Error::Build(format!(
-                    "line {}: the kind is `variant` or `_`, not {kind:?}",
-                    number + 1
-                )));
+                return Err(at(Error::Build(format!(
+                    "the kind is `variant` or `_`, not {kind:?}"
+                ))));
             }
         }
         if rank != "_" {
             let rank = rank.parse().map_err(|_| {
-                Error::Build(format!(
-                    "line {}: the place is a number or `_`, not {rank:?}",
-                    number + 1
-                ))
+                at(Error::Build(format!(
+                    "the place is a number or `_`, not {rank:?}"
+                )))
             })?;
-            builder.set_rank(lemma, pos, form, plain(feats), rank)?;
+            builder
+                .set_rank(lemma, pos, form, plain(feats), rank)
+                .map_err(at)?;
         }
         forms.entry(form).or_default().push(Row {
             lemma,
@@ -83,13 +97,17 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
             spelling: false,
         });
     }
+    if forms.is_empty() {
+        return Err(Error::Build(format!("{}: no rows", lexemes.display())));
+    }
     for row in forms.values_mut().flatten() {
         row.spelling = !main.contains(&(row.lemma, row.pos));
     }
     let counts = Counts::read(
         &read(&counts.join("analyses.tsv"))?,
         &read(&counts.join("pos.tsv"))?,
-    )?;
+    )
+    .map_err(|err| Error::Build(format!("{}: {err}", counts.display())))?;
     for (pos, feats, count) in counts.tags() {
         builder.set_tag_frequency(pos, plain(feats), count)?;
     }
@@ -118,13 +136,17 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
         }
     }
     let bytes = builder.build()?;
+    let failed = |err: std::io::Error| Error::Build(format!("{}: {err}", output.display()));
     if let Some(parent) = output.parent() {
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent).map_err(failed)?;
     }
     // The file of an open dictionary must not change in place: a mapping keeps its old file
     let temporary = output.with_extension("tmp");
-    fs::write(&temporary, &bytes)?;
-    fs::rename(&temporary, output)?;
+    if let Err(err) = fs::write(&temporary, &bytes).and_then(|()| fs::rename(&temporary, output)) {
+        // Nothing is left of a failed writing
+        let _ = fs::remove_file(&temporary);
+        return Err(failed(err));
+    }
     Ok(bytes.len())
 }
 
@@ -163,6 +185,36 @@ mod tests {
         );
         assert_eq!(joined("{}", "{}").unwrap(), "{\"counts\": {}}");
         assert!(joined("no", "{}").is_err());
+    }
+
+    #[test]
+    fn errors_name_files_and_lines() {
+        let dir = std::env::temp_dir().join(format!("esmorph-build-{}", std::process::id()));
+        let (export, counts) = (dir.join("export"), dir.join("counts"));
+        fs::create_dir_all(&export).unwrap();
+        fs::create_dir_all(&counts).unwrap();
+        fs::write(export.join("meta.json"), "{}").unwrap();
+        for name in ["analyses.tsv", "pos.tsv"] {
+            fs::write(counts.join(name), "").unwrap();
+        }
+        fs::write(counts.join("sources.json"), "{}").unwrap();
+        let output = dir.join("es.dict");
+        let error = |lexemes: &str, output: &Path| {
+            fs::write(export.join("lexemes.tsv"), lexemes).unwrap();
+            build(&export, &counts, output).unwrap_err().to_string()
+        };
+        let line = "casa\tNOUN\tcasa\t_\t_\t_\n";
+        let message = error(&format!("{line}Casa\tNOUN\tCasa\t_\t_\t_\n"), &output);
+        assert!(message.contains("lexemes.tsv:2:"), "{message}");
+        assert!(error("", &output).contains("no rows"));
+        // A directory in place of the dictionary file: the error names it and leaves no file
+        let taken = dir.join("taken.dict");
+        fs::create_dir_all(&taken).unwrap();
+        assert!(error(line, &taken).contains("taken.dict"));
+        assert!(!dir.join("taken.tmp").exists());
+        fs::write(export.join("lexemes.tsv"), line).unwrap();
+        assert!(build(&export, &counts, &output).is_ok());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

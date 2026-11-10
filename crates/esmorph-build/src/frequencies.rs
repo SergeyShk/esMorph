@@ -52,6 +52,22 @@ fn number(line: &str, text: &str) -> Result<u32, Error> {
         .map_err(|_| Error::Build(format!("wrong count in {line:?}")))
 }
 
+/// Adds a count to a total, which must fit 32 bits
+fn add(total: &mut u32, count: u32) -> Result<(), Error> {
+    *total = total
+        .checked_add(count)
+        .ok_or_else(|| Error::Build(format!("the counts add up beyond {}", u32::MAX)))?;
+    Ok(())
+}
+
+/// An error of a line of a file of counts with its place
+fn at_line(file: &str, number: usize, err: Error) -> Error {
+    match err {
+        Error::Build(message) => Error::Build(format!("{file}:{}: {message}", number + 1)),
+        err => err,
+    }
+}
+
 /// The last letters of a form
 fn suffix(form: &str) -> &str {
     let start = form
@@ -67,20 +83,27 @@ impl Counts {
     /// `pos.tsv` (form, part of speech, count)
     pub fn read(analyses: &str, parts: &str) -> Result<Self, Error> {
         let mut counts = Counts::default();
-        for line in analyses.lines() {
+        for (at, line) in analyses.lines().enumerate() {
+            let line_error = |err| at_line("analyses.tsv", at, err);
             let &[form, pos, lemma, feats, count] = line.split('\t').collect::<Vec<_>>().as_slice()
             else {
-                return Err(Error::Build(format!("wrong line of analyses {line:?}")));
+                return Err(line_error(Error::Build(format!("wrong line {line:?}"))));
             };
-            let count = number(line, count)?;
-            *counts
-                .lemmas
-                .entry((form.to_owned(), pos.to_owned(), lemma.to_owned()))
-                .or_default() += count;
-            *counts
-                .tags
-                .entry((pos.to_owned(), feats.to_owned()))
-                .or_default() += count;
+            let count = number(line, count).map_err(line_error)?;
+            add(
+                (counts.lemmas)
+                    .entry((form.to_owned(), pos.to_owned(), lemma.to_owned()))
+                    .or_default(),
+                count,
+            )
+            .map_err(line_error)?;
+            add(
+                (counts.tags)
+                    .entry((pos.to_owned(), feats.to_owned()))
+                    .or_default(),
+                count,
+            )
+            .map_err(line_error)?;
             counts.analyses.insert(
                 (
                     form.to_owned(),
@@ -91,19 +114,23 @@ impl Counts {
                 count,
             );
         }
-        for line in parts.lines() {
+        for (at, line) in parts.lines().enumerate() {
+            let line_error = |err| at_line("pos.tsv", at, err);
             let &[form, pos, count] = line.split('\t').collect::<Vec<_>>().as_slice() else {
-                return Err(Error::Build(format!("wrong line of parts {line:?}")));
+                return Err(line_error(Error::Build(format!("wrong line {line:?}"))));
             };
-            let count = number(line, count)?;
+            let count = number(line, count).map_err(line_error)?;
             counts
                 .parts
                 .insert((form.to_owned(), pos.to_owned()), count);
-            *counts
-                .suffixes
-                .entry((suffix(form).to_owned(), pos.to_owned()))
-                .or_default() += count;
-            *counts.forms.entry(form.to_owned()).or_default() += count;
+            add(
+                (counts.suffixes)
+                    .entry((suffix(form).to_owned(), pos.to_owned()))
+                    .or_default(),
+                count,
+            )
+            .map_err(line_error)?;
+            add(counts.forms.entry(form.to_owned()).or_default(), count).map_err(line_error)?;
         }
         Ok(counts)
     }
@@ -246,6 +273,22 @@ mod tests {
                          casas\tNOUN\t10\n\
                          mesas\tNOUN\t10\n\
                          pasas\tVERB\t2\n";
+
+    #[test]
+    fn errors_name_the_line_and_counts_do_not_overflow() {
+        let error = Counts::read("a\tNOUN\ta\t_\tmany\n", "").err().unwrap();
+        assert!(error.to_string().contains("analyses.tsv:1:"), "{error}");
+        let error = Counts::read("", "a\tNOUN\t1\nb\n").err().unwrap();
+        assert!(error.to_string().contains("pos.tsv:2:"), "{error}");
+        let big = "a\tNOUN\ta\t_\t4294967295\na\tNOUN\ta\tGender=Fem\t1\n";
+        let error = Counts::read(big, "").err().unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("analyses.tsv:2: the counts add up"),
+            "{error}"
+        );
+    }
 
     fn counts() -> Counts {
         Counts::read(ANALYSES, PARTS).unwrap()
