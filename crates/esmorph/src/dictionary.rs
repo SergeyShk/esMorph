@@ -29,8 +29,9 @@ pub enum Source {
     Dictionary,
     /// The word form is a verb of the dictionary with enclitic pronouns
     Clitics,
-    /// The token is not in the dictionary, a rule gives its analysis: punctuation, a symbol, a
-    /// number, a Roman numeral, a name; a name of a word in capitals that the dictionary has
+    /// A rule gives the analysis: of a token that is not in the dictionary (punctuation, a symbol,
+    /// a number, a Roman numeral, a name) or the name and the Roman numeral of a word with a
+    /// capital letter that the dictionary has (`Estados`, `ETA`, `X`)
     Rule,
     /// A lowercase word that is not in the dictionary, guessed: by its last part after a hyphen,
     /// by the word without a known prefix or by the words of the dictionary with its ending
@@ -344,6 +345,8 @@ impl Dictionary {
         if (!exact || homonym) && word.chars().any(char::is_alphabetic) {
             let mut analyses = self.with_clitics(&word);
             if !analyses.is_empty() {
+                // A word the dictionary has is a name as rarely as any other: `Vete`, `Trátase`
+                let known = !found.is_empty();
                 if homonym {
                     for analysis in &mut analyses {
                         analysis.prob *= clitics::HOMONYM_SHARE;
@@ -352,9 +355,14 @@ impl Dictionary {
                         prob: analysis.prob * (1.0 - clitics::HOMONYM_SHARE),
                         ..analysis
                     }));
+                    analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
                 }
                 if word.chars().any(char::is_uppercase) {
-                    let share = self.clitics_name(&word, &analyses);
+                    let share = if known {
+                        CAPS_NAME[2]
+                    } else {
+                        self.clitics_name(&word, &analyses)
+                    };
                     self.add_rules(&word, &[(Rule::Name, share)], &mut analyses);
                 }
                 return analyses;
@@ -402,18 +410,18 @@ impl Dictionary {
     }
 
     /// Share of a name among the analyses of a token with a capital letter that splits as a verb
-    /// with clitics: an imperative without an accent and a finite form mostly are names
-    /// (`Mandela`, `Portela`, `Espínola`), an infinitive, a gerund and an imperative with an accent
-    /// mostly are verbs (`Hacerlo`, `Déjame`)
+    /// with clitics: an imperative without an accent mostly is a name (`Mandela`, `Portela`), an
+    /// infinitive, a gerund, an imperative with an accent and a finite form mostly are verbs
+    /// (`Hacerlo`, `Déjame`, `Levantóse`)
     fn clitics_name(&self, token: &str, analyses: &[Analysis]) -> f64 {
         let host = analyses
             .first()
             .and_then(|analysis| self.hosts.get(usize::from(analysis.ud)));
-        let accented = token.chars().any(|c| clitics::without_acute(c) != c);
+        let accented =
+            (token.chars().flat_map(char::to_lowercase)).any(|c| clitics::without_acute(c) != c);
         match host {
-            Some(Host::NonFinite) => CLITICS_NAME[1],
-            Some(Host::Imperative) if accented => CLITICS_NAME[1],
-            _ => CLITICS_NAME[0],
+            Some(Host::Imperative) if !accented => CLITICS_NAME[0],
+            _ => CLITICS_NAME[1],
         }
     }
 
@@ -629,10 +637,8 @@ impl Dictionary {
                 let feat = |name| self.ud.get(analysis.ud).and_then(|tag| tag.feat(name));
                 if first == "os" {
                     // `os` follows only the imperative of `vosotros`, which loses its `d`:
-                    // `cuéntenos` is `cuente` + `nos`, `distribuídos` is no imperative at all,
-                    // but `idos` keeps it
-                    analysis.word.ends_with('d')
-                        && (!split.host.ends_with('d') || split.host == "id")
+                    // `cuéntenos` is `cuente` + `nos`, `distribuídos` is no imperative at all
+                    analysis.word.ends_with('d') && !split.host.ends_with('d')
                 } else if first == "te" {
                     // `te` follows the imperative of `tú`: `siéntate` is of `sentar`, not `sentir`
                     feat("Person") == Some("2") && feat("Number") == Some("Sing")
@@ -1477,7 +1483,6 @@ pub(crate) mod tests {
         let plural = "Mood=Imp|Number=Plur|Person=3|VerbForm=Fin";
         builder.add_form("aliar", "VERB", "alíen", plural).unwrap();
         let vosotros = "Mood=Imp|Number=Plur|Person=2|VerbForm=Fin";
-        builder.add_form("ir", "VERB", "id", vosotros).unwrap();
         (builder.add_form("distribuir", "VERB", "distribuid", vosotros)).unwrap();
         let participle = "Gender=Masc|Number=Plur|Tense=Past|VerbForm=Part";
         (builder.add_form("distribuir", "VERB", "distribuidos", participle)).unwrap();
@@ -1529,7 +1534,8 @@ pub(crate) mod tests {
                 [("dar".into(), Source::Clitics), (word.into(), Source::Rule)]
             );
         }
-        assert_eq!(dictionary.analyze("Díjole")[0].source, Source::Rule);
+        assert_eq!(dictionary.analyze("Díjole")[0].source, Source::Clitics);
+        assert_eq!(dictionary.analyze("DÁMELO")[0].source, Source::Clitics);
     }
 
     #[test]
@@ -1566,12 +1572,16 @@ pub(crate) mod tests {
         let analyses = dictionary.analyze("verse");
         assert_eq!(analyses[0].words, ["ver", "se"]);
         assert_eq!(analyses[1].lemma, "versar");
+        assert!(analyses.windows(2).all(|pair| pair[0].prob >= pair[1].prob));
+        // A word the dictionary has is no more a name for its clitics
+        let capital = dictionary.analyze("Verse");
+        assert_eq!(capital[0].words, ["ver", "se"]);
+        assert!(capital.windows(2).all(|pair| pair[0].prob >= pair[1].prob));
         let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
         assert!((total - 1.0).abs() < 1e-9, "{total}");
         // Without an accent, a host as written goes first
         assert_eq!(dictionary.analyze("alientelo")[0].lemma, "alentar");
-        // The `d` of the imperative stays before `os` only in `idos`
-        assert_eq!(dictionary.analyze("idos")[0].words, ["id", "os"]);
+        // The `d` of the imperative does not stay before `os`
         let analyses = dictionary.analyze("distribuídos");
         assert!(analyses.iter().all(|analysis| analysis.words.is_empty()));
         assert_eq!(analyses[0].lemma, "distribuir");
