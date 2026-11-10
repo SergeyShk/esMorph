@@ -1,6 +1,17 @@
 # Analyzer
 
-`Analyzer` finds the analyses of a word form in a dictionary built from Wiktionary: the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features.
+``` {.python .signature}
+Analyzer(path=None)
+```
+
+Morphological analyzer: for a word form it finds all [analyses](analysis.md) in a dictionary built from Wiktionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and orders them by probability. A token that the dictionary does not have gets the analyses of [rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). The dictionary is loaded when the analyzer is created.
+
+Exceptions:
+
+- `FileNotFoundError` - the dictionary file does not exist;
+- `OSError` - the dictionary file cannot be read: no access, the path points to a directory;
+- `ValueError` - the file is not an esMorph dictionary or is damaged;
+- `TypeError` - a path that is neither a string nor `PathLike`.
 
 === "Code"
 
@@ -8,124 +19,188 @@
     from esmorph import Analyzer
 
     morph = Analyzer()
-    analysis = morph.analyze("camiones")[0]
-    analysis.word, analysis.lemma, analysis.pos, analysis.feats
+    morph.analyze("hablamos")[0]
     ```
 
 === "Result"
 
     ```
-    ('camiones', 'camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
+    Analysis(word='hablamos', lemma='hablar', pos='VERB', feats={'Mood': 'Ind', 'Number': 'Plur', 'Person': '1', 'Tense': 'Pres', 'VerbForm': 'Fin'}, prob=0.978261, words=('hablamos',), source='dictionary')
     ```
 
-## Order of analyses { #order }
+## Parameters
 
-Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features.
+| Parameter | Type | Default | Description |
+| :-------- | :--- | :------ | :---------- |
+| `path` | `str` / `PathLike` | `None` | Path to the dictionary file; by default, the dictionary of the package |
+
+The object keeps the dictionary path in `path` of type `Path`, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, so dictionaries from untrusted sources should not be loaded.
+
+## Methods
+
+<div class="metric-card" markdown>
+
+### Analyses of a word form { #analyze }
+
+`analyze` · `list[Analysis]`
+{ .metric-meta }
+
+``` {.python .signature}
+analyze(word)
+```
+
+Analyses of the word form, the most probable first; the probabilities sum to 1. Case does not matter for finding the word in the dictionary, though a token with a capital letter may also be a name, and a word absent as written is looked for without its accents and with a lost diaeresis ([spelling](analysis.md#spelling)). A verb with enclitic pronouns is analyzed as its verb ([clitics](analysis.md#clitics)), a token that the dictionary does not have - a sign, a number, a name - [by rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). A token that nothing analyzes - with a space or a control character, a lowercase word without a sample such as `qzxw` - has no analyses.
+
+| Parameter | Type | Default | Description |
+| :-------- | :--- | :------ | :---------- |
+| `word` | `str` | - | Word form |
+
+Exceptions:
+
+- `TypeError` - a word that is not a string.
 
 === "Code"
 
     ``` python
-    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("casa")][:2]
+    [(a.lemma, a.pos, round(a.prob, 3)) for a in morph.analyze("casa")]
+    [(a.lemma, a.source) for a in morph.analyze("zumbeábamos")][:1]
     ```
 
 === "Result"
 
     ```
-    [('casa', 'NOUN', 0.99), ('casar', 'VERB', 0.01)]
+    [('casa', 'NOUN', 0.986), ('casar', 'VERB', 0.013), ('casar', 'VERB', 0.0)]
+    [('zumbear', 'guess')]
     ```
 
-Lemmas and features follow the conventions of these treebanks: `la` is a form of `el`, `se` of `él`, `muy` of `mucho`, and verbs have no `-se` in the lemma. An auxiliary verb has both `AUX` and `VERB` analyses, and a participle is also an adjective.
+</div>
 
-## Words with clitics { #clitics }
+<div class="metric-card" markdown>
 
-A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. `del` and `al` also have their two words. A word of the dictionary is not split: `comete` is a form of `cometer`.
+### Analyses of a list of word forms { #analyze_many }
+
+`analyze_many` · `list[list[Analysis]]`
+{ .metric-meta }
+
+``` {.python .signature}
+analyze_many(words)
+```
+
+Analyses of every word form, as with [`analyze`](#analyze).
+
+| Parameter | Type | Default | Description |
+| :-------- | :--- | :------ | :---------- |
+| `words` | `Iterable[str]` | - | Word forms: a list, a tuple, a generator |
+
+Exceptions:
+
+- `TypeError` - a string instead of a collection of words, a word that is not a string.
 
 === "Code"
 
     ``` python
-    [(a.lemma, a.pos, a.words, a.source) for a in morph.analyze("dámelo")]
+    [len(analyses) for analyses in morph.analyze_many(["el", "gato", "come"])]
     ```
 
 === "Result"
 
     ```
-    [('dar', 'VERB', ('da', 'me', 'lo'), 'clitics')]
+    [2, 1, 2]
     ```
 
-## Spelling { #spelling }
+</div>
 
-Case does not matter. A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary; for a verb with clitics `word` is the token as written, in lower case.
+<div class="metric-card" markdown>
+
+### Lemmatization { #lemmatize }
+
+`lemmatize` · `list[str]`
+{ .metric-meta }
+
+``` {.python .signature}
+lemmatize(words)
+```
+
+Lemmas of the most probable analyses of the word forms; a token without analyses comes back in lower case. Equal lemmas are one string object, so the lemmas of a large text take little memory; the method releases the GIL.
+
+| Parameter | Type | Default | Description |
+| :-------- | :--- | :------ | :---------- |
+| `words` | `Iterable[str]` | - | Word forms: a list, a tuple, a generator |
+
+Exceptions:
+
+- `TypeError` - a string instead of a collection of words, a word that is not a string.
 
 === "Code"
 
     ``` python
-    [morph.analyze(word)[0].word for word in ["CAMIÓN", "camion", "pinguino"]]
+    morph.lemmatize(["Los", "niños", "cantaban", "canciones"])
     ```
 
 === "Result"
 
     ```
-    ['camión', 'camión', 'pingüino']
+    ['el', 'niño', 'cantar', 'canción']
     ```
 
-## Tokens out of the dictionary { #rules }
+</div>
 
-A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
+<div class="metric-card" markdown>
 
-- a sign of punctuation is `PUNCT` with its `PunctType`, and `PunctSide` for paired signs; a symbol such as `%`, `€` or `²` is `SYM`;
-- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too; the lemma drops the periods between thousands: `10.000` is `10000`;
-- a Roman numeral is `NUM` with `NumForm=Roman`, less often a name;
-- a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`.
+### Word form in the dictionary { #is_known }
 
-A word in capitals that the dictionary knows may be a name too, with its share: a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a word of a closed class are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral in `I` such as `VI` or `XI` is a numeral first. A token with a capital letter that splits as a verb with clitics is mostly a name too: `Mandela` is first of all `PROPN`. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
+`is_known` · `bool`
+{ .metric-meta }
+
+``` {.python .signature}
+is_known(word)
+```
+
+Whether the dictionary has the word form, as written or as a verb of the dictionary with clitics; as with `analyze`, case and lost accents do not matter. Tokens analyzed by rules and guessed words are not in the dictionary.
+
+| Parameter | Type | Default | Description |
+| :-------- | :--- | :------ | :---------- |
+| `word` | `str` | - | Word form |
+
+Exceptions:
+
+- `TypeError` - a word that is not a string.
 
 === "Code"
 
     ``` python
-    [(a.lemma, a.pos, a.feats, a.source) for a in morph.analyze("10.000")]
-    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("ETA")]
+    morph.is_known("Gatos"), morph.is_known("zumbeábamos")
     ```
 
 === "Result"
 
     ```
-    [('10000', 'NUM', {'NumForm': 'Digit', 'NumType': 'Card'}, 'rule')]
-    [('ETA', 'PROPN', 0.82), ('eta', 'NOUN', 0.18)]
+    (True, False)
     ```
 
-## Unknown words { #guess }
+</div>
 
-A lowercase word that neither the dictionary nor the rules know gets guessed analyses, with `source` equal to `"guess"`:
+## Dictionary { #dictionary }
 
-- a word with a hyphen is analyzed by its last part of an open class: `palestino-israelíes` is a form of `palestino-israelí`;
-- a word with a known prefix is analyzed by the dictionary word without it: `supergallos` is a form of `supergallo`, `sobreandan` of `sobreandar`;
-- a verb with clitics is analyzed by its guessed gerund, or by its guessed infinitive before `se` or a clitic of the third person: `autogenerarse` is `autogenerar` + `se`;
-- any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often the treebanks have their features.
+The dictionary of the package is built from the English [Wiktionary](https://en.wiktionary.org) of October 2026: 676 thousand word forms of 117 thousand lexemes. Determiners, pronouns, prepositions, conjunctions and numerals in words come from a table after the treebank [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), whose conventions the lemmas and features follow ([Word analysis](analysis.md#ud)). The probabilities of analyses come from the training parts of UD Spanish AnCora and [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD); word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) license.
 
-A guessed word has its forms, guessed too: `forms()` and `inflect()` work as for a word of the dictionary. `is_known` stays false for it.
+## Threads and processes { #parallel }
+
+One analyzer can be used from several threads. `lemmatize` releases the GIL, so threads speed it up; `analyze_many` creates the analyses with the GIL, so with it threads speed it up little, and on the free-threaded Python 3.14t, which has a wheel of its own, they do. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. A pickle keeps the path of the dictionary file (none for the dictionary of the package): unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, and an analysis whose dictionary file is gone takes the dictionary of the package. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
 
 === "Code"
 
     ``` python
-    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("zumbeábamos")]
-    morph.analyze("zumbeábamos")[0].inflect(Tense="Pres", Person="1", Number="Sing")
+    from concurrent.futures import ThreadPoolExecutor
+
+    texts = [["los", "niños", "cantaban"], ["el", "gato", "come"]]
+    with ThreadPoolExecutor(2) as pool:
+        lemmas = list(pool.map(morph.lemmatize, texts))
+    lemmas
     ```
 
 === "Result"
 
     ```
-    [('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
-    'zumbeo'
+    [['el', 'niño', 'cantar'], ['el', 'gato', 'comer']]
     ```
-
-## Methods { #methods }
-
-| Method | Result |
-| :-- | :-- |
-| `Analyzer(path=None)` | An analyzer with the dictionary of the package or from a file |
-| `analyze(word)` | The list of `Analysis`; empty for a token that nothing analyzes, as `qzxw` |
-| `analyze_many(words)` | The same for a collection of words, without the GIL |
-| `lemmatize(words)` | The lemma of the first analysis of every word; a word without analyses in lower case, without the GIL |
-| `is_known(word)` | Whether the dictionary has the word, as written or as a verb with clitics |
-
-`Analysis` has the fields `word`, `lemma`, `pos`, `feats`, `prob`, `words` and `source` and the methods `forms()` and `inflect()` - see [Inflection](inflection.md). It is immutable and hashable and is compared without the probability. An analyzer and an analysis can be pickled: unpickling takes the analyzer of the same dictionary that the process already has, so analyses unpickled one by one share it, and an analysis whose dictionary file is gone takes the dictionary of the package.

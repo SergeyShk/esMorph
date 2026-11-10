@@ -1,6 +1,6 @@
 # Inflection
 
-Every analysis knows its lexeme - the forms of the word with the same lemma and part of speech. `forms()` gives all of them, and `inflect()` gives the form with the given [Universal Dependencies](https://universaldependencies.org/) features. The lexeme follows the [conventions](analyzer.md#order) of the analyses: the auxiliary `haber` and the verb `haber` are two lexemes, and so are a participle and the adjective it makes.
+Every analysis knows its lexeme - the forms of the word with the same lemma and part of speech. `forms()` gives all of them, and `inflect()` gives the form with the given [Universal Dependencies](https://universaldependencies.org/) features. The lexeme follows the [conventions](analysis.md#ud) of the analyses: the auxiliary `haber` and the verb `haber` are two lexemes, and so are a participle and the adjective it makes.
 
 ## Forms of the lexeme { #forms }
 
@@ -56,7 +56,7 @@ Several forms may have the same features. A variant comes only from a variant: `
     [('AUX', 'ha'), ('VERB', 'hay')]
     ```
 
-A form of a noun, an adjective, a determiner or a pronoun without a gender or a number agrees with any: `grande` in the feminine plural is `grandes`. A verb with [clitics](analyzer.md#clitics) inflects as its verb, and its forms have no clitics: `dámelo` in the plural is `dad`.
+A form of a noun, an adjective, a determiner or a pronoun without a gender or a number agrees with any: `grande` in the feminine plural is `grandes`. A verb with [clitics](analysis.md#clitics) inflects as its verb, and its forms have no clitics: `dámelo` in the plural is `dad`.
 
 === "Code"
 

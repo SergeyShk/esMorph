@@ -7,8 +7,10 @@ nav:
     - Home:
       - About: index.md
       - Installation: installation.md
+      - Exceptions: exceptions.md
       - Authors: authors.md
     - Analyzer: analyzer.md
+    - Word analysis: analysis.md
     - Inflection: inflection.md
 
 theme:
@@ -66,7 +68,9 @@ plugins:
             About: Acerca de
             Installation: Instalación
             Authors: Autores
+            Exceptions: Excepciones
             Analyzer: Analizador
+            Word analysis: Análisis de palabras
             Inflection: Flexión
 
 extra:

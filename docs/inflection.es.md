@@ -1,6 +1,6 @@
 # Flexión
 
-Cada análisis conoce su lexema: las formas de la palabra con el mismo lema y la misma categoría gramatical. `forms()` las da todas, e `inflect()` da la forma con los rasgos de [Universal Dependencies](https://universaldependencies.org/) indicados. El lexema sigue las [convenciones](analyzer.md#order) de los análisis: el auxiliar `haber` y el verbo `haber` son dos lexemas, igual que un participio y el adjetivo que forma.
+Cada análisis conoce su lexema: las formas de la palabra con el mismo lema y la misma categoría gramatical. `forms()` las da todas, e `inflect()` da la forma con los rasgos de [Universal Dependencies](https://universaldependencies.org/) indicados. El lexema sigue las [convenciones](analysis.md#ud) de los análisis: el auxiliar `haber` y el verbo `haber` son dos lexemas, igual que un participio y el adjetivo que forma.
 
 ## Formas del lexema { #forms }
 
@@ -56,7 +56,7 @@ Varias formas pueden tener los mismos rasgos. Una variante solo sale de una vari
     [('AUX', 'ha'), ('VERB', 'hay')]
     ```
 
-Una forma de un sustantivo, un adjetivo, un determinante o un pronombre sin género o sin número concuerda con cualquiera: `grande` en femenino plural es `grandes`. Un verbo con [clíticos](analyzer.md#clitics) se flexiona como su verbo, y sus formas no llevan clíticos: `dámelo` en plural es `dad`.
+Una forma de un sustantivo, un adjetivo, un determinante o un pronombre sin género o sin número concuerda con cualquiera: `grande` en femenino plural es `grandes`. Un verbo con [clíticos](analysis.md#clitics) se flexiona como su verbo, y sus formas no llevan clíticos: `dámelo` en plural es `dad`.
 
 === "Código"
 

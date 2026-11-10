@@ -1,0 +1,147 @@
+# Word analysis
+
+An analysis is an `Analysis` object returned by the `analyze` and `analyze_many` methods of the [analyzer](analyzer.md): the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features, the probability, the words of the token and the source of the analysis. Analyses are immutable; they can be compared (the probability takes no part in the comparison, so an analysis equals its form from `forms()`), put into sets and pickled. The forms of a word are given by the `forms` and `inflect` methods - see [Inflection](inflection.md).
+
+=== "Code"
+
+    ``` python
+    from esmorph import Analyzer
+
+    morph = Analyzer()
+    analysis = morph.analyze("cantaban")[0]
+    analysis.word, analysis.lemma, analysis.pos, analysis.feats, analysis.words, analysis.source
+    ```
+
+=== "Result"
+
+    ```
+    ('cantaban',
+     'cantar',
+     'VERB',
+     {'Mood': 'Ind', 'Number': 'Plur', 'Person': '3', 'Tense': 'Imp', 'VerbForm': 'Fin'},
+     ('cantaban',),
+     'dictionary')
+    ```
+
+## Attributes { #attributes }
+
+| Attribute | Type | Description |
+| :-------- | :--- | :---------- |
+| `word` | `str` | The word form as the dictionary spells it, with its accents; a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written |
+| `lemma` | `str` | The lemma |
+| `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
+| `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
+| `prob` | `float` | Share of the analysis among the analyses of the word; it sums to 1 over all of them |
+| `words` | `tuple[str, ...]` | Words of the token: a verb and its clitics, the words of `del` and `al`, or the word itself; the analysis describes the first of them |
+| `source` | `str` | Where the analysis comes from: `"dictionary"` - the word form is in the dictionary, `"clitics"` - a verb of the dictionary with [clitics](#clitics), `"rule"` - an [analysis by rule](#rules), `"guess"` - a [guessed analysis](#guess) of an unknown word |
+
+## Parts of speech and features { #ud }
+
+Parts of speech, features and lemmas follow the [Universal Dependencies](https://universaldependencies.org/u/pos/) guidelines and, where they are silent, the conventions of the largest Spanish treebank, [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), so the output can be compared with spaCy, Stanza and other UD tools:
+
+- determiners, pronouns, prepositions and conjunctions have the lemmas and features of AnCora: `la` is the article `el` (`Definite=Def`, `PronType=Art`) or the pronoun `él`, `se` is `él` with `Reflex=Yes`, `su` is `DET` with `Poss=Yes`, `muy` is a form of `mucho`;
+- `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` and `saber` have both `AUX` and `VERB` analyses; `hay` is first of all the verb `haber`;
+- a participle is a verb with the infinitive as the lemma (`VerbForm=Part`, `Tense=Past`) and an adjective with the masculine singular as the lemma (`VerbForm=Part` without `Tense`);
+- verbs have no `-se` in the lemma: `quejarse` is `quejar` with the clitic `se`;
+- the conditional and the imperative have no `Tense`, and a proper name has no features;
+- an adjective in `-ísimo` is its own lemma with `Degree=Abs`.
+
+If the part of speech of a word depends on context, the word has both analyses: `que` is `PRON` and `SCONJ`, `la` is `DET` and `PRON`, a participle is `VERB` and `ADJ`. Features: gender, number, person, tense, mood, verb form, degree, negation (`Polarity=Neg` of `no`), definiteness (`Definite`), the type of a pronoun or a determiner (`PronType`), possessiveness (`Poss`), reflexivity (`Reflex`), the case of personal pronouns (`Case`) and whether they follow a preposition (`PrepCase`), politeness (`Polite=Form` of `usted`), the type of a numeral (`NumType`) and how it is written (`NumForm`), and the kind of a sign of punctuation (`PunctType`, `PunctSide`).
+
+## Order of analyses { #order }
+
+Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features.
+
+=== "Code"
+
+    ``` python
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("casa")][:2]
+    ```
+
+=== "Result"
+
+    ```
+    [('casa', 'NOUN', 0.99), ('casar', 'VERB', 0.01)]
+    ```
+
+## Words with clitics { #clitics }
+
+A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. `del` and `al` also have their two words. A word of the dictionary is not split: `comete` is a form of `cometer`.
+
+=== "Code"
+
+    ``` python
+    [(a.lemma, a.pos, a.words, a.source) for a in morph.analyze("dámelo")]
+    ```
+
+=== "Result"
+
+    ```
+    [('dar', 'VERB', ('da', 'me', 'lo'), 'clitics')]
+    ```
+
+## Spelling { #spelling }
+
+Case does not matter for finding a word in the dictionary, though a token with a capital letter may also be a [name](#rules). A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary; for a verb with clitics `word` is the token as written, in lower case.
+
+=== "Code"
+
+    ``` python
+    [morph.analyze(word)[0].word for word in ["CAMIÓN", "camion", "pinguino"]]
+    ```
+
+=== "Result"
+
+    ```
+    ['camión', 'camión', 'pingüino']
+    ```
+
+## Tokens out of the dictionary { #rules }
+
+A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
+
+- a sign of punctuation is `PUNCT` with its `PunctType`, and `PunctSide` for brackets and question and exclamation marks; a symbol such as `%`, `€` or `²` is `SYM`;
+- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too; the lemma drops the periods between thousands: `10.000` is `10000`;
+- a Roman numeral is `NUM` with `NumForm=Roman`, less often a name;
+- a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`.
+
+A word in capitals that the dictionary knows may be a name too, with its share: a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral in `I` such as `VI` or `XI` is a numeral first. A token with a capital letter that splits as a verb with clitics is mostly a name too: `Mandela` is first of all `PROPN`. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
+
+=== "Code"
+
+    ``` python
+    [(a.lemma, a.pos, a.feats, a.source) for a in morph.analyze("10.000")]
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("ETA")]
+    ```
+
+=== "Result"
+
+    ```
+    [('10000', 'NUM', {'NumForm': 'Digit', 'NumType': 'Card'}, 'rule')]
+    [('ETA', 'PROPN', 0.82), ('eta', 'NOUN', 0.18)]
+    ```
+
+## Unknown words { #guess }
+
+A lowercase word that neither the dictionary nor the rules know gets guessed analyses, with `source` equal to `"guess"`:
+
+- a word with a hyphen is analyzed by its last part of an open class: `palestino-israelíes` is a form of `palestino-israelí`;
+- a word with a known prefix is analyzed by the dictionary word without it: `supergallos` is a form of `supergallo`, `sobreandan` of `sobreandar`;
+- a verb with clitics is analyzed by its guessed gerund, or by its guessed infinitive before `se` or a clitic of the third person: `autogenerarse` is `autogenerar` + `se`;
+- any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often the treebanks have their features.
+
+A guessed word has its forms, guessed too: `forms()` and `inflect()` work as for a word of the dictionary. `is_known` stays false for it.
+
+=== "Code"
+
+    ``` python
+    [(a.lemma, a.pos, round(a.prob, 2)) for a in morph.analyze("zumbeábamos")]
+    morph.analyze("zumbeábamos")[0].inflect(Tense="Pres", Person="1", Number="Sing")
+    ```
+
+=== "Result"
+
+    ```
+    [('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
+    'zumbeo'
+    ```
