@@ -60,6 +60,7 @@ def _analysis(
     words: list[str],
     source: str,
     path: str | PathLike[str] | None = None,
+    entry: int | None = None,
 ) -> Analysis:
     """Restores an analysis from pickle"""
 

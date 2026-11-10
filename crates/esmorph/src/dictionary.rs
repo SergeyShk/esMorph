@@ -312,6 +312,12 @@ impl Dictionary {
         &self.meta
     }
 
+    /// Checksum of the dictionary file: dictionaries with one checksum are one dictionary, so the
+    /// numbers of the tags and the forms of their analyses agree
+    pub fn checksum(&self) -> u32 {
+        self.layout.checksum
+    }
+
     /// Number of word forms in the dictionary
     pub fn len(&self) -> usize {
         self.word_count

@@ -18,6 +18,8 @@ use pyo3::types::{
 /// How many words `analyze_many` and `lemmatize` read and analyze at a time without the GIL: the
 /// input is not copied whole, and Ctrl+C is checked between the chunks
 const CHUNK: usize = 8192;
+/// `errno` of an invalid argument, the same on POSIX and in the C runtime of Windows
+const EINVAL: i32 = 22;
 
 /// The analyzer of the dictionary of the package that pickle restores: one for the process
 static PACKAGE: PyOnceLock<Py<Analyzer>> = PyOnceLock::new();
@@ -144,7 +146,12 @@ impl Analysis {
                 }
                 (dictionary.analyze(&self.lemma).into_iter())
                     .flat_map(|analysis| dictionary.forms(&analysis))
-                    .find(|form| form.word == self.word && form.ud == ud && form.source == source)
+                    .find(|form| {
+                        form.word == self.word
+                            && form.ud == ud
+                            && form.source == source
+                            && form.lemma.to_lowercase() == lemma
+                    })
                     .and_then(|form| form.entry)
             })
     }
@@ -347,9 +354,24 @@ impl Analysis {
                 self.words.clone(),
                 self.source.to_owned(),
                 Analyzer::saved_path(self.analyzer.bind(py))?,
+                (self.entry.get())
+                    .map(|&entry| saved_entry(self.analyzer.get().dictionary.checksum(), entry)),
             ),
         ))
     }
+}
+
+/// The form of the table of an analysis in pickle, if known: the checksum of the dictionary in
+/// the high 32 bits, the table and the form in the low ones, all ones for no table
+type SavedEntry = Option<u64>;
+
+const NO_ENTRY: u64 = 0xFFFF_FFFF;
+
+fn saved_entry(checksum: u32, entry: Option<esmorph::Entry>) -> u64 {
+    let low = entry.map_or(NO_ENTRY, |entry| {
+        u64::from(entry.table) << 16 | u64::from(entry.form)
+    });
+    u64::from(checksum) << 32 | low
 }
 
 /// The path of a dictionary that pickle saves: `None` for the dictionary of the package
@@ -365,12 +387,14 @@ type AnalysisState = (
     Vec<String>,
     String,
     SavedPath,
+    SavedEntry,
 );
 
 /// Restores an analysis from pickle with the analyzer of `path` (`None` for the dictionary of the
-/// package); if that file cannot be read, with the dictionary of the package
+/// package); if that file cannot be read, with the dictionary of the package. The form of its table
+/// is taken from `entry` if that is for the same dictionary, otherwise found on first use
 #[pyfunction]
-#[pyo3(signature = (word, lemma, pos, feats, prob, words, source, path=None))]
+#[pyo3(signature = (word, lemma, pos, feats, prob, words, source, path=None, entry=None))]
 #[allow(clippy::too_many_arguments)]
 fn _analysis(
     py: Python<'_>,
@@ -382,6 +406,7 @@ fn _analysis(
     words: Vec<String>,
     source: &str,
     path: Option<PathBuf>,
+    entry: SavedEntry,
 ) -> PyResult<Py<Analysis>> {
     let Some(source) = self::source(source).map(esmorph::Source::as_str) else {
         return Err(PyValueError::new_err(format!(
@@ -401,11 +426,18 @@ fn _analysis(
         || Arc::new(tag),
         |ud| Arc::clone(&this.tags[usize::from(ud)]),
     );
-    // The form of its table is found on first use: unpickling a list of analyses stays cheap
-    let entry = if ud.is_some() {
-        OnceLock::new()
-    } else {
-        OnceLock::from(None)
+    // The form of its table, unless pickle has it for this dictionary, is found on first use:
+    // unpickling a list of analyses stays cheap
+    let entry = match entry {
+        _ if ud.is_none() => OnceLock::from(None),
+        Some(saved) if saved >> 32 == u64::from(this.dictionary.checksum()) => {
+            let low = saved & NO_ENTRY;
+            OnceLock::from((low != NO_ENTRY).then_some(esmorph::Entry {
+                table: (low >> 16) as u16,
+                form: low as u16,
+            }))
+        }
+        _ => OnceLock::new(),
     };
     untracked(
         py,
@@ -511,9 +543,10 @@ impl Analyzer {
         }
         // Opening a pipe or a device would wait for its writer
         if std::fs::metadata(&path).is_ok_and(|meta| !meta.is_file() && !meta.is_dir()) {
-            return Err(PyOSError::new_err(format!(
-                "The path to the dictionary is not a file: {}",
-                path.display()
+            return Err(PyOSError::new_err((
+                EINVAL,
+                "The path to the dictionary is not a file",
+                path.display().to_string(),
             )));
         }
         let dictionary = py
@@ -872,7 +905,8 @@ fn default_path(py: Python<'_>) -> PyResult<PathBuf> {
 
 /// Words of an iterable, read in chunks: the input is not copied whole
 struct Words<'py> {
-    iterator: Bound<'py, PyIterator>,
+    /// Fused: an iterator that has ended is not asked again, as `sys.stdin` would wait for more
+    iterator: std::iter::Fuse<Bound<'py, PyIterator>>,
     /// Number of the words read
     read: usize,
     /// The words of the chunk
@@ -902,7 +936,7 @@ impl<'py> Words<'py> {
             }
         })?;
         Ok(Words {
-            iterator,
+            iterator: iterator.fuse(),
             read: 0,
             texts: Vec::with_capacity(CHUNK),
             originals: Vec::new(),
@@ -935,9 +969,10 @@ impl<'py> Words<'py> {
 
     /// The word of the chunk with lone surrogates as Python has it
     fn original(&self, number: usize) -> Option<&Bound<'py, PyString>> {
-        (self.originals.iter())
-            .find(|(known, _)| *known == number)
-            .map(|(_, word)| word)
+        let at = (self.originals)
+            .binary_search_by_key(&number, |&(known, _)| known)
+            .ok()?;
+        Some(&self.originals[at].1)
     }
 }
 

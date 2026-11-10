@@ -648,6 +648,35 @@ def test_words_must_be_strings(morph, method):
         getattr(morph, method)(words())
 
 
+@pytest.mark.parametrize("method", ["analyze_many", "lemmatize"])
+def test_an_ended_input_is_not_asked_again(morph, method):
+    class Words:
+        calls = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            self.calls += 1
+            if self.calls > 3:
+                raise StopIteration
+            return "casa"
+
+    words = Words()
+    assert len(getattr(morph, method)(words)) == 3
+    assert words.calls == 4
+
+
+def test_pickled_analyses_keep_their_tables(morph):
+    forms = morph.analyze("zumbeábamos")[0].forms()
+    assert all(pickle.loads(pickle.dumps(form)).forms() == forms for form in forms)
+    # A pickle without the table, or with the table of another dictionary, finds it on first use
+    state = forms[0].__reduce__()[1]
+    other = state[8] ^ (1 << 32)
+    for restored in [state[:8], (*state[:8], other)]:
+        assert esmorph._esmorph._analysis(*restored).forms() == forms
+
+
 def test_analyses_are_not_tracked_by_the_garbage_collector(morph):
     analyses = [
         *morph.analyze("casa"),
@@ -760,8 +789,9 @@ def test_dictionary_paths(morph, tmp_path, monkeypatch):
         Analyzer("es\0.dict")
     if hasattr(os, "mkfifo"):
         os.mkfifo(tmp_path / "pipe")
-        with pytest.raises(OSError, match="not a file"):
+        with pytest.raises(OSError, match="not a file") as error:
             Analyzer(tmp_path / "pipe")
+        assert (error.value.errno, error.value.filename) == (errno.EINVAL, str(tmp_path / "pipe"))
 
 
 def test_load_errors(morph, tmp_path):
