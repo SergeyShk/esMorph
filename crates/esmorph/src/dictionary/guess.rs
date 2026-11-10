@@ -29,6 +29,14 @@ const MIN_GUESSED: usize = 3;
 /// A longer word is not guessed: its ending tells nothing, and copies of it are costly
 const MAX_GUESSED: usize = 64;
 
+/// The shortest word after a prefix of three letters: shorter rests are mostly other words,
+/// `destos` is no `des` + `tos`, `presona` no `pre` + `sona`
+const MIN_AFTER_SHORT_PREFIX: usize = 4;
+
+/// Endings of an adjective of the absolute degree: `esbeltísima` is one, though the nouns and
+/// adverbs of the ending are more frequent words
+const ABSOLUTE: [&str; 4] = ["ísimo", "ísima", "ísimos", "ísimas"];
+
 impl Dictionary {
     /// Analyses of an unknown lowercase word, the most probable first; empty if nothing fits
     pub(super) fn guess(&self, word: &str) -> Vec<Analysis> {
@@ -50,7 +58,21 @@ impl Dictionary {
         if !with_clitics.is_empty() {
             return with_clitics;
         }
-        self.by_ending(word)
+        let analyses = self.by_ending(word);
+        if ABSOLUTE.iter().any(|ending| word.ends_with(ending)) {
+            let absolute: Vec<Analysis> = (analyses.iter())
+                .filter(|analysis| {
+                    self.ud
+                        .get(analysis.ud)
+                        .is_some_and(|tag| tag.pos() == "ADJ" && tag.feat("Degree") == Some("Abs"))
+                })
+                .cloned()
+                .collect();
+            if !absolute.is_empty() {
+                return normalized(absolute);
+            }
+        }
+        analyses
     }
 
     /// A verb with clitics whose host the dictionary does not have: the guessed analyses of the
@@ -121,7 +143,12 @@ impl Dictionary {
             let Some(rest) = word.strip_prefix(prefix) else {
                 continue;
             };
-            if rest.chars().count() < MIN_GUESSED {
+            let shortest = if prefix.chars().count() == 3 {
+                MIN_AFTER_SHORT_PREFIX
+            } else {
+                MIN_GUESSED
+            };
+            if rest.chars().count() < shortest {
                 continue;
             }
             let analyses: Vec<Analysis> = self

@@ -34,7 +34,8 @@ pub enum Source {
     /// capital letter that the dictionary has (`Estados`, `ETA`, `X`)
     Rule,
     /// A lowercase word that is not in the dictionary, guessed: by its last part after a hyphen,
-    /// by the word without a known prefix or by the words of the dictionary with its ending
+    /// by the word without a known prefix, as a verb with clitics of a guessed host or by the words
+    /// of the dictionary with its ending
     Guess,
 }
 
@@ -331,10 +332,11 @@ impl Dictionary {
     /// though a token with a capital letter may also be a name. A word spelled as in the dictionary
     /// gives the analyses of that spelling; a word absent as written is a verb with clitics
     /// (`dámelo`) or is looked for without its accents and with a lost diaeresis. A token that is
-    /// neither gets the analyses of the rules: punctuation, a symbol, a number, a Roman numeral, a
-    /// name with a capital letter. A lowercase word that is none of these is guessed: by its last
-    /// part after a hyphen, by the word without a known prefix or by the dictionary words with its
-    /// ending
+    /// neither gets the analyses of the rules: punctuation, a symbol, a number, an ordinal number
+    /// in digits, a Roman numeral, a name with a capital letter, an address, an abbreviation. A
+    /// lowercase word that is none of these is guessed: by its last part after a hyphen, by the
+    /// word without a known prefix, as a verb with clitics of a guessed host or by the dictionary
+    /// words with its ending
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
         let (found, exact) = self.spelled(&word);
@@ -369,6 +371,24 @@ impl Dictionary {
             }
         }
         let mut analyses = found;
+        // An abbreviation with a period is the noun or symbol of the dictionary without it: `kg.`
+        // is `kg`, `pág.` is `pág`
+        if analyses.is_empty()
+            && let Some(stem) = word.strip_suffix('.')
+            && !stem.is_empty()
+            && stem.chars().all(|c| c.is_alphabetic() && !c.is_uppercase())
+        {
+            analyses = (self.found(stem).into_iter())
+                .filter(|analysis| {
+                    (self.ud.get(analysis.ud))
+                        .is_some_and(|tag| matches!(tag.pos(), "NOUN" | "SYM"))
+                })
+                .collect();
+            let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+            for analysis in &mut analyses {
+                analysis.prob /= total;
+            }
+        }
         if analyses.is_empty() {
             let ruled = self.ruled(&word);
             return if ruled.is_empty() {
@@ -1293,19 +1313,23 @@ fn automaton(storage: &Arc<Storage>, range: &Range<usize>) -> Result<Map<Slice>,
     Ok(map)
 }
 
-/// A query in the terms of the dictionary: invisible characters are dropped, and a combining mark
-/// joins its letter. Tokens of a text keep both
+/// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
+/// joins its letter, and a hyphen of Unicode is the hyphen-minus. Tokens of a text keep them
 fn normalized(word: &str) -> Cow<'_, str> {
     if word.is_ascii()
         || !word
             .chars()
-            .any(|c| is_invisible(c) || combined(' ', c).is_some())
+            .any(|c| is_invisible(c) || is_hyphen(c) || combined(' ', c).is_some())
     {
         return Cow::Borrowed(word);
     }
     let mut out = String::with_capacity(word.len());
     for c in word.chars() {
         if is_invisible(c) {
+            continue;
+        }
+        if is_hyphen(c) {
+            out.push('-');
             continue;
         }
         match out.chars().next_back().and_then(|last| combined(last, c)) {
@@ -1319,12 +1343,24 @@ fn normalized(word: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
-/// Soft hyphen, zero width characters and the byte order mark
+/// Soft hyphen, zero width characters, marks of the direction of text, invisible operators,
+/// the combining grapheme joiner and the byte order mark
 fn is_invisible(c: char) -> bool {
     matches!(
         c,
-        '\u{AD}' | '\u{200B}'..='\u{200D}' | '\u{2060}' | '\u{FEFF}'
+        '\u{AD}'
+            | '\u{34F}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
     )
+}
+
+/// The hyphen and the non-breaking hyphen of Unicode
+fn is_hyphen(c: char) -> bool {
+    matches!(c, '\u{2010}' | '\u{2011}')
 }
 
 /// The letter of a base and a combining mark of Spanish; the base `' '` tells only the mark apart

@@ -499,11 +499,12 @@ impl Analyzer {
     ///
     /// Description:
     ///     A token that the dictionary does not have gets the analyses of the rules: punctuation,
-    ///     a symbol, a number in digits, a Roman numeral, a name with a capital letter. A word with
-    ///     a capital letter that the dictionary knows may be a name too (`ETA`, `Angel`), and a name
-    ///     of the dictionary has a lemma with a capital letter (`Madrid`). A lowercase word out of
-    ///     the dictionary is guessed: by its last part after a hyphen, by the word without a known
-    ///     prefix or by the dictionary words with its ending
+    ///     a symbol, a number in digits, an ordinal number in digits, a Roman numeral, a name with
+    ///     a capital letter, an address, an abbreviation. A word with a capital letter that the
+    ///     dictionary knows may be a name too (`ETA`, `Angel`), and a name of the dictionary has a
+    ///     lemma with a capital letter (`Madrid`). A lowercase word out of the dictionary is
+    ///     guessed: by its last part after a hyphen, by the word without a known prefix, as a verb
+    ///     with clitics of a guessed host or by the dictionary words with its ending
     ///
     /// Arguments:
     ///     word (str): The word form

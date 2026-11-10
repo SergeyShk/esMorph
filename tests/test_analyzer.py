@@ -579,11 +579,13 @@ def test_table_of_closed_classes():
 
 
 def test_canonical_rows_are_the_word_itself(morph):
-    assert morph.analyze("www.rae.es") == []
+    # An address of an entry is no word of the dictionary: a rule gives it
+    assert [a.source for a in morph.analyze("www.rae.es")] == ["rule"]
+    assert not morph.is_known("www.rae.es")
     assert not morph.is_known("tdhle")
 
 
-@pytest.mark.parametrize("word", ["", " ", "qzxw", "­", "a b", "\x00", "\ud83d", "1 000"])
+@pytest.mark.parametrize("word", ["", " ", "qzxw", "­", "a b", "\x00", "\ud83d", "1 00"])
 def test_unknown_words(morph, word):
     assert morph.analyze(word) == []
     assert not morph.is_known(word)
@@ -1125,6 +1127,30 @@ def test_conventions_of_the_dictionary(morph):
     este = next(a for a in morph.analyze("éste") if a.pos == "PRON")
     assert este.inflect(Gender="Fem", Number="Plur") == "éstas"
     assert morph.analyze("este")[0].inflect(Gender="Fem", Number="Plur") == "estas"
+
+
+def test_more_tokens_out_of_the_dictionary(morph):
+    def first(word):
+        analysis = morph.analyze(word)[0]
+        return analysis.lemma, analysis.pos
+
+    assert first("kg.") == ("kg", "NOUN")
+    assert first("fig.") == ("fig.", "NOUN")
+    assert first("b") == ("b", "NOUN")
+    ordinal = morph.analyze("2.ª")[0]
+    assert (ordinal.lemma, ordinal.pos, ordinal.feats["NumType"]) == ("2.º", "ADJ", "Ord")
+    assert first("500cc") == ("500", "NUM")
+    assert first("-5") == ("-5", "NUM")
+    assert first("10 000") == ("10 000", "NUM")
+    assert first("www.aeat.es") == ("www.aeat.es", "SYM")
+    assert first("xii") == ("xii", "NUM")
+    # Unicode hyphens and marks of direction do not stop the analysis
+    assert first("franco\u2010alemán") == ("franco-alemán", "ADJ")
+    assert first("casa\u200f") == ("casa", "NOUN")
+    # An adjective in -ísimo is one, and a short rest after a prefix is no word
+    esbelta = morph.analyze("esbeltísima")[0]
+    assert (esbelta.lemma, esbelta.pos, esbelta.feats["Degree"]) == ("esbeltísimo", "ADJ", "Abs")
+    assert first("procul")[0] != "procool"
 
 
 def test_clitics_in_literary_writing(morph):
