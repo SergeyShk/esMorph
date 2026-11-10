@@ -33,6 +33,14 @@
 
     [:octicons-arrow-right-24: Inflection](inflection.md)
 
+-   :material-speedometer:{ .lg .middle } __Comparison__
+
+    ---
+
+    Accuracy, inflection and speed compared with simplemma, spaCy, Stanza, ablaut and verbecc, loading and memory
+
+    [:octicons-arrow-right-24: Comparison](comparison.md)
+
 -   :material-alert-circle-outline:{ .lg .middle } __Exceptions__
 
     ---
@@ -83,7 +91,7 @@ Prebuilt wheels and building from source are described on the [Installation](ins
     *   **crates/esmorph-dict-es** - the crate with the dictionary for `esmorph` on crates.io
     *   **crates/esmorph-py** - the Python module `esmorph._esmorph` on PyO3
     *   **python/esmorph** - the Python package
-    *   **scripts** - exporting Wiktionary and the counts of the treebanks, the conventions of the dictionary and checking the installed package before publishing
+    *   **scripts** - exporting Wiktionary and the counts of the treebanks, the conventions of the dictionary, checking the installed package before publishing and the comparison with other tools
     *   **data** - the table of closed classes after UD Spanish AnCora
     *   **docs** - MkDocs documentation in English and Spanish
     *   **tests** - tests of the Python package

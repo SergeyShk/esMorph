@@ -81,7 +81,7 @@ Los informes de errores, las ideas y los pull requests son bienvenidos, en ingl�
 *   **crates/esmorph-dict-es** - el diccionario como crate
 *   **crates/esmorph-py** - el módulo de Python `esmorph._esmorph`, compilado con PyO3
 *   **python/esmorph** - el paquete de Python
-*   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario y la comprobación del paquete instalado antes de publicar
+*   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario, la comprobación del paquete instalado antes de publicar y la comparación con otras herramientas
 *   **data** - la tabla de clases cerradas según UD Spanish AnCora
 *   **docs** - la documentación de MkDocs en inglés y en español
 *   **tests** - las pruebas del paquete de Python

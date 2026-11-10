@@ -33,6 +33,14 @@
 
     [:octicons-arrow-right-24: Flexión](inflection.md)
 
+-   :material-speedometer:{ .lg .middle } __Comparación__
+
+    ---
+
+    Precisión, flexión y velocidad frente a simplemma, spaCy, Stanza, ablaut y verbecc, carga y memoria
+
+    [:octicons-arrow-right-24: Comparación](comparison.md)
+
 -   :material-alert-circle-outline:{ .lg .middle } __Excepciones__
 
     ---
@@ -83,7 +91,7 @@ Los paquetes precompilados y la compilación desde el código fuente se describe
     *   **crates/esmorph-dict-es** - el crate con el diccionario para `esmorph` en crates.io
     *   **crates/esmorph-py** - el módulo de Python `esmorph._esmorph` sobre PyO3
     *   **python/esmorph** - el paquete de Python
-    *   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario y la comprobación del paquete instalado antes de publicar
+    *   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario, la comprobación del paquete instalado antes de publicar y la comparación con otras herramientas
     *   **data** - la tabla de clases cerradas según UD Spanish AnCora
     *   **docs** - documentación de MkDocs en inglés y español
     *   **tests** - pruebas del paquete de Python
