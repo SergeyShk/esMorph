@@ -149,6 +149,20 @@ def table_lemmas(rows: set[Row], table: set[Row]) -> tuple[set[Row], set[tuple[s
     return result, moved
 
 
+def without_ordinals_in_digits(rows: set[Row]) -> set[Row]:
+    """
+    Rows without the ordinal numbers in digits (`1.º`, `2ª`): a rule of the analyzer gives them,
+    with the features that Wiktionary has not
+
+    Arguments:
+        rows (set[Row]): The rows
+
+    Returns:
+        set[Row]: The rows
+    """
+    return {row for row in rows if not (row[1] == "ADJ" and row[2][:1].isdigit())}
+
+
 def infinitives(rows: set[Row]) -> set[Row]:
     """
     Rows with the infinitive of every verb: a verb that only the entries of its forms give, as a
@@ -284,7 +298,7 @@ def apply(rows: set[Row], table: set[Row]) -> tuple[set[Row], set[tuple[str, str
         tuple[set[Row], set[tuple[str, str]]]: The rows; part of speech and form of the spellings
         of words of the table that it has not, as `güeno`
     """
-    rows = with_table(infinitives(verb_lemmas(rows)), table)
+    rows = with_table(infinitives(verb_lemmas(without_ordinals_in_digits(rows))), table)
     rows, spellings = table_lemmas(rows, table)
     rows = names_and_numerals(rows)
     # Symbols of units, which Wiktionary has not as words: `km` is a noun or a symbol

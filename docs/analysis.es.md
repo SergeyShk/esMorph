@@ -27,7 +27,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 
 | Atributo | Tipo | Descripción |
 | :------- | :--- | :---------- |
-| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito |
+| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con `-` en lugar de los guiones U+2010 y U+2011 |
 | `lemma` | `str` | El lema |
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
@@ -100,10 +100,15 @@ Las mayúsculas no importan para buscar una palabra en el diccionario, aunque un
 
 Un token que el diccionario no tiene recibe los análisis de unas reglas, con `source` igual a `"rule"` y `word` tal como está escrito:
 
-- un signo de puntuación es `PUNCT` con su `PunctType`, y `PunctSide` para los paréntesis, los corchetes, las llaves y los signos de interrogación y de exclamación; un símbolo como `%`, `€` o `²` es `SYM`;
-- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año; el lema quita los puntos entre los millares: `10.000` es `10000`;
-- un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre;
-- un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`.
+- un signo de puntuación es `PUNCT` con el `PunctType` de sus signos si son de una misma clase, y `PunctSide` para los paréntesis, los corchetes, las llaves y los signos de interrogación y de exclamación; un símbolo como `%`, `€` o `²` es `SYM`;
+- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año, también con signo, fracción, potencia o espacios entre los millares (`-5`, `37½`, `10²`, `10 000`); el lema quita los puntos entre los millares (`10.000` es `10000`) y una unidad tras el número (`500cc` es `500`);
+- un número ordinal en cifras es `ADJ` con `NumForm=Digit|NumType=Ord`, su género y su número, y el masculino singular como lema: `2.ª` es `2.º`;
+- un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre; en minúsculas es solo un numeral: `xii`;
+- un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`;
+- un enlace, un correo, una etiqueta o una mención en minúsculas es `SYM`: `www.aeat.es`, `#hola`;
+- una abreviatura con punto en minúsculas que el diccionario no tiene es un sustantivo con ella misma como lema (`fig.`), y lo mismo una letra minúscula (`b`).
+
+Una abreviatura con punto en minúsculas que el diccionario tiene sin el punto recibe los sustantivos y los símbolos de esa palabra, con `source` igual a `"dictionary"`: `kg.` es `kg`. Una palabra del diccionario de otra categoría con un punto no recibe análisis: `come.` es un verbo con el punto de una oración.
 
 Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una inicial (`D.`) y una palabra sin tildes que el diccionario solo tiene con ellas (`Angel`, `Perez`) suelen ser nombres, así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (`Estados`, `Comisión`), así que su nombre suele ir después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como `VI`, `XI` o `X`, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (`Mandela` es ante todo `PROPN`), mientras que un infinitivo, un gerundio, un imperativo con tilde y una forma personal suelen ser verbos (`Hacerlo`, `Déjame`, `Levantóse`). Una palabra en minúsculas rara vez es un nombre: `miró` es ante todo `mirar`, `Miró` es un nombre. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
 
@@ -125,10 +130,10 @@ Una palabra con mayúscula que el diccionario conoce también puede ser un nombr
 
 Una palabra en minúsculas que ni el diccionario ni las reglas conocen recibe análisis estimados, con `source` igual a `"guess"`:
 
-- una palabra con guion se analiza por su última parte de una clase abierta: `palestino-israelíes` es una forma de `palestino-israelí`;
-- una palabra con un prefijo conocido se analiza por la palabra del diccionario sin él: `supergallos` es una forma de `supergallo`, `sobreandan` de `sobreandar`;
+- una palabra con guion se analiza por su última parte de una clase abierta o un numeral: `palestino-israelíes` es una forma de `palestino-israelí`;
+- una palabra con un prefijo conocido se analiza por la palabra del diccionario sin él, de cuatro letras al menos tras un prefijo de tres: `supergallos` es una forma de `supergallo`, `sobreandan` de `sobreandar`;
 - un verbo con clíticos se analiza por su gerundio estimado, o por su infinitivo estimado ante `se` o un clítico de tercera persona: `autogenerarse` es `autogenerar` + `se`;
-- cualquier otra palabra se analiza por las palabras del diccionario con la misma terminación de hasta cinco letras: sus categorías, rasgos y flexión, según cuántas palabras los tienen y con qué frecuencia los treebanks tienen sus rasgos.
+- cualquier otra palabra se analiza por las palabras del diccionario con la misma terminación de hasta cinco letras: sus categorías, rasgos y flexión, según cuántas palabras los tienen y con qué frecuencia AnCora train tiene sus rasgos; una palabra en `-ísimo` es un adjetivo de `Degree=Abs`: `esbeltísima` es una forma de `esbeltísimo`.
 
 Una palabra estimada tiene sus formas, también estimadas: `forms()` e `inflect()` funcionan como con una palabra del diccionario. `is_known` sigue siendo falso para ella.
 

@@ -13,13 +13,13 @@ const SIGNS: [(&str, &str, &str); 13] = [
     (";", "Semi", ""),
     ("…", "Elip", ""),
     ("-‐‑‒–—―", "Dash", ""),
-    ("\"'«»“”„‘’‚‹›`´", "Quot", ""),
+    ("\"'«»“”„‟‘’‚‹›`´", "Quot", ""),
     ("([{", "Brck", "Ini"),
     (")]}", "Brck", "Fin"),
     ("¿", "Qest", "Ini"),
     ("?", "Qest", "Fin"),
     ("¡", "Excl", "Ini"),
-    ("!", "Excl", "Fin"),
+    ("!‼", "Excl", "Fin"),
 ];
 
 /// Symbols out of the symbol blocks of Unicode that are `SYM`, not `PUNCT`; the superscripts and
@@ -64,6 +64,45 @@ pub(crate) const LOWER_NAME: f64 = 142.0 / 21442.0;
 pub(crate) const CAPS_NAME: [f64; 3] = [890.0 / 1079.0, 81.0 / 295.0, 39.0 / 252.0];
 pub(crate) const SHORT_CAPS: usize = 4;
 
+/// Endings of ordinal numbers in digits after the number and a possible period (`1.º`, `2ª`, `3er`,
+/// `4to`) and their genders and numbers, by the places in `ORDINAL_FEATS`; the masculine singular
+/// ending is the lemma
+const ORDINALS: &[(&str, usize, &str)] = &[
+    ("º", 0, "º"),
+    ("ª", 1, "º"),
+    ("ºs", 2, "º"),
+    ("ªs", 3, "º"),
+    ("o", 0, "o"),
+    ("a", 1, "o"),
+    ("os", 2, "o"),
+    ("as", 3, "o"),
+    ("er", 0, "er"),
+    ("ro", 0, "ro"),
+    ("ra", 1, "ro"),
+    ("do", 0, "do"),
+    ("da", 1, "do"),
+    ("to", 0, "to"),
+    ("ta", 1, "to"),
+    ("vo", 0, "vo"),
+    ("va", 1, "vo"),
+    ("no", 0, "no"),
+    ("na", 1, "no"),
+    ("mo", 0, "mo"),
+    ("ma", 1, "mo"),
+];
+const ORDINAL_FEATS: [(&str, &str); 4] = [
+    ("Masc", "Sing"),
+    ("Fem", "Sing"),
+    ("Masc", "Plur"),
+    ("Fem", "Plur"),
+];
+
+/// Symbols of units after a number in one token: `500cc` is the number `500`
+const UNITS: &[&str] = &[
+    "cc", "cm", "g", "gb", "h", "hz", "kb", "kg", "km", "kw", "l", "m", "mb", "mg", "min", "ml",
+    "mm", "w",
+];
+
 /// UD tags of the analyses by the rules, by their numbers in the tags of the dictionary
 #[derive(Clone, Debug)]
 pub(crate) struct RuleTags {
@@ -71,7 +110,9 @@ pub(crate) struct RuleTags {
     signs: [u16; SIGNS.len()],
     symbol: u16,
     cardinal: u16,
+    ordinals: [u16; ORDINAL_FEATS.len()],
     roman: u16,
+    noun: u16,
     pub name: u16,
 }
 
@@ -83,7 +124,11 @@ pub(crate) enum Rule {
     Sign(usize),
     Symbol,
     Cardinal,
+    /// An ordinal number in digits, by its gender and number in `ORDINAL_FEATS`
+    Ordinal(usize),
     Roman,
+    /// An abbreviation or a letter: `fig.`, `b`
+    Noun,
     Name,
 }
 
@@ -99,12 +144,24 @@ impl RuleTags {
             };
             *number = tags.find_or_add("PUNCT", feats)?;
         }
+        let mut ordinals = [0; ORDINAL_FEATS.len()];
+        for (number, &(gender, count)) in ordinals.iter_mut().zip(&ORDINAL_FEATS) {
+            let feats = [
+                ("Gender", gender),
+                ("NumForm", "Digit"),
+                ("NumType", "Ord"),
+                ("Number", count),
+            ];
+            *number = tags.find_or_add("ADJ", &feats)?;
+        }
         Some(RuleTags {
             punct: tags.find_or_add("PUNCT", &[])?,
             signs,
             symbol: tags.find_or_add("SYM", &[])?,
             cardinal: tags.find_or_add("NUM", &[("NumForm", "Digit"), ("NumType", "Card")])?,
+            ordinals,
             roman: tags.find_or_add("NUM", &[("NumForm", "Roman"), ("NumType", "Card")])?,
+            noun: tags.find_or_add("NOUN", &[])?,
             name: tags.find_or_add("PROPN", &[])?,
         })
     }
@@ -115,7 +172,9 @@ impl RuleTags {
             Rule::Sign(at) => self.signs[at],
             Rule::Symbol => self.symbol,
             Rule::Cardinal => self.cardinal,
+            Rule::Ordinal(at) => self.ordinals[at],
             Rule::Roman => self.roman,
+            Rule::Noun => self.noun,
             Rule::Name => self.name,
         }
     }
@@ -124,9 +183,14 @@ impl RuleTags {
 /// Analyses of a token by the rules: the lemma, the rule and the share; empty if no rule fits
 pub(crate) fn rules(token: &str) -> Vec<(String, Rule, f64)> {
     // A replacement character is a lost character of the text, not a sign
-    if token.is_empty()
-        || (token.chars()).any(|c| c.is_whitespace() || c.is_control() || c == '\u{FFFD}')
-    {
+    if token.is_empty() || (token.chars()).any(|c| c.is_control() || c == '\u{FFFD}') {
+        return Vec::new();
+    }
+    // Spaces part only the thousands of a number: `10 000`
+    if spaced_number(token) {
+        return vec![(token.to_owned(), Rule::Cardinal, 1.0)];
+    }
+    if token.chars().any(char::is_whitespace) {
         return Vec::new();
     }
     if token.chars().all(|c| !c.is_alphanumeric() || symbol(c)) {
@@ -140,6 +204,9 @@ pub(crate) fn rules(token: &str) -> Vec<(String, Rule, f64)> {
     if let Some(lemma) = number(token) {
         return vec![(lemma, Rule::Cardinal, 1.0)];
     }
+    if let Some((lemma, at)) = ordinal(token) {
+        return vec![(lemma, Rule::Ordinal(at), 1.0)];
+    }
     if roman(token) {
         let (number, name) = roman_shares(token);
         return vec![
@@ -150,7 +217,77 @@ pub(crate) fn rules(token: &str) -> Vec<(String, Rule, f64)> {
     if token.chars().any(char::is_uppercase) {
         return vec![(token.to_owned(), Rule::Name, 1.0)];
     }
-    Vec::new()
+    // An address is a symbol (`www.aeat.es`, `#hola`), a Roman numeral may be in lower case
+    // (`xii`), and an abbreviation with a period and a letter are nouns (`fig.`, `b`)
+    let rule = if address(token) {
+        Rule::Symbol
+    } else if token.len() > 1 && roman(&token.to_uppercase()) {
+        Rule::Roman
+    } else if abbreviation(token)
+        || (token.chars().count() == 1 && token.chars().all(char::is_lowercase))
+    {
+        Rule::Noun
+    } else {
+        return Vec::new();
+    };
+    vec![(token.to_owned(), rule, 1.0)]
+}
+
+/// Whether a lowercase token is an address: a link (`www.aeat.es`, `https://…`), an email, a
+/// hashtag or a mention (`#hola`, `@usuario`)
+fn address(token: &str) -> bool {
+    let tagged = |mark: char| {
+        token.strip_prefix(mark).is_some_and(|rest| {
+            !rest.is_empty() && rest.chars().all(|c| c.is_alphanumeric() || c == '_')
+        })
+    };
+    let email = token.split_once('@').is_some_and(|(name, domain)| {
+        !name.is_empty()
+            && domain.contains('.')
+            && !domain.starts_with('.')
+            && !domain.ends_with('.')
+    });
+    token.contains("://") || token.starts_with("www.") || email || tagged('#') || tagged('@')
+}
+
+/// Whether a lowercase token is an abbreviation: letters and periods, a period last (`fig.`, `p.ej.`)
+fn abbreviation(token: &str) -> bool {
+    token.ends_with('.')
+        && token.chars().any(char::is_alphabetic)
+        && token.chars().all(|c| c.is_alphabetic() || c == '.')
+}
+
+/// The lemma of an ordinal number in digits and the place of its gender and number in
+/// `ORDINAL_FEATS`: the lemma is the masculine singular in the same writing (`3.ª` is `3.º`)
+fn ordinal(token: &str) -> Option<(String, usize)> {
+    let digits = token.bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 {
+        return None;
+    }
+    let (number, ending) = token.split_at(digits);
+    let (period, ending) = match ending.strip_prefix('.') {
+        Some(rest) => (".", rest),
+        None => ("", ending),
+    };
+    let &(_, at, lemma) = ORDINALS.iter().find(|&&(known, ..)| known == ending)?;
+    Some((format!("{number}{period}{lemma}"), at))
+}
+
+/// Whether a token is a number whose thousands are parted by spaces (`10 000`, `1 234,5`); its
+/// lemma keeps them, as the treebanks do
+fn spaced_number(token: &str) -> bool {
+    const SPACES: [char; 4] = [' ', '\u{A0}', '\u{2009}', '\u{202F}'];
+    if !token.contains(SPACES) {
+        return false;
+    }
+    let (whole, fraction) = token.split_once(',').unwrap_or((token, ""));
+    let mut groups = whole.split(SPACES);
+    let digits = |group: &str| !group.is_empty() && group.bytes().all(|b| b.is_ascii_digit());
+    groups
+        .next()
+        .is_some_and(|first| digits(first) && first.len() <= 3)
+        && groups.all(|group| group.len() == 3 && digits(group))
+        && (fraction.is_empty() || digits(fraction))
 }
 
 /// Shares of a Roman numeral and of a name for a Roman numeral
@@ -200,11 +337,38 @@ fn symbol(c: char) -> bool {
         )
 }
 
-/// The lemma of a number in digits: groups of digits joined by `.`, `,`, `:`, `/` or a dash
-/// (`3,14`, `15:00`, `1990/92`, `2-1`); the periods between thousands go away (`10.000` is
-/// `10000`), the rest stays as written
+/// The lemma of a number in digits: groups of digits joined by `.`, `,`, `:`, `/`, `'` or a dash
+/// (`3,14`, `15:00`, `1990/92`, `2-1`, `2'70`), maybe with a sign (`-5`), a fraction (`37½`), a
+/// power (`10²`) or a unit (`500cc`, whose lemma is `500`); the periods between thousands go away
+/// (`10.000` is `10000`), the rest stays as written
 fn number(token: &str) -> Option<String> {
-    if !(token.split(['.', ',', ':', '/', '-', '–']))
+    match token.strip_prefix(['+', '-', '−', '±']) {
+        Some(rest) => {
+            let sign = &token[..token.len() - rest.len()];
+            unsigned(rest).map(|lemma| format!("{sign}{lemma}"))
+        }
+        None => unsigned(token),
+    }
+}
+
+/// The lemma of a number in digits without a sign
+fn unsigned(token: &str) -> Option<String> {
+    let fraction = |c: char| matches!(c, '¼'..='¾' | '\u{2150}'..='\u{215E}');
+    let power = |c: char| matches!(c, '¹' | '²' | '³' | '\u{2070}'..='\u{2079}');
+    let plain = token.trim_end_matches(|c| fraction(c) || power(c));
+    if plain.len() < token.len() {
+        let digits = plain.bytes().all(|b| b.is_ascii_digit());
+        let alone = plain.is_empty() && token.chars().all(fraction);
+        return (alone || (!plain.is_empty() && digits)).then(|| token.to_owned());
+    }
+    // Of the units that end the token, the one after the digits: `kg`, not `g`, in `5kg`
+    let unit = (UNITS.iter())
+        .filter_map(|unit| token.strip_suffix(unit))
+        .find(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
+    if let Some(digits) = unit {
+        return Some(digits.to_owned());
+    }
+    if !(token.split(['.', ',', ':', '/', '\'', '-', '–', '‒', '—', '‑']))
         .all(|group| !group.is_empty() && group.bytes().all(|b| b.is_ascii_digit()))
     {
         return None;
@@ -323,6 +487,97 @@ mod tests {
         for word in ["1.", "3,", ".5", "1..2", "1a"] {
             assert!(
                 !kinds(word).iter().any(|(_, rule)| *rule == Rule::Cardinal),
+                "{word}"
+            );
+        }
+    }
+
+    #[test]
+    fn numbers_with_signs_fractions_powers_and_units() {
+        for number in [
+            "-5",
+            "+34",
+            "−5",
+            "1990—2000",
+            "2'70",
+            "½",
+            "37½",
+            "10²",
+            "10 000",
+        ] {
+            assert_eq!(kinds(number), [(number.into(), Rule::Cardinal)], "{number}");
+        }
+        assert_eq!(kinds("1 234,5"), [("1 234,5".into(), Rule::Cardinal)]);
+        assert_eq!(kinds("500cc"), [("500".into(), Rule::Cardinal)]);
+        assert_eq!(kinds("3km"), [("3".into(), Rule::Cardinal)]);
+        // A unit that ends in another one
+        for (word, lemma) in [
+            ("5kg", "5"),
+            ("10mm", "10"),
+            ("100mg", "100"),
+            ("100ml", "100"),
+        ] {
+            assert_eq!(kinds(word), [(lemma.into(), Rule::Cardinal)], "{word}");
+        }
+        // One sign only, and a long run of signs is no deep recursion
+        assert!(kinds("--5").is_empty());
+        let signs = format!("{}5", "-".repeat(20_000));
+        let run = std::thread::Builder::new().stack_size(1 << 21);
+        assert!(
+            run.spawn(move || kinds(&signs))
+                .unwrap()
+                .join()
+                .unwrap()
+                .is_empty()
+        );
+        // Spaces part only groups of three digits
+        for word in ["1 23", "12345 678", "a 000", "½a"] {
+            assert!(
+                !kinds(word).iter().any(|(_, rule)| *rule == Rule::Cardinal),
+                "{word}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinal_numbers() {
+        assert_eq!(kinds("25º"), [("25º".into(), Rule::Ordinal(0))]);
+        assert_eq!(kinds("2.ª"), [("2.º".into(), Rule::Ordinal(1))]);
+        assert_eq!(kinds("1.ºs"), [("1.º".into(), Rule::Ordinal(2))]);
+        assert_eq!(kinds("3er"), [("3er".into(), Rule::Ordinal(0))]);
+        assert_eq!(kinds("6ta"), [("6to".into(), Rule::Ordinal(1))]);
+        assert_eq!(kinds("2as"), [("2o".into(), Rule::Ordinal(3))]);
+        // A degree is no ordinal
+        assert!(kinds("20°").is_empty());
+    }
+
+    #[test]
+    fn addresses_abbreviations_and_letters() {
+        for address in [
+            "www.aeat.es",
+            "https://a.es/b",
+            "user@mail.com",
+            "#hola",
+            "@usuario",
+        ] {
+            assert_eq!(
+                kinds(address),
+                [(address.into(), Rule::Symbol)],
+                "{address}"
+            );
+        }
+        // With a capital letter it is a name
+        assert_eq!(kinds("#Hola"), [("#Hola".into(), Rule::Name)]);
+        for word in ["fig.", "p.ej.", "b"] {
+            assert_eq!(kinds(word), [(word.into(), Rule::Noun)], "{word}");
+        }
+        assert_eq!(kinds("xii"), [("xii".into(), Rule::Roman)]);
+        // A character of a script without case is no lowercase letter
+        for word in ["casa", "a.b", "@", "#", "円", "が"] {
+            assert!(
+                !kinds(word)
+                    .iter()
+                    .any(|(_, rule)| matches!(rule, Rule::Noun | Rule::Roman)),
                 "{word}"
             );
         }

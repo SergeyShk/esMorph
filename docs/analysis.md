@@ -27,7 +27,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 
 | Attribute | Type | Description |
 | :-------- | :--- | :---------- |
-| `word` | `str` | The word form as the dictionary spells it, with its accents; a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written |
+| `word` | `str` | The word form as the dictionary spells it, with its accents; a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters and with `-` for the hyphens U+2010 and U+2011 |
 | `lemma` | `str` | The lemma |
 | `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
 | `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
@@ -100,10 +100,15 @@ Case does not matter for finding a word in the dictionary, though a token with a
 
 A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
 
-- a sign of punctuation is `PUNCT` with its `PunctType`, and `PunctSide` for brackets and question and exclamation marks; a symbol such as `%`, `€` or `²` is `SYM`;
-- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too; the lemma drops the periods between thousands: `10.000` is `10000`;
-- a Roman numeral is `NUM` with `NumForm=Roman`, less often a name;
-- a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`.
+- a sign of punctuation is `PUNCT` with the `PunctType` of its signs if they are of one kind, and `PunctSide` for brackets and question and exclamation marks; a symbol such as `%`, `€` or `²` is `SYM`;
+- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too, also with a sign, a fraction, a power or spaces between thousands (`-5`, `37½`, `10²`, `10 000`); the lemma drops the periods between thousands (`10.000` is `10000`) and a unit after the number (`500cc` is `500`);
+- an ordinal number in digits is `ADJ` with `NumForm=Digit|NumType=Ord`, its gender and number, and the masculine singular as the lemma: `2.ª` is `2.º`;
+- a Roman numeral is `NUM` with `NumForm=Roman`, less often a name; in lower case it is a numeral only: `xii`;
+- a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`;
+- a link, an email, a hashtag or a mention in lower case is `SYM`: `www.aeat.es`, `#hola`;
+- an abbreviation with a period in lower case that the dictionary does not have is a noun with itself as the lemma (`fig.`), and so is a lowercase letter (`b`).
+
+A lowercase abbreviation with a period that the dictionary has without the period gets the nouns and the symbols of that word, with `source` equal to `"dictionary"`: `kg.` is `kg`. A word of the dictionary with a period of another part of speech gets no analyses: `come.` is a verb with the period of a sentence.
 
 A word with a capital letter that the dictionary knows may be a name too, with its share. An initial (`D.`) and a word without accents that the dictionary has only with them (`Angel`, `Perez`) are mostly names, so their name goes first, while another word with a capital letter is a name less often (`Estados`, `Comisión`), so its name usually goes after the analyses of the dictionary. Of the words in capitals, a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral that the dictionary knows as a word, such as `VI`, `XI` or `X`, is a numeral first. A token with a capital letter that splits as a verb with clitics may be a name too: an imperative without an accent mostly is one (`Mandela` is first of all `PROPN`), while an infinitive, a gerund, an imperative with an accent and a finite form mostly are verbs (`Hacerlo`, `Déjame`, `Levantóse`). A lowercase word is a name rarely: `miró` is first of all `mirar`, `Miró` a name. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
 
@@ -125,10 +130,10 @@ A word with a capital letter that the dictionary knows may be a name too, with i
 
 A lowercase word that neither the dictionary nor the rules know gets guessed analyses, with `source` equal to `"guess"`:
 
-- a word with a hyphen is analyzed by its last part of an open class: `palestino-israelíes` is a form of `palestino-israelí`;
-- a word with a known prefix is analyzed by the dictionary word without it: `supergallos` is a form of `supergallo`, `sobreandan` of `sobreandar`;
+- a word with a hyphen is analyzed by its last part of an open class or a numeral: `palestino-israelíes` is a form of `palestino-israelí`;
+- a word with a known prefix is analyzed by the dictionary word without it, of four letters at least after a prefix of three: `supergallos` is a form of `supergallo`, `sobreandan` of `sobreandar`;
 - a verb with clitics is analyzed by its guessed gerund, or by its guessed infinitive before `se` or a clitic of the third person: `autogenerarse` is `autogenerar` + `se`;
-- any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often the treebanks have their features.
+- any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often AnCora train has their features; a word in `-ísimo` is an adjective of `Degree=Abs`: `esbeltísima` is a form of `esbeltísimo`.
 
 A guessed word has its forms, guessed too: `forms()` and `inflect()` work as for a word of the dictionary. `is_known` stays false for it.
 
