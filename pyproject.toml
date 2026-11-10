@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "esmorph"
-version = "0.1.0.dev13"
+version = "0.1.0"
 description = "Fast Spanish morphological analyzer written in Rust with a Python API"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -45,7 +45,9 @@ dependencies = []
 [project.urls]
 Homepage = "https://github.com/SergeyShk/esMorph"
 Repository = "https://github.com/SergeyShk/esMorph"
+Documentation = "https://sergeyshk.github.io/esMorph/"
 Issues = "https://github.com/SergeyShk/esMorph/issues"
+Changelog = "https://github.com/SergeyShk/esMorph/releases"
 
 [tool.maturin]
 manifest-path = "crates/esmorph-py/Cargo.toml"

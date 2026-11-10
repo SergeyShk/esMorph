@@ -9,10 +9,16 @@
 </p>
 
 <p align="center">
+  <a href="https://sergeyshk.github.io/esMorph/">Documentation</a> ·
+  <a href="https://pypi.org/project/esmorph/">PyPI</a> ·
+  <a href="https://crates.io/crates/esmorph">crates.io</a> ·
   <a href="https://github.com/SergeyShk/esMorph/blob/master/README.es.md">Español</a>
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/esmorph/"><img src="https://img.shields.io/pypi/v/esmorph?logo=pypi&logoColor=FFE873" alt="Version"></a>
+  <a href="https://pypi.org/project/esmorph/"><img src="https://img.shields.io/pypi/pyversions/esmorph.svg?logo=python&logoColor=FFE873" alt="Supported Python versions"></a>
+  <a href="https://crates.io/crates/esmorph"><img src="https://img.shields.io/crates/v/esmorph?logo=rust" alt="Crate"></a>
   <a href="https://github.com/SergeyShk/esMorph/actions/workflows/ci.yml"><img src="https://github.com/SergeyShk/esMorph/actions/workflows/ci.yml/badge.svg" alt="Build"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
   <a href="https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt"><img src="https://img.shields.io/github/license/sergeyshk/esmorph.svg" alt="License"></a>
@@ -20,26 +26,47 @@
 
 ---
 
-**esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it finds the analyses in a dictionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and gives the forms of a lexeme by their features: conjugation, gender and number.
+**esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it finds the analyses in a dictionary built from [Wiktionary](https://en.wiktionary.org) - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - orders them by probability and builds the forms of the word: conjugation, gender and number.
 
-> [!WARNING]
-> Work in progress: versions `0.1.0.devN` are published on TestPyPI, and the documentation site appears with the first release.
+It analyzes 1.2 million tokens per second from Python, 28 times faster than spaCy, and lemmatizes as fast as simplemma, whose lemmas are right less often on the UD test sets of AnCora, PUD and COSER. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
+
+* **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, lists of words and lemmatization, checking a word form against the dictionary
+* **[Universal Dependencies](https://sergeyshk.github.io/esMorph/analysis/#ud)** - parts of speech, features and lemmas by the UD guidelines and the AnCora conventions
+* **[Verbs with clitics](https://sergeyshk.github.io/esMorph/analysis/#clitics)** - a verb with enclitic pronouns and its words: `dámelo` is `da` + `me` + `lo`
+* **[Tokens out of the dictionary](https://sergeyshk.github.io/esMorph/analysis/#rules)** - punctuation, numbers, ordinals, Roman numerals, names, addresses and abbreviations by rules
+* **[Unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess)** - analyses by the ending, a hyphen or a prefix, and the forms of guessed words
+* **[Inflection](https://sergeyshk.github.io/esMorph/inflection/)** - the forms of a lexeme and the form with given UD features
+* **[Comparison](https://sergeyshk.github.io/esMorph/comparison/)** - accuracy, inflection and speed compared with simplemma, spaCy, Stanza, ablaut and verbecc
+
+> [!NOTE]
+> Early version: before 1.0 the API may change between 0.x versions; the changes are described in the release notes.
 
 ## Installation
 
-Python 3.11 or newer is required. Pre-release versions are published only on TestPyPI:
+Python 3.11 or newer is required.
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ esmorph
+pip install esmorph
 ```
 
-Wheels are built for Linux (Alpine included), macOS and Windows and for the free-threaded Python 3.14t; on other platforms building from source requires [Rust](https://www.rust-lang.org/tools/install) 1.88 or newer. See the [Installation](https://github.com/SergeyShk/esMorph/blob/master/docs/installation.md) page.
+Or with [uv](https://docs.astral.sh/uv/):
 
-## Usage
+```bash
+uv add esmorph
+```
+
+Wheels are built for Linux (Alpine included), macOS and Windows and for the free-threaded Python 3.14t; Rust is not needed to install them, and the dictionary is in the package. On other platforms pip builds the package from source, which requires [Rust](https://www.rust-lang.org/tools/install) 1.88 or newer. See the [Installation](https://sergeyshk.github.io/esMorph/installation/) page.
+
+For Rust there is the crate [`esmorph`](https://crates.io/crates/esmorph) with the dictionary (`cargo add esmorph`; the documentation is on [docs.rs](https://docs.rs/esmorph)).
+
+## Quick start
 
 ```python
 >>> from esmorph import Analyzer
+
 >>> morph = Analyzer()
+>>> morph.lemmatize("Los niños cantaban en la plaza".split())
+['el', 'niño', 'cantar', 'en', 'el', 'plaza']
 >>> analysis = morph.analyze("camiones")[0]
 >>> analysis.lemma, analysis.pos, analysis.feats
 ('camión', 'NOUN', {'Gender': 'Masc', 'Number': 'Plur'})
@@ -48,6 +75,108 @@ Wheels are built for Linux (Alpine included), macOS and Windows and for the free
 >>> [form.word for form in morph.analyze("bonitas")[0].forms()]
 ['bonito', 'bonita', 'bonitos', 'bonitas']
 ```
+
+The analyzer is created once: it loads the dictionary, and then it can be used in the whole program.
+
+## Features
+
+### Analysis of a word form
+
+`analyze` gives the analyses of a word form, the most probable first: objects `Analysis` with the lemma, the part of speech, the UD features, the probability and the source of the analysis. Case does not matter for finding a word, though a word with a capital letter may also be a name, and a word without its accents is found too. Analyses are immutable: they can be compared, put into sets and pickled.
+
+```python
+>>> [(a.lemma, a.pos, round(a.prob, 3)) for a in morph.analyze("canto")]
+[('canto', 'NOUN', 0.999), ('cantar', 'VERB', 0.001)]
+>>> analysis = morph.analyze("dámelo")[0]
+>>> analysis.lemma, analysis.pos, analysis.words
+('dar', 'VERB', ('da', 'me', 'lo'))
+>>> morph.is_known("Camion"), morph.is_known("qzxw")
+(True, False)
+```
+
+`analyze_many` analyzes a list of words, and `lemmatize` gives their lemmas without the GIL. The analyzer and the analyses are pickled, so they work with `multiprocessing` and joblib.
+
+See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/), [word analysis](https://sergeyshk.github.io/esMorph/analysis/).
+
+<details>
+<summary><b>Parts of speech and features of Universal Dependencies</b></summary>
+
+<br>
+
+Parts of speech, features and lemmas follow the [Universal Dependencies](https://universaldependencies.org/u/pos/) guidelines and, where they are silent, the conventions of the largest Spanish treebank, [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora):
+
+*   determiners, pronouns, prepositions and conjunctions have the lemmas and features of AnCora: `la` is the article `el` or the pronoun `él`, `se` is `él` with `Reflex=Yes`, `su` is `DET` with `Poss=Yes`
+*   `ser`, `estar`, `haber` and the other auxiliaries have both `AUX` and `VERB` analyses
+*   a participle is a verb and an adjective, verbs have no `-se` in the lemma, a proper name has a lemma with a capital letter
+
+```python
+>>> [(w, morph.analyze(w)[0].lemma, morph.analyze(w)[0].pos) for w in ["la", "su", "hay", "madrid"]]
+[('la', 'el', 'DET'), ('su', 'su', 'DET'), ('hay', 'haber', 'VERB'), ('madrid', 'Madrid', 'PROPN')]
+>>> morph.analyze("la")[0].feats
+{'Definite': 'Def', 'Gender': 'Fem', 'Number': 'Sing', 'PronType': 'Art'}
+```
+
+See the [documentation](https://sergeyshk.github.io/esMorph/analysis/#ud).
+
+</details>
+
+<details>
+<summary><b>Tokens out of the dictionary and unknown words</b></summary>
+
+<br>
+
+Tokens that the dictionary does not have get the analyses of rules, with `source` equal to `"rule"`: punctuation, symbols, numbers in digits, ordinals (`2.ª`), Roman numerals, names, addresses and abbreviations. A lowercase word that neither the dictionary nor the rules know is guessed, with `source` equal to `"guess"`: by its last part after a hyphen, by the word without a known prefix, as a verb with clitics or by the dictionary words with its ending. A guessed word has its forms too.
+
+```python
+>>> [(a.lemma, a.pos, a.source) for w in ["2.ª", "10.000", "xii"] for a in morph.analyze(w)]
+[('2.º', 'ADJ', 'rule'), ('10000', 'NUM', 'rule'), ('xii', 'NUM', 'rule')]
+>>> [(morph.analyze(w)[0].lemma, morph.analyze(w)[0].source) for w in ["supergallos", "esbeltísima"]]
+[('supergallo', 'guess'), ('esbeltísimo', 'guess')]
+>>> morph.analyze("zumbeábamos")[0].inflect(Tense="Pres", Person="3", Number="Sing")
+'zumbea'
+```
+
+See the documentation: [tokens out of the dictionary](https://sergeyshk.github.io/esMorph/analysis/#rules), [unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess).
+
+</details>
+
+<details>
+<summary><b>Inflection</b></summary>
+
+<br>
+
+`forms()` gives the forms of the lexeme of an analysis in the order of its paradigm, and `inflect` gives the form with the given UD features, keeping the other features of the analysis. A variant, such as a form of `vos` or an older spelling, comes only from a variant.
+
+```python
+>>> morph.analyze("gata")[0].inflect(Number="Plur")
+'gatas'
+>>> morph.analyze("hablás")[0].inflect(Mood="Imp")
+'hablá'
+```
+
+See the [documentation](https://sergeyshk.github.io/esMorph/inflection/).
+
+</details>
+
+<details>
+<summary><b>Comparison</b></summary>
+
+<br>
+
+The share of words whose first analysis has the right lemma, and the right part of speech, features and lemma all together, % (test parts of the UD 2.18 treebanks), and the speed of text analysis:
+
+| System | Lemma, AnCora | Lemma, PUD | Lemma, COSER | All together, PUD | Tokens per second |
+| :----- | :------------ | :--------- | :----------- | :---------------- | :---------------- |
+| esMorph | 97.80 | 97.74 | 94.49 | **87.90** | 1,228,661 |
+| simplemma | 96.94 | 96.96 | 93.50 | - | **2,507,937** |
+| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 83.59 | 44,100 |
+| Stanza | **99.16** | **97.80** | **94.98** | 86.34 | 2,694 |
+
+esMorph analyzes a word without context, while spaCy and Stanza choose the analysis by the sentence and are trained on AnCora, so they lead on it; on PUD, new to all of them, the first analysis of esMorph has the right features and lemma together more often. An analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It gives the gold form of 99.65, 93.29 and 95.55 % of the verbs of AnCora, PUD and COSER, against 98.87, 92.71 and 93.61 % of ablaut. A short text together with loading takes 3.5 ms against 0.35-2.3 s, and every further process with the same dictionary adds 3.6 MB of memory. Measured on Apple M3 Pro, Python 3.11.
+
+See the [documentation](https://sergeyshk.github.io/esMorph/comparison/): all the scores, verb inflection, the chart of speed by the size of the text, memory and how it was measured.
+
+</details>
 
 ## Development
 
@@ -99,3 +228,16 @@ Bug reports, ideas and pull requests are welcome, in English or Spanish - the [i
 ## License
 
 The code is distributed under the [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt) license. The dictionary is built from [Wiktionary](https://en.wiktionary.org) and the treebanks [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora) and [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD), and is distributed under the [CC BY-SA 4.0](https://github.com/SergeyShk/esMorph/blob/master/LICENSE-DICTIONARY.txt) license.
+
+## Citation
+
+If you use **esMorph** in research or software, please cite it with the following BibTeX entry: this helps the project grow and be maintained. The same metadata is in [CITATION.cff](https://github.com/SergeyShk/esMorph/blob/master/CITATION.cff) - GitHub shows it under "Cite this repository".
+
+```bibtex
+@software{esMorph,
+  author = {Sergey Shkarin},
+  title = {{esMorph, a fast morphological analyzer for Spanish}},
+  year = 2026,
+  url = {https://github.com/SergeyShk/esMorph}
+}
+```

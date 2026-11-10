@@ -4,8 +4,8 @@
 
 **esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form the analyzer finds its analyses in a dictionary built from Wiktionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - orders them by probability and builds the forms of the word: conjugation, gender and number.
 
-!!! warning "Work in progress"
-    Versions `0.1.0.devN` are published on TestPyPI. Before 1.0 the API may change between 0.x versions.
+!!! note "Early version"
+    Before 1.0 the API may change between 0.x versions; the changes are described in the release notes.
 
 ## Features
 
@@ -55,13 +55,13 @@
 
 ## Installation
 
-Python 3.11 or newer is required. Pre-release versions are published only on TestPyPI:
+Python 3.11 or newer is required.
 
 ``` bash
-pip install --index-url https://test.pypi.org/simple/ esmorph
+pip install esmorph
 ```
 
-Prebuilt wheels and building from source are described on the [Installation](installation.md) page.
+Prebuilt wheels, building from source and the Rust crate are described on the [Installation](installation.md) page.
 
 ## Quick start
 
