@@ -298,7 +298,7 @@ mod tests {
         }
         if let Some(frequency) = tag_frequency {
             builder
-                .set_tag_frequency("NOUN", "Gender=Masc|Number=Plur", frequency)
+                .add_tag_frequency("NOUN", "Gender=Masc|Number=Plur", frequency)
                 .unwrap();
         }
         Dictionary::from_bytes(&builder.build().unwrap()).unwrap()

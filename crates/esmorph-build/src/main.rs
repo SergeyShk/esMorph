@@ -18,13 +18,26 @@ fn read(path: &Path) -> Result<String, Error> {
     fs::read_to_string(path).map_err(|err| Error::Build(format!("{}: {err}", path.display())))
 }
 
-/// An error of a line of a file with its place: `lexemes.tsv:2: word "Casa" is not in lower case`
-fn at_line(path: &Path, number: usize, err: Error) -> Error {
+/// An error of a file with its path: `counts: analyses.tsv:3: wrong count`
+fn within(path: &Path, err: Error) -> Error {
     let message = match err {
         Error::Build(message) | Error::Format(message) => message,
         err => err.to_string(),
     };
-    Error::Build(format!("{}:{}: {message}", path.display(), number + 1))
+    Error::Build(format!("{}: {message}", path.display()))
+}
+
+/// An error of a line of a file with its place: `lexemes.tsv:2: word "Casa" is not in lower case`
+fn at_line(path: &Path, number: usize, err: Error) -> Error {
+    within(
+        &path.with_file_name(format!("{}:{}", file_name(path), number + 1)),
+        err,
+    )
+}
+
+fn file_name(path: &Path) -> String {
+    path.file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
 }
 
 /// Description of the dictionary: the description of its export with the sources of the counts
@@ -103,13 +116,13 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
     for row in forms.values_mut().flatten() {
         row.spelling = !main.contains(&(row.lemma, row.pos));
     }
-    let counts = Counts::read(
-        &read(&counts.join("analyses.tsv"))?,
-        &read(&counts.join("pos.tsv"))?,
-    )
-    .map_err(|err| Error::Build(format!("{}: {err}", counts.display())))?;
+    let analyses = counts.join("analyses.tsv");
+    let counts = Counts::read(&read(&analyses)?, &read(&counts.join("pos.tsv"))?)
+        .map_err(|err| within(counts, err))?;
     for (pos, feats, count) in counts.tags() {
-        builder.set_tag_frequency(pos, plain(feats), count)?;
+        builder
+            .add_tag_frequency(pos, plain(feats), count)
+            .map_err(|err| within(&analyses, err))?;
     }
     for (form, rows) in &forms {
         builder.set_frequency(form, counts.frequency(form));
@@ -213,6 +226,17 @@ mod tests {
         assert!(error(line, &taken).contains("taken.dict"));
         assert!(!dir.join("taken.tmp").exists());
         fs::write(export.join("lexemes.tsv"), line).unwrap();
+        // An error of the counts names its file once, a wrong tag too
+        for (analyses, wanted) in [
+            ("a\tNOUN\ta\t_\tmany\n", "analyses.tsv:1: wrong count"),
+            ("a\tNOUN\ta\tGender\t1\n", "analyses.tsv: wrong UD features"),
+        ] {
+            fs::write(counts.join("analyses.tsv"), analyses).unwrap();
+            let message = build(&export, &counts, &output).unwrap_err().to_string();
+            assert!(message.contains(wanted), "{message}");
+            assert_eq!(message.matches("build error").count(), 1, "{message}");
+        }
+        fs::write(counts.join("analyses.tsv"), "").unwrap();
         assert!(build(&export, &counts, &output).is_ok());
         fs::remove_dir_all(&dir).unwrap();
     }
