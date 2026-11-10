@@ -56,7 +56,7 @@ Several forms may have the same features. A variant comes only from a variant: `
     [('AUX', 'ha'), ('VERB', 'hay')]
     ```
 
-A form of a noun, an adjective, a determiner or a pronoun without a gender or a number agrees with any: `grande` in the feminine plural is `grandes`. A verb with [clitics](analysis.md#clitics) inflects as its verb, and its forms have no clitics: `dámelo` in the plural is `dad`.
+A form of a noun, a name, an adjective, a determiner, a pronoun or a numeral without a gender or a number agrees with any: `grande` in the feminine plural is `grandes`, and an analysis of a [rule](analysis.md#rules) stays itself (`ETA`). A form that changes another feature of the analysis goes after one that lacks it, and a form with the gender and number of the analysis before one without them: `chulitos` in the singular is `chulito`, `lo` in the dative is `le`. A value with several parts, such as `Case=Acc,Nom`, may be given in any order. A verb with [clitics](analysis.md#clitics) inflects as its verb, and its forms have no clitics: `dámelo` in the plural is `dad`.
 
 === "Code"
 

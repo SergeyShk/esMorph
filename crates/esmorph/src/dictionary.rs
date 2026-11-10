@@ -153,6 +153,9 @@ struct HostAnalyses {
     written: bool,
 }
 
+/// Parts of speech whose forms without a gender or a number take any
+const NOMINAL: [&str; 6] = ["NOUN", "PROPN", "ADJ", "DET", "PRON", "NUM"];
+
 /// A form that takes clitics
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Host {
@@ -797,23 +800,30 @@ impl Dictionary {
     }
 
     /// The form of the lexeme of an analysis with the features `feats` ("name", "value"): of the
-    /// forms that have them, the one that keeps most of the other features of the analysis and,
-    /// for a noun, an adjective, a determiner or a pronoun, has fewest features more, then a
-    /// variant only for a variant, unless a main form of such a word is closer in spelling, then a
-    /// form of the tag of the analysis, then the first in the paradigm; of the forms with equal
-    /// features, the closest in spelling to the analysis if it has such forms too, as `hablase`
-    /// and `hablara`. An infinitive and a gerund
-    /// asked for features they have not become finite forms: `hablar` with `Tense=Past` is
-    /// `hablé`. A form of a noun, an adjective, a determiner or a pronoun without a gender or a
+    /// forms that have them, the one that changes fewest other features of the analysis (`chulitos`
+    /// in the singular is `chulito`, not `chulita`), then keeps most of them and, for a noun, a
+    /// name, an adjective, a determiner, a pronoun or a numeral, has fewest features more and lacks
+    /// no gender or number of the analysis (`lo` in the dative is `le`, not `se`), then a variant
+    /// only for a variant, unless a main form of such a word is closer in spelling, then a form of
+    /// the tag of the analysis, then the first in the paradigm; of the forms with equal features,
+    /// the closest in spelling to the analysis if it has such forms too, as `hablase` and
+    /// `hablara`. An infinitive and a gerund asked for features they have not become finite forms:
+    /// `hablar` with `Tense=Past` is `hablé`. A form of such a part of speech without a gender or a
     /// number takes any, though a form that has it goes first: `grande` with `Gender=Fem` is
     /// `grande`. A value of a form may list several (`Case=Acc,Nom`): any of them matches. A verb
-    /// with clitics inflects as its verb, without clitics; an analysis of a rule gives itself if
-    /// it has the features
+    /// with clitics inflects as its verb, without clitics; an analysis of a rule gives itself if it
+    /// has the features or, as a nominal, lacks the gender or number
     pub fn inflect(&self, analysis: &Analysis, feats: &[(&str, &str)]) -> Option<Analysis> {
         if analysis.entry.is_none() {
             let tag = self.ud.get(analysis.ud)?;
+            let nominal = NOMINAL.contains(&tag.pos());
             return (feats.iter())
-                .all(|&(name, value)| has(tag.feat(name), value))
+                .all(|&(name, value)| {
+                    has(tag.feat(name), value)
+                        || (nominal
+                            && matches!(name, "Gender" | "Number")
+                            && tag.feat(name).is_none())
+                })
                 .then(|| Analysis {
                     prob: 1.0,
                     ..analysis.clone()
@@ -866,17 +876,36 @@ impl Dictionary {
             .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
             .filter_map(|form| {
                 let tag = self.ud.get((lexeme.cells[form] & UD_BITS) as u16)?;
-                let nominal =
-                    matches!(tag.pos(), "NOUN" | "PROPN" | "ADJ" | "DET" | "PRON" | "NUM");
+                let nominal = NOMINAL.contains(&tag.pos());
                 let fits = feats.iter().all(|&(name, value)| {
                     has(tag.feat(name), value)
                         || (nominal
                             && matches!(name, "Gender" | "Number")
                             && tag.feat(name).is_none())
                 });
-                let missed = (wanted.iter())
-                    .filter(|&&(name, value)| !has(tag.feat(name), value))
-                    .count();
+                if !fits {
+                    return None;
+                }
+                // A form with another value of a kept feature is worse than one without it
+                // (`chulitos` in the singular is `chulito`, not `chulita`); of equally fitting
+                // forms the one with the gender and number goes first (`lo` in the dative is `le`,
+                // not `se`)
+                let (mut contradicted, mut missed, mut absent) = (0, 0, 0);
+                for &(name, value) in &wanted {
+                    match tag.feat(name) {
+                        Some(known) if has(Some(known), value) => {}
+                        Some(_) => {
+                            contradicted += 1;
+                            missed += 1;
+                        }
+                        None => {
+                            missed += 1;
+                            if nominal && matches!(name, "Gender" | "Number") {
+                                absent += 1;
+                            }
+                        }
+                    }
+                }
                 // A pronoun with a feature more is another word: `vos` is not `usted`
                 let extra = (tag.feats())
                     .filter(|&(name, _)| nominal && !matches!(name, "Gender" | "Number"))
@@ -884,8 +913,10 @@ impl Dictionary {
                     .count();
                 let variant = (lexeme.cells[form] ^ own) & VARIANT != 0;
                 let key = (
+                    contradicted,
                     missed,
                     extra,
+                    absent,
                     variant,
                     lexeme.cells[form] != own,
                     group(form),
@@ -893,12 +924,12 @@ impl Dictionary {
                     form != own_form,
                     form,
                 );
-                fits.then_some((key, form))
+                Some((key, form))
             });
         // The best form and the best of the other kind, a main form for a variant
         let (mut best, mut other) = (None, None);
         for candidate in candidates {
-            if candidate.0.2 && other.is_none_or(|known| candidate < known) {
+            if candidate.0.4 && other.is_none_or(|known| candidate < known) {
                 other = Some(candidate);
             }
             if best.is_none_or(|known| candidate < known) {
@@ -910,9 +941,9 @@ impl Dictionary {
         // plural is `buenos`, not the older `bones`; a verb keeps its variety: `sigás` gives `seguí`
         if let Some((main_key, main)) = other
             && own & VARIANT != 0
-            && matches!(tag.pos(), "NOUN" | "PROPN" | "ADJ" | "DET" | "PRON" | "NUM")
-            && !key.2
-            && (main_key.0, main_key.1) == (key.0, key.1)
+            && NOMINAL.contains(&tag.pos())
+            && !key.4
+            && (main_key.0, main_key.1, main_key.2, main_key.3) == (key.0, key.1, key.2, key.3)
             && common_prefix(main) > common_prefix(best)
         {
             best = main;
@@ -2223,7 +2254,10 @@ pub(crate) mod tests {
         assert_eq!((forms[0].word.as_str(), forms[0].prob), ("10.000", 1.0));
         let card = [("NumType", "Card")];
         assert_eq!(dictionary.inflect(number, &card).unwrap().word, "10.000");
-        assert!(dictionary.inflect(number, &[("Number", "Plur")]).is_none());
+        // Without a gender or a number it takes any, as a form of a table does
+        let plural = [("Number", "Plur")];
+        assert_eq!(dictionary.inflect(number, &plural).unwrap().word, "10.000");
+        assert!(dictionary.inflect(number, &[("NumType", "Ord")]).is_none());
     }
 
     #[test]
