@@ -6,7 +6,10 @@ authors:
   - family-names: Shkarin
     given-names: Sergey
     email: kouki.sergey@gmail.com
+version: 0.1.0
+date-released: 2026-11-09
 repository-code: "https://github.com/SergeyShk/esMorph"
+url: "https://sergeyshk.github.io/esMorph/"
 license:
   - MIT
   - CC-BY-SA-4.0
@@ -21,4 +24,4 @@ keywords:
   - universal dependencies
   - wiktionary
   - rust
-abstract: "esMorph is a morphological analyzer of Spanish with a Rust core and a Python API: for a word form it finds the analyses in a dictionary - the lemma, the part of speech and the Universal Dependencies features - and gives the forms of a lexeme by their features. Work in progress."
+abstract: "esMorph is a morphological analyzer of Spanish with a Rust core and a Python API. For a word form it finds the analyses in a dictionary built from Wiktionary - the lemma, the part of speech and the Universal Dependencies features following the UD guidelines and, where they are silent, the AnCora conventions - and orders them by probability by the counts of the AnCora and GSD treebanks. Verbs with enclitic pronouns are analyzed with the words of the token; punctuation, numbers, ordinals, Roman numerals, names, addresses and abbreviations are analyzed by rules, and unknown words are guessed by their endings, hyphenated parts and prefixes. Every analysis gives the forms of its lexeme and the form with the requested features: conjugation, gender and number."

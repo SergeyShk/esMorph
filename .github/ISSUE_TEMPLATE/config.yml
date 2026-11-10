@@ -1,1 +1,5 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://sergeyshk.github.io/esMorph/
+    about: Installation and use of the analyzer

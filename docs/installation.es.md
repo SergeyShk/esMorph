@@ -1,14 +1,26 @@
 # Instalación
 
-Se requiere Python 3.11 o superior. Las versiones preliminares `0.1.0.devN` se publican solo en TestPyPI:
+Se requiere Python 3.11 o superior.
 
 ``` bash
-pip install --index-url https://test.pypi.org/simple/ esmorph
+pip install esmorph
 ```
 
 ## Paquetes precompilados
 
-Hay paquetes precompilados para Linux (x86_64 y aarch64, manylinux y musllinux), macOS (Intel y Apple Silicon) y Windows (x64 y arm64). Un mismo paquete sirve para todas las versiones de Python a partir de la 3.11, y Python 3.14t sin GIL tiene el suyo propio; para instalarlos no hace falta Rust. Python 3.13 sin GIL no es compatible: las compilaciones sin GIL empiezan en la 3.14.
+PyPI tiene paquetes precompilados para Linux (x86_64 y aarch64, manylinux y musllinux), macOS (Intel y Apple Silicon) y Windows (x64 y arm64). Un mismo paquete sirve para todas las versiones de Python a partir de la 3.11, y Python 3.14t sin GIL tiene el suyo propio; para instalarlos no hace falta Rust. El diccionario forma parte del paquete y no requiere una instalación aparte. Python 3.13 sin GIL no es compatible: las compilaciones sin GIL empiezan en la 3.14.
+
+Las versiones preliminares `X.Y.Z.devN` se publican solo en TestPyPI:
+
+``` bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --pre esmorph
+```
+
+uv toma un paquete del primer índice que lo tiene, así que necesita otro orden de índices:
+
+``` bash
+uv pip install --extra-index-url https://test.pypi.org/simple/ --index-strategy unsafe-best-match --pre esmorph
+```
 
 ## Compilación desde el código fuente
 
@@ -16,10 +28,15 @@ En otras plataformas y en las compilaciones sin GIL posteriores a la 3.14, pip c
 
 ``` bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-pip install 'maturin>=1.9.4,<2'
-pip install --no-build-isolation --index-url https://test.pypi.org/simple/ esmorph
+pip install esmorph
 ```
 
-La dependencia de compilación se instala primero y desde PyPI, porque TestPyPI no tiene una versión adecuada de maturin; el paquete en sí debe venir solo de TestPyPI. Ejecute ambos comandos en un entorno virtual activado: con `--no-build-isolation`, la compilación busca el comando `maturin` en el `PATH`.
-
 El entorno de desarrollo se describe en [CONTRIBUTING.md](https://github.com/SergeyShk/esMorph/blob/master/CONTRIBUTING.md).
+
+## Rust { #rust }
+
+El núcleo del analizador se publica en crates.io como el crate [`esmorph`](https://crates.io/crates/esmorph), y el diccionario como el crate [`esmorph-dict-es`](https://crates.io/crates/esmorph-dict-es): se activa por defecto con la característica `bundled` y se carga con `Dictionary::bundled()`. La documentación de la API está en [docs.rs](https://docs.rs/esmorph).
+
+``` bash
+cargo add esmorph
+```

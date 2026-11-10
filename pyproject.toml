@@ -45,7 +45,9 @@ dependencies = []
 [project.urls]
 Homepage = "https://github.com/SergeyShk/esMorph"
 Repository = "https://github.com/SergeyShk/esMorph"
+Documentation = "https://sergeyshk.github.io/esMorph/"
 Issues = "https://github.com/SergeyShk/esMorph/issues"
+Changelog = "https://github.com/SergeyShk/esMorph/releases"
 
 [tool.maturin]
 manifest-path = "crates/esmorph-py/Cargo.toml"
