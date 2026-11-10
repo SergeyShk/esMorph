@@ -432,10 +432,9 @@ fn _analysis(
         _ if ud.is_none() => OnceLock::from(None),
         Some(saved) if saved >> 32 == u64::from(this.dictionary.checksum()) => {
             let low = saved & NO_ENTRY;
-            OnceLock::from((low != NO_ENTRY).then_some(esmorph::Entry {
-                table: (low >> 16) as u16,
-                form: low as u16,
-            }))
+            OnceLock::from(
+                (low != NO_ENTRY).then_some(esmorph::Entry::new((low >> 16) as u16, low as u16)),
+            )
         }
         _ => OnceLock::new(),
     };

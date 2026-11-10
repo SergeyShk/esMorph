@@ -41,7 +41,7 @@ pub enum Source {
 }
 
 impl Source {
-    /// Name of the source: `dictionary`, `clitics`, `rule`
+    /// Name of the source: `dictionary`, `clitics`, `rule` or `guess`
     pub fn as_str(self) -> &'static str {
         match self {
             Source::Dictionary => "dictionary",
@@ -52,13 +52,22 @@ impl Source {
     }
 }
 
-/// Analysis of a word form in the dictionary: a form of an inflection table
+/// Analysis of a word form in the dictionary: a form of an inflection table. The numbers are valid
+/// only for the dictionary that gave them: with another one they give other forms
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub struct Entry {
     /// Number of the table
     pub table: u16,
     /// Number of the form in the paradigm of the table
     pub form: u16,
+}
+
+impl Entry {
+    /// A form of a table by the numbers that an analysis of the same dictionary had
+    pub fn new(table: u16, form: u16) -> Self {
+        Entry { table, form }
+    }
 }
 
 /// Analysis of a word form
@@ -86,7 +95,8 @@ pub struct Analysis {
 
 impl Analysis {
     /// An analysis from its fields, as `Dictionary::analyze` gave them: for an analysis kept apart
-    /// from the dictionary, whose forms are then asked for
+    /// from the dictionary, whose forms are then asked for. `ud` and `entry` are numbers of the
+    /// dictionary that gave the analysis and are valid only for it
     pub fn new(
         word: String,
         lemma: String,
@@ -121,7 +131,8 @@ impl Analysis {
 ///
 /// The dictionary file is mapped into memory: processes with one dictionary share its memory, and
 /// a copy (`clone`) shares the mapped file. While a dictionary is open, its file must not be
-/// overwritten in place
+/// overwritten in place. A dictionary is trusted data, like code: loading rejects a damaged file,
+/// but a deliberately crafted one may make the analysis panic, though memory safety holds
 #[derive(Clone)]
 pub struct Dictionary {
     storage: Arc<Storage>,
@@ -225,7 +236,8 @@ impl Dictionary {
         Self::from_storage(format::read(file)?)
     }
 
-    /// Reads a dictionary from the bytes of a dictionary file
+    /// Reads a dictionary from the bytes of a dictionary file; as with `open`, the bytes must come
+    /// from a trusted source
     pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
         Self::from_storage(Storage::copy(data))
     }
@@ -243,7 +255,9 @@ impl Dictionary {
     pub fn bundled() -> Result<Self, Error> {
         if esmorph_dict_es::DICTIONARY.is_empty() {
             return Err(Error::Format(
-                "the crate esmorph-dict-es is built without a dictionary file".into(),
+                "the crate esmorph-dict-es is built without a dictionary file: build it with \
+                 `make dictionary` in the repository of esMorph"
+                    .into(),
             ));
         }
         Self::from_static(esmorph_dict_es::DICTIONARY)
@@ -714,9 +728,9 @@ impl Dictionary {
             .fold((0, 0.0), |(count, total), (.., weight)| {
                 (count + 1, total + f64::from(weight))
             });
-        let mut analyses = Vec::new();
+        let mut analyses = Vec::with_capacity(4);
         for (marks, records, weight) in spellings.matching(key.marks) {
-            let spelling = self.alphabet.spelling(&key, marks);
+            let mut spelling = self.alphabet.spelling(&key, marks);
             // The exact spelling takes the whole query, as `weight / total` is one
             let weight = f64::from(weight);
             let (records, probabilities) = analyses_at(self.records(), records).unwrap_or_default();
@@ -733,7 +747,13 @@ impl Dictionary {
                     }
                     None => weight / records.len() as f64 / total,
                 };
-                if let Some(analysis) = self.analysis(&spelling, entry, share) {
+                // The last analysis of a spelling takes its string
+                let word = if at + 1 == records.len() {
+                    std::mem::take(&mut spelling)
+                } else {
+                    spelling.clone()
+                };
+                if let Some(analysis) = self.analysis(word, entry, share) {
                     analyses.push(analysis);
                 }
             }
@@ -778,12 +798,16 @@ impl Dictionary {
     }
 
     /// Analysis of a spelling by a form of a table
-    fn analysis(&self, spelling: &str, entry: Entry, prob: f64) -> Option<Analysis> {
-        let lexeme = self.lexeme(entry, spelling)?;
+    fn analysis(&self, word: String, entry: Entry, prob: f64) -> Option<Analysis> {
+        let lexeme = self.lexeme(entry, &word)?;
+        let (lemma, ud) = (
+            lexeme.spell(&self.suffixes, 0)?,
+            lexeme.ud(usize::from(entry.form))?,
+        );
         Some(Analysis {
-            word: spelling.to_owned(),
-            lemma: lexeme.spell(&self.suffixes, 0)?,
-            ud: lexeme.ud(usize::from(entry.form))?,
+            word,
+            lemma,
+            ud,
             prob,
             source: Source::Dictionary,
             entry: Some(entry),

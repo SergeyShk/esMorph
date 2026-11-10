@@ -28,19 +28,19 @@ let dictionary = esmorph::Dictionary::open("es.dict")?;
 ## Example
 
 ```rust
-# #[cfg(feature = "bundled")] {
 use esmorph::Dictionary;
 
-let dictionary = Dictionary::bundled()?;
-for analysis in dictionary.analyze("camiones") {
-    let tag = dictionary.ud_tag(analysis.ud).unwrap();
-    println!("{} {} {}", analysis.lemma, tag.pos(), tag.feats_string());
+fn main() -> Result<(), esmorph::Error> {
+    let dictionary = Dictionary::bundled()?;
+    for analysis in dictionary.analyze("camiones") {
+        let tag = dictionary.ud_tag(analysis.ud).unwrap();
+        println!("{} {} {}", analysis.lemma, tag.pos(), tag.feats_string());
+    }
+    let hablar = &dictionary.analyze("hablar")[0];
+    let past = [("Tense", "Past"), ("Person", "3"), ("Number", "Plur")];
+    assert_eq!(dictionary.inflect(hablar, &past).unwrap().word, "hablaron");
+    Ok(())
 }
-let hablar = &dictionary.analyze("hablar")[0];
-let past = [("Tense", "Past"), ("Person", "3"), ("Number", "Plur")];
-assert_eq!(dictionary.inflect(hablar, &past).unwrap().word, "hablaron");
-# }
-# Ok::<(), esmorph::Error>(())
 ```
 
 ## License

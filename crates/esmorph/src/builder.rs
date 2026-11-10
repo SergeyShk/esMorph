@@ -285,17 +285,20 @@ impl Builder {
         self.frequencies.insert(form.to_owned(), frequency);
     }
 
-    /// Sets how often texts have a part of speech with features: a form of a table guesses
-    /// unknown words by the number of its word forms with an ending times this number and one
-    pub fn set_tag_frequency(
+    /// Adds to how often texts have a part of speech with features, up to `u32::MAX`: a form of a
+    /// table guesses unknown words by the number of its word forms with an ending times this
+    /// number and one. Every call adds, also for features written in another order
+    pub fn add_tag_frequency(
         &mut self,
         pos: &str,
         feats: &str,
         frequency: u32,
     ) -> Result<(), Error> {
         let feats = normalized(feats)?;
-        self.tag_frequencies
-            .insert((pos.to_owned(), feats), frequency);
+        let total = (self.tag_frequencies)
+            .entry((pos.to_owned(), feats))
+            .or_default();
+        *total = total.saturating_add(frequency);
         Ok(())
     }
 
@@ -749,6 +752,19 @@ mod tests {
         assert!(builder.place("a", "X", "a", "", 0, Some(-0.5)).is_err());
         assert!(builder.place("a", "X", "a", "", 0, Some(f64::NAN)).is_err());
         assert!(builder.place("a", "X", "a", "", 0, Some(1.0)).is_ok());
+    }
+
+    #[test]
+    fn frequencies_of_one_tag_add_up_to_the_limit() {
+        let mut builder = Builder::new();
+        builder
+            .add_tag_frequency("NOUN", "Gender=Fem|Number=Sing", 2)
+            .unwrap();
+        builder
+            .add_tag_frequency("NOUN", "Number=Sing|Gender=Fem", u32::MAX)
+            .unwrap();
+        let key = ("NOUN".to_owned(), "Gender=Fem|Number=Sing".to_owned());
+        assert_eq!(builder.tag_frequencies[&key], u32::MAX);
     }
 
     #[test]
