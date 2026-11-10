@@ -28,7 +28,7 @@
 
 **esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it finds the analyses in a dictionary built from [Wiktionary](https://en.wiktionary.org) - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - orders them by probability and builds the forms of the word: conjugation, gender and number.
 
-It analyzes 1.2 million tokens per second from Python, 28 times faster than spaCy, and lemmatizes as fast as simplemma, whose lemmas are right less often on every UD test set. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
+It analyzes 1.2 million tokens per second from Python, 28 times faster than spaCy, and lemmatizes as fast as simplemma, whose lemmas are right less often on the UD test sets of AnCora, PUD and COSER. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
 
 * **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, lists of words and lemmatization, checking a word form against the dictionary
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/analysis/#ud)** - parts of speech, features and lemmas by the UD guidelines and the AnCora conventions

@@ -28,7 +28,7 @@
 
 **esMorph** es un analizador morfológico del español: un núcleo en Rust con API para Python. Para una forma de palabra busca los análisis en un diccionario creado a partir de [Wiktionary](https://en.wiktionary.org) - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) -, los ordena por probabilidad y construye las formas de la palabra: conjugación, género y número.
 
-Analiza 1.2 millones de tokens por segundo desde Python, 28 veces más rápido que spaCy, y lematiza tan rápido como simplemma, cuyos lemas aciertan menos en cada conjunto de prueba de UD. Las categorías, los rasgos y los lemas siguen la guía de UD y las convenciones del treebank AnCora, así que los resultados se pueden comparar con spaCy, Stanza y otras herramientas de UD.
+Analiza 1.2 millones de tokens por segundo desde Python, 28 veces más rápido que spaCy, y lematiza tan rápido como simplemma, cuyos lemas aciertan menos en los conjuntos de prueba de UD de AnCora, PUD y COSER. Las categorías, los rasgos y los lemas siguen la guía de UD y las convenciones del treebank AnCora, así que los resultados se pueden comparar con spaCy, Stanza y otras herramientas de UD.
 
 * **[Analizador](https://sergeyshk.github.io/esMorph/es/analyzer/)** - los análisis de una forma de palabra por probabilidad, listas de palabras y lematización, comprobación de una forma de palabra en el diccionario
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/es/analysis/#ud)** - categorías, rasgos y lemas según la guía de UD y las convenciones de AnCora
