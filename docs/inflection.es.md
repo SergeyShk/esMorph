@@ -42,7 +42,7 @@ Cada análisis conoce su lexema: las formas de la palabra con el mismo lema y la
     'hablaron'
     ```
 
-Varias formas pueden tener los mismos rasgos. Una variante solo sale de una variante: `hablás` en imperativo es `hablá`, mientras que `hablas` es `habla`. De las dos formas del pretérito imperfecto de subjuntivo el análisis conserva la suya: `hablase` en primera persona del plural es `hablásemos`. En los demás casos va primero la forma más frecuente: el verbo `haber` da `hay`, el auxiliar da `ha`.
+Varias formas pueden tener los mismos rasgos. Una variante solo sale de una variante: `hablás` en imperativo es `hablá`, mientras que `hablas` es `habla`. De las dos formas del pretérito imperfecto de subjuntivo el análisis conserva la suya: `hablase` en primera persona del plural es `hablásemos`. En los demás casos va primero una forma que los treebanks tienen claramente más a menudo (el verbo `haber` da `hay`, el auxiliar da `ha`), y el orden de la tabla de la palabra decide el resto: `ser` da `soy`, no `seigo`. Una forma de solo algunos países es una variante: el participio femenino de `apagar` es `apagada`, no `apaga`.
 
 === "Código"
 

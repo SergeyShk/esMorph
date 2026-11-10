@@ -95,6 +95,7 @@ TABLE_CLITIC = re.compile(r"^(me|te|se|nos|os) ")
 CLITIC_ENDING = re.compile(r"(me|te|se|nos|os|lo|la|le|los|las|les)$")
 REFLEXIVE_ENDING = re.compile(r"(nos|os|te|se)$")
 ACUTE = set("áéíóú")
+DEMONSTRATIVES = {"este", "ese", "aquel"}
 # Vowels of a syllable: two strong vowels are two syllables
 SYLLABLE_VOWELS = re.compile(r"[iuü]*[aeo][iuü]*|[iuü]+")
 NON_FINITE_ROWS = {"infinitive", "gerund"}
@@ -742,9 +743,13 @@ def kind(row: conventions.Row, variants: set[Variant]) -> str:
         variants (set[Variant]): The variants of `rows`
 
     Returns:
-        str: `variant` or `_`; an auxiliary is a variant as its verb
+        str: `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative pronoun
+        with an accent is a variant of the one without, which the spelling of 2010 prefers: `éste`
+        of `este`
     """
     lemma, pos, form, feats = row
+    if pos == "PRON" and lemma in DEMONSTRATIVES:
+        return "variant" if set(form) & ACUTE else "_"
     pos = "VERB" if pos == "AUX" else pos
     return "variant" if {(lemma, pos, form, feats), (None, pos, form, None)} & variants else "_"
 

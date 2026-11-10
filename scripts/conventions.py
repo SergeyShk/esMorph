@@ -15,6 +15,7 @@ from pathlib import Path
 Row = tuple[str, str, str, str]
 
 CLOSED_CLASSES = Path(__file__).resolve().parents[1] / "data" / "closed-classes.tsv"
+UNITS = Path(__file__).resolve().parents[1] / "data" / "units.tsv"
 # What the table answers for alone: a word of such a class out of the table with an analysis of
 # another class is no such word, as `hace` is no preposition
 CLOSED = {"ADP", "CCONJ", "DET", "PART", "PRON", "SCONJ"}
@@ -27,7 +28,7 @@ INFINITIVE = re.compile(r"[aeiíoó]r$")
 
 def closed_classes(path: Path = CLOSED_CLASSES) -> set[Row]:
     """
-    Rows of the table of closed classes
+    Rows of a table: of closed classes or of units
 
     Arguments:
         path (Path): File of the table
@@ -279,4 +280,6 @@ def apply(rows: set[Row], table: set[Row]) -> set[Row]:
     """
     rows = with_table(infinitives(verb_lemmas(rows)), table)
     rows = names_and_numerals(table_lemmas(rows, table))
+    # Symbols of units, which Wiktionary has not as words: `km` is a noun or a symbol
+    rows |= closed_classes(UNITS)
     return participle_adjectives(auxiliaries(absolute_superlatives(rows)))

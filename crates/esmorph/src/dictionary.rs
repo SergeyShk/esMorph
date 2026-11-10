@@ -14,8 +14,8 @@ use crate::format::{
     Storage, Strings, UD_BITS, VARIANT, WordValue,
 };
 use crate::rules::{
-    self, CAPS_NAME, CLITICS_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule, RuleTags,
-    SHORT_CAPS,
+    self, CAPS_NAME, CLITICS_NAME, INITIAL_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule,
+    RuleTags, SHORT_CAPS,
 };
 use crate::ud::{UdTag, UdTags};
 
@@ -426,9 +426,10 @@ impl Dictionary {
     }
 
     /// Adds the analysis of a name to the analyses of a word with a capital letter that the
-    /// dictionary knows without a name of its spelling: a word without accents that the dictionary
-    /// has only with them is mostly a name (`Angel`, `Perez`), another word only sometimes
-    /// (`Estados`, `Comisión`), so its name usually goes after the analyses of the dictionary
+    /// dictionary knows without a name of its spelling: an initial (`D.`) and a word without accents
+    /// that the dictionary has only with them (`Angel`, `Perez`) are mostly names, another word only
+    /// sometimes (`Estados`, `Comisión`), so its name usually goes after the analyses of the
+    /// dictionary
     fn add_capital_name(&self, token: &str, analyses: &mut Vec<Analysis>) {
         let written = |analysis: &Analysis| lower_eq(token, &analysis.word);
         if (analyses.iter()).any(|analysis| written(analysis) && self.is_name(analysis)) {
@@ -437,7 +438,11 @@ impl Dictionary {
         let restored = !(token.chars().flat_map(char::to_lowercase))
             .any(|c| c != clitics::without_acute(c) || c == 'ü')
             && !analyses.iter().any(written);
-        let share = if restored {
+        let mut letters = token.chars();
+        let initial = letters.next().is_some_and(char::is_uppercase) && letters.as_str() == ".";
+        let share = if initial {
+            INITIAL_NAME
+        } else if restored {
             RESTORED_NAME
         } else {
             CAPS_NAME[2]
@@ -2318,6 +2323,7 @@ pub(crate) mod tests {
         let noun = "Gender=Masc|Number=Sing";
         builder.add_form("ángel", "NOUN", "ángel", noun).unwrap();
         builder.add_form("x", "PRON", "x", "").unwrap();
+        builder.add_form("don", "NOUN", "d.", "").unwrap();
         Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
     }
 
@@ -2343,6 +2349,8 @@ pub(crate) mod tests {
                 ("ángel".into(), "ángel".into(), "NOUN".into())
             ]
         );
+        // An initial is mostly a name
+        assert_eq!(summary(&dictionary, "D.")[0].2, "PROPN");
         // A word with a name of its spelling gets no other
         assert_eq!(dictionary.analyze("Rosa").len(), 2);
         // A lowercase word is a name rarely

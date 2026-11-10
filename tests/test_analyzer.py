@@ -1092,6 +1092,29 @@ def test_names_of_the_dictionary(morph):
     assert [(a.pos, a.feats.get("NumForm")) for a in morph.analyze("X")][:1] == [("NUM", "Roman")]
 
 
+def test_conventions_of_the_dictionary(morph):
+    def verb(lemma):
+        return next(a for a in morph.analyze(lemma) if a.lemma == lemma and a.pos == "VERB")
+
+    # Equal forms go by the table of the word, and a form of some countries is a variant
+    assert verb("ser").inflect(Mood="Ind", Tense="Pres", Person="1", Number="Sing") == "soy"
+    assert verb("apagar").inflect(VerbForm="Part", Gender="Fem", Number="Sing") == "apagada"
+    assert verb("colar").inflect(Mood="Ind", Tense="Pres", Person="1", Number="Sing") == "cuelo"
+    # A spelling of a word of the table has its lemma, and a word goes before its old spelling
+    assert morph.lemmatize(["usté", "güeno", "á", "tambien"]) == ["tú", "buen", "a", "también"]
+    # A verb has its infinitive among its forms
+    assert morph.analyze("acepillo")[0].inflect(VerbForm="Inf") == "acepillar"
+    # Older contractions, initials and symbols of units
+    assert morph.analyze("desta")[0].words == ("de", "esta")
+    initial = [(a.lemma, a.pos) for a in morph.analyze("V.")]
+    assert initial[0] == ("V.", "PROPN") and ("tú", "PRON") in initial
+    assert [(a.lemma, a.pos) for a in morph.analyze("km")][:1] == [("km", "NOUN")]
+    # A demonstrative with an accent is a variant: it inflects to variants
+    este = next(a for a in morph.analyze("éste") if a.pos == "PRON")
+    assert este.inflect(Gender="Fem", Number="Plur") == "éstas"
+    assert morph.analyze("este")[0].inflect(Gender="Fem", Number="Plur") == "estas"
+
+
 def test_clitics_in_literary_writing(morph):
     # A finite form takes enclitics with the accent of the token
     dijole = morph.analyze("díjole")[0]
