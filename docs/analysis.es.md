@@ -43,7 +43,7 @@ Las categorías gramaticales, los rasgos y los lemas siguen las directrices de [
 - `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` y `saber` tienen análisis `AUX` y `VERB`; `hay` es ante todo el verbo `haber`;
 - un participio es un verbo con el infinitivo como lema (`VerbForm=Part`, `Tense=Past`) y un adjetivo con el masculino singular como lema (`VerbForm=Part` sin `Tense`);
 - los verbos no llevan `-se` en el lema: `quejarse` es `quejar` con el clítico `se`;
-- el condicional y el imperativo no tienen `Tense`, y un nombre propio no tiene rasgos;
+- el condicional y el imperativo no tienen `Tense`; un nombre propio no tiene rasgos, y su lema lleva mayúscula: `madrid` y `Madrid` son `Madrid`, `PSOE` sigue siendo `PSOE`;
 - un adjetivo en `-ísimo` es su propio lema con `Degree=Abs`.
 
 Si la categoría de una palabra depende del contexto, la palabra tiene ambos análisis: `que` es `PRON` y `SCONJ`, `la` es `DET` y `PRON`, un participio es `VERB` y `ADJ`. Rasgos: género, número, persona, tiempo, modo, forma verbal, grado, negación (`Polarity=Neg` de `no`), definitud (`Definite`), el tipo de pronombre o de determinante (`PronType`), la posesión (`Poss`), la reflexividad (`Reflex`), el caso de los pronombres personales (`Case`) y si van tras una preposición (`PrepCase`), la cortesía (`Polite=Form` de `usted`), el tipo de numeral (`NumType`) y cómo se escribe (`NumForm`), y la clase de un signo de puntuación (`PunctType`, `PunctSide`).
@@ -66,7 +66,7 @@ Los análisis van del más probable al menos probable. `prob` es la parte de un 
 
 ## Palabras con clíticos { #clitics }
 
-Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. `del` y `al` también tienen sus dos palabras. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`.
+Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: `díjole` es `dijo` + `le`. `del` y `al` también tienen sus dos palabras. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`, aunque unas pocas suelen ser verbos con clíticos: `verse` es ante todo `ver` + `se`.
 
 === "Código"
 
@@ -82,7 +82,7 @@ Un verbo con pronombres enclíticos se analiza como su verbo: el análisis descr
 
 ## Ortografía { #spelling }
 
-Las mayúsculas no importan para buscar una palabra en el diccionario, aunque un token con mayúscula también puede ser un [nombre](#rules). Una palabra escrita como en el diccionario da los análisis de esa grafía: `publico` no es `público`. Una palabra que no está tal como se escribe se busca sin sus tildes y con la diéresis perdida, y `word` muestra la grafía del diccionario; para un verbo con clíticos `word` es el token tal como se escribe, en minúsculas.
+Las mayúsculas no importan para buscar una palabra en el diccionario, aunque un token con mayúscula también puede ser un [nombre](#rules). Una palabra escrita como en el diccionario da los análisis de esa grafía: `publico` no es `público`. Una palabra que no está tal como se escribe puede ser un verbo con clíticos (`verte` es `ver` + `te`, no `verté`); si no lo es, se busca sin sus tildes y con la diéresis perdida, y `word` muestra la grafía del diccionario; para un verbo con clíticos `word` es el token tal como se escribe, en minúsculas.
 
 === "Código"
 
@@ -105,7 +105,7 @@ Un token que el diccionario no tiene recibe los análisis de unas reglas, con `s
 - un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre;
 - un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`.
 
-Una palabra en mayúsculas que el diccionario conoce también puede ser un nombre, con su parte: una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano en `I` como `VI` o `XI` es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también suele ser un nombre: `Mandela` es ante todo `PROPN`. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
+Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una palabra sin tildes que el diccionario solo tiene con ellas suele ser un nombre (`Angel`, `Perez`), así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (`Estados`, `Comisión`), así que su nombre va después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como `VI`, `XI` o `X`, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (`Mandela` es ante todo `PROPN`), mientras que un infinitivo, un gerundio y un imperativo con tilde suelen ser verbos (`Hacerlo`, `Déjame`). Una palabra en minúsculas rara vez es un nombre: `miró` es ante todo `mirar`, `Miró` es un nombre. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
 
 === "Código"
 

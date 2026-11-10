@@ -43,7 +43,7 @@ Parts of speech, features and lemmas follow the [Universal Dependencies](https:/
 - `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` and `saber` have both `AUX` and `VERB` analyses; `hay` is first of all the verb `haber`;
 - a participle is a verb with the infinitive as the lemma (`VerbForm=Part`, `Tense=Past`) and an adjective with the masculine singular as the lemma (`VerbForm=Part` without `Tense`);
 - verbs have no `-se` in the lemma: `quejarse` is `quejar` with the clitic `se`;
-- the conditional and the imperative have no `Tense`, and a proper name has no features;
+- the conditional and the imperative have no `Tense`; a proper name has no features, and its lemma has a capital letter: `madrid` and `Madrid` are `Madrid`, `PSOE` stays `PSOE`;
 - an adjective in `-ísimo` is its own lemma with `Degree=Abs`.
 
 If the part of speech of a word depends on context, the word has both analyses: `que` is `PRON` and `SCONJ`, `la` is `DET` and `PRON`, a participle is `VERB` and `ADJ`. Features: gender, number, person, tense, mood, verb form, degree, negation (`Polarity=Neg` of `no`), definiteness (`Definite`), the type of a pronoun or a determiner (`PronType`), possessiveness (`Poss`), reflexivity (`Reflex`), the case of personal pronouns (`Case`) and whether they follow a preposition (`PrepCase`), politeness (`Polite=Form` of `usted`), the type of a numeral (`NumType`) and how it is written (`NumForm`), and the kind of a sign of punctuation (`PunctType`, `PunctSide`).
@@ -66,7 +66,7 @@ Analyses go from the most probable to the least. `prob` is the share of an analy
 
 ## Words with clitics { #clitics }
 
-A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. `del` and `al` also have their two words. A word of the dictionary is not split: `comete` is a form of `cometer`.
+A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. In older and literary writing a finite form takes enclitics too, when the accent of the token marks it: `díjole` is `dijo` + `le`. `del` and `al` also have their two words. A word of the dictionary is not split: `comete` is a form of `cometer`, though a few are mostly verbs with clitics: `verse` is first of all `ver` + `se`.
 
 === "Code"
 
@@ -82,7 +82,7 @@ A verb with enclitic pronouns is analyzed as its verb: the analysis describes th
 
 ## Spelling { #spelling }
 
-Case does not matter for finding a word in the dictionary, though a token with a capital letter may also be a [name](#rules). A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary; for a verb with clitics `word` is the token as written, in lower case.
+Case does not matter for finding a word in the dictionary, though a token with a capital letter may also be a [name](#rules). A word spelled as in the dictionary gives the analyses of that spelling: `publico` is not `público`. A word absent as written may be a verb with clitics (`verte` is `ver` + `te`, not `verté`); otherwise it is looked for without its accents and with a lost diaeresis, and `word` shows the spelling of the dictionary; for a verb with clitics `word` is the token as written, in lower case.
 
 === "Code"
 
@@ -105,7 +105,7 @@ A token that the dictionary does not have gets the analyses of rules, with `sour
 - a Roman numeral is `NUM` with `NumForm=Roman`, less often a name;
 - a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`.
 
-A word in capitals that the dictionary knows may be a name too, with its share: a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral in `I` such as `VI` or `XI` is a numeral first. A token with a capital letter that splits as a verb with clitics is mostly a name too: `Mandela` is first of all `PROPN`. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
+A word with a capital letter that the dictionary knows may be a name too, with its share. A word without accents that the dictionary has only with them is mostly a name (`Angel`, `Perez`), so its name goes first, while another word with a capital letter is a name less often (`Estados`, `Comisión`), so its name goes after the analyses of the dictionary. Of the words in capitals, a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral that the dictionary knows as a word, such as `VI`, `XI` or `X`, is a numeral first. A token with a capital letter that splits as a verb with clitics may be a name too: an imperative without an accent mostly is one (`Mandela` is first of all `PROPN`), while an infinitive, a gerund and an imperative with an accent mostly are verbs (`Hacerlo`, `Déjame`). A lowercase word is a name rarely: `miró` is first of all `mirar`, `Miró` a name. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
 
 === "Code"
 
