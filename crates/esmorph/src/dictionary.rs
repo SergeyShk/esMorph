@@ -30,8 +30,9 @@ pub enum Source {
     /// The word form is a verb of the dictionary with enclitic pronouns
     Clitics,
     /// A rule gives the analysis: of a token that is not in the dictionary (punctuation, a symbol,
-    /// a number, a Roman numeral, a name) or the name and the Roman numeral of a word with a
-    /// capital letter that the dictionary has (`Estados`, `ETA`, `X`)
+    /// a number, an ordinal number, a Roman numeral, a name, an address, an abbreviation, a letter)
+    /// or the name and the Roman numeral of a word with a capital letter that the dictionary has
+    /// (`Estados`, `ETA`, `X`)
     Rule,
     /// A lowercase word that is not in the dictionary, guessed: by its last part after a hyphen,
     /// by the word without a known prefix, as a verb with clitics of a guessed host or by the words
@@ -378,7 +379,17 @@ impl Dictionary {
             && !stem.is_empty()
             && stem.chars().all(|c| c.is_alphabetic() && !c.is_uppercase())
         {
-            analyses = (self.found(stem).into_iter())
+            let known = self.found(stem);
+            // A word of the dictionary with the period of a sentence is no abbreviation: `come.`
+            if !known.is_empty()
+                && !(known.iter()).any(|analysis| {
+                    (self.ud.get(analysis.ud))
+                        .is_some_and(|tag| matches!(tag.pos(), "NOUN" | "SYM"))
+                })
+            {
+                return Vec::new();
+            }
+            analyses = (known.into_iter())
                 .filter(|analysis| {
                     (self.ud.get(analysis.ud))
                         .is_some_and(|tag| matches!(tag.pos(), "NOUN" | "SYM"))

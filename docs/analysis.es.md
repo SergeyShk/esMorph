@@ -27,7 +27,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 
 | Atributo | Tipo | Descripción |
 | :------- | :--- | :---------- |
-| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles y con las marcas combinantes unidas a sus letras |
+| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con `-` en lugar de los guiones U+2010 y U+2011 |
 | `lemma` | `str` | El lema |
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
@@ -106,7 +106,9 @@ Un token que el diccionario no tiene recibe los análisis de unas reglas, con `s
 - un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre; en minúsculas es solo un numeral: `xii`;
 - un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`;
 - un enlace, un correo, una etiqueta o una mención en minúsculas es `SYM`: `www.aeat.es`, `#hola`;
-- una abreviatura con punto en minúsculas es el sustantivo o el símbolo del diccionario sin el punto (`kg.` es `kg`) o un sustantivo con ella misma como lema (`fig.`), y lo mismo una letra (`b`).
+- una abreviatura con punto en minúsculas que el diccionario no tiene es un sustantivo con ella misma como lema (`fig.`), y lo mismo una letra minúscula (`b`).
+
+Una abreviatura con punto en minúsculas que el diccionario tiene sin el punto recibe los sustantivos y los símbolos de esa palabra, con `source` igual a `"dictionary"`: `kg.` es `kg`. Una palabra del diccionario de otra categoría con un punto no recibe análisis: `come.` es un verbo con el punto de una oración.
 
 Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una inicial (`D.`) y una palabra sin tildes que el diccionario solo tiene con ellas (`Angel`, `Perez`) suelen ser nombres, así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (`Estados`, `Comisión`), así que su nombre suele ir después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como `VI`, `XI` o `X`, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (`Mandela` es ante todo `PROPN`), mientras que un infinitivo, un gerundio, un imperativo con tilde y una forma personal suelen ser verbos (`Hacerlo`, `Déjame`, `Levantóse`). Una palabra en minúsculas rara vez es un nombre: `miró` es ante todo `mirar`, `Miró` es un nombre. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
 

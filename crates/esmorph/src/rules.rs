@@ -224,7 +224,7 @@ pub(crate) fn rules(token: &str) -> Vec<(String, Rule, f64)> {
     } else if token.len() > 1 && roman(&token.to_uppercase()) {
         Rule::Roman
     } else if abbreviation(token)
-        || (token.chars().count() == 1 && token.chars().all(char::is_alphabetic))
+        || (token.chars().count() == 1 && token.chars().all(char::is_lowercase))
     {
         Rule::Noun
     } else {
@@ -342,10 +342,17 @@ fn symbol(c: char) -> bool {
 /// power (`10²`) or a unit (`500cc`, whose lemma is `500`); the periods between thousands go away
 /// (`10.000` is `10000`), the rest stays as written
 fn number(token: &str) -> Option<String> {
-    if let Some(rest) = token.strip_prefix(['+', '-', '−', '±']) {
-        let sign = &token[..token.len() - rest.len()];
-        return number(rest).map(|lemma| format!("{sign}{lemma}"));
+    match token.strip_prefix(['+', '-', '−', '±']) {
+        Some(rest) => {
+            let sign = &token[..token.len() - rest.len()];
+            unsigned(rest).map(|lemma| format!("{sign}{lemma}"))
+        }
+        None => unsigned(token),
     }
+}
+
+/// The lemma of a number in digits without a sign
+fn unsigned(token: &str) -> Option<String> {
     let fraction = |c: char| matches!(c, '¼'..='¾' | '\u{2150}'..='\u{215E}');
     let power = |c: char| matches!(c, '¹' | '²' | '³' | '\u{2070}'..='\u{2079}');
     let plain = token.trim_end_matches(|c| fraction(c) || power(c));
@@ -354,10 +361,11 @@ fn number(token: &str) -> Option<String> {
         let alone = plain.is_empty() && token.chars().all(fraction);
         return (alone || (!plain.is_empty() && digits)).then(|| token.to_owned());
     }
-    let unit = UNITS.iter().find_map(|unit| token.strip_suffix(unit));
-    if let Some(digits) =
-        unit.filter(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
-    {
+    // Of the units that end the token, the one after the digits: `kg`, not `g`, in `5kg`
+    let unit = (UNITS.iter())
+        .filter_map(|unit| token.strip_suffix(unit))
+        .find(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
+    if let Some(digits) = unit {
         return Some(digits.to_owned());
     }
     if !(token.split(['.', ',', ':', '/', '\'', '-', '–', '‒', '—', '‑']))
@@ -502,6 +510,26 @@ mod tests {
         assert_eq!(kinds("1 234,5"), [("1 234,5".into(), Rule::Cardinal)]);
         assert_eq!(kinds("500cc"), [("500".into(), Rule::Cardinal)]);
         assert_eq!(kinds("3km"), [("3".into(), Rule::Cardinal)]);
+        // A unit that ends in another one
+        for (word, lemma) in [
+            ("5kg", "5"),
+            ("10mm", "10"),
+            ("100mg", "100"),
+            ("100ml", "100"),
+        ] {
+            assert_eq!(kinds(word), [(lemma.into(), Rule::Cardinal)], "{word}");
+        }
+        // One sign only, and a long run of signs is no deep recursion
+        assert!(kinds("--5").is_empty());
+        let signs = format!("{}5", "-".repeat(20_000));
+        let run = std::thread::Builder::new().stack_size(1 << 21);
+        assert!(
+            run.spawn(move || kinds(&signs))
+                .unwrap()
+                .join()
+                .unwrap()
+                .is_empty()
+        );
         // Spaces part only groups of three digits
         for word in ["1 23", "12345 678", "a 000", "½a"] {
             assert!(
@@ -544,7 +572,8 @@ mod tests {
             assert_eq!(kinds(word), [(word.into(), Rule::Noun)], "{word}");
         }
         assert_eq!(kinds("xii"), [("xii".into(), Rule::Roman)]);
-        for word in ["casa", "a.b", "@", "#"] {
+        // A character of a script without case is no lowercase letter
+        for word in ["casa", "a.b", "@", "#", "円", "が"] {
             assert!(
                 !kinds(word)
                     .iter()

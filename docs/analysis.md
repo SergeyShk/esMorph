@@ -27,7 +27,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 
 | Attribute | Type | Description |
 | :-------- | :--- | :---------- |
-| `word` | `str` | The word form as the dictionary spells it, with its accents; a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters and with combining marks joined to their letters |
+| `word` | `str` | The word form as the dictionary spells it, with its accents; a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters and with `-` for the hyphens U+2010 and U+2011 |
 | `lemma` | `str` | The lemma |
 | `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
 | `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
@@ -106,7 +106,9 @@ A token that the dictionary does not have gets the analyses of rules, with `sour
 - a Roman numeral is `NUM` with `NumForm=Roman`, less often a name; in lower case it is a numeral only: `xii`;
 - a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`;
 - a link, an email, a hashtag or a mention in lower case is `SYM`: `www.aeat.es`, `#hola`;
-- an abbreviation with a period in lower case is the noun or the symbol of the dictionary without the period (`kg.` is `kg`) or a noun with itself as the lemma (`fig.`), and so is a letter (`b`).
+- an abbreviation with a period in lower case that the dictionary does not have is a noun with itself as the lemma (`fig.`), and so is a lowercase letter (`b`).
+
+A lowercase abbreviation with a period that the dictionary has without the period gets the nouns and the symbols of that word, with `source` equal to `"dictionary"`: `kg.` is `kg`. A word of the dictionary with a period of another part of speech gets no analyses: `come.` is a verb with the period of a sentence.
 
 A word with a capital letter that the dictionary knows may be a name too, with its share. An initial (`D.`) and a word without accents that the dictionary has only with them (`Angel`, `Perez`) are mostly names, so their name goes first, while another word with a capital letter is a name less often (`Estados`, `Comisión`), so its name usually goes after the analyses of the dictionary. Of the words in capitals, a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral that the dictionary knows as a word, such as `VI`, `XI` or `X`, is a numeral first. A token with a capital letter that splits as a verb with clitics may be a name too: an imperative without an accent mostly is one (`Mandela` is first of all `PROPN`), while an infinitive, a gerund, an imperative with an accent and a finite form mostly are verbs (`Hacerlo`, `Déjame`, `Levantóse`). A lowercase word is a name rarely: `miró` is first of all `mirar`, `Miró` a name. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
 

@@ -1137,6 +1137,9 @@ def test_more_tokens_out_of_the_dictionary(morph):
     assert first("kg.") == ("kg", "NOUN")
     assert first("fig.") == ("fig.", "NOUN")
     assert first("b") == ("b", "NOUN")
+    # A word of the dictionary with a sentence period, a letter without case and many signs
+    assert morph.analyze_many(["come.", "él.", "円", "-" * 50_000 + "5"]) == [[], [], [], []]
+    assert [first(word) for word in ["5kg", "100ml"]] == [("5", "NUM"), ("100", "NUM")]
     ordinal = morph.analyze("2.ª")[0]
     assert (ordinal.lemma, ordinal.pos, ordinal.feats["NumType"]) == ("2.º", "ADJ", "Ord")
     assert first("500cc") == ("500", "NUM")
