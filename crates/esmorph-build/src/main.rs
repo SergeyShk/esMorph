@@ -6,7 +6,7 @@
 
 mod frequencies;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
@@ -43,6 +43,8 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
     )?);
     let table = read(&export.join("lexemes.tsv"))?;
     let mut forms: BTreeMap<&str, Vec<Row>> = BTreeMap::new();
+    // Lexemes with a main form: the others only spell other words
+    let mut main: HashSet<(&str, &str)> = HashSet::new();
     for (number, line) in table.lines().enumerate() {
         let fields: Vec<&str> = line.split('\t').collect();
         let &[lemma, pos, form, feats, kind, rank] = fields.as_slice() else {
@@ -54,7 +56,9 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
         };
         builder.add_form(lemma, pos, form, plain(feats))?;
         match kind {
-            "_" => {}
+            "_" => {
+                main.insert((lemma, pos));
+            }
             "variant" => builder.mark_variant(lemma, pos, form, plain(feats))?,
             _ => {
                 return Err(Error::Build(format!(
@@ -72,10 +76,15 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
             })?;
             builder.set_rank(lemma, pos, form, plain(feats), rank)?;
         }
-        forms
-            .entry(form)
-            .or_default()
-            .push(Row { lemma, pos, feats });
+        forms.entry(form).or_default().push(Row {
+            lemma,
+            pos,
+            feats,
+            spelling: false,
+        });
+    }
+    for row in forms.values_mut().flatten() {
+        row.spelling = !main.contains(&(row.lemma, row.pos));
     }
     let counts = Counts::read(
         &read(&counts.join("analyses.tsv"))?,

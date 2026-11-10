@@ -18,6 +18,8 @@ pub struct Row<'a> {
     pub lemma: &'a str,
     pub pos: &'a str,
     pub feats: &'a str,
+    /// Whether the lexeme of the row has only variants: a spelling of another word
+    pub spelling: bool,
 }
 
 /// Analyses of a form, the most probable first
@@ -153,8 +155,9 @@ impl Counts {
         f64::from(self.tags.get(&key).copied().unwrap_or(0)) + 1.0
     }
 
-    /// Analyses of a form in their order. Equal probabilities prefer the word as its own lemma and
-    /// then the shorter lemma
+    /// Analyses of a form in their order. Equal probabilities prefer a word to its spelling with
+    /// other accents (`a` to `á`, `también` to `tambien`), though not a name, then the word as its
+    /// own lemma and then the shorter lemma
     pub fn rank<'a>(&self, form: &str, rows: &[Row<'a>]) -> Ranked<'a> {
         let distinct = |pick: fn(&Row<'a>) -> &'a str, of: &[Row<'a>]| -> Vec<&'a str> {
             let mut seen = HashSet::new();
@@ -199,7 +202,11 @@ impl Counts {
             }
         }
         scored.sort_by(|(a, pa), (b, pb)| {
+            // A name keeps its spelling: `Mali`, `Amazonia`
+            let spelling =
+                |row: &Row| row.spelling && row.pos != "PROPN" && plain(a.lemma) == plain(b.lemma);
             pb.total_cmp(pa)
+                .then_with(|| spelling(a).cmp(&spelling(b)))
                 .then_with(|| (b.lemma == form).cmp(&(a.lemma == form)))
                 .then_with(|| a.lemma.len().cmp(&b.lemma.len()))
                 .then_with(|| (a.lemma, a.pos, a.feats).cmp(&(b.lemma, b.pos, b.feats)))
@@ -210,6 +217,20 @@ impl Counts {
             probabilities: (seen_pos > 0.0).then_some(values),
         }
     }
+}
+
+/// A word without its accents and diaeresis
+fn plain(word: &str) -> String {
+    word.chars()
+        .map(|c| match c {
+            'á' => 'a',
+            'é' | 'ë' => 'e',
+            'í' | 'ï' => 'i',
+            'ó' => 'o',
+            'ú' | 'ü' => 'u',
+            _ => c,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -231,7 +252,30 @@ mod tests {
     }
 
     fn row<'a>(lemma: &'a str, pos: &'a str, feats: &'a str) -> Row<'a> {
-        Row { lemma, pos, feats }
+        Row {
+            lemma,
+            pos,
+            feats,
+            spelling: false,
+        }
+    }
+
+    #[test]
+    fn a_word_goes_before_its_spelling_with_other_accents() {
+        let counts = counts();
+        let spelling = Row {
+            spelling: true,
+            ..row("á", "ADP", "")
+        };
+        let ranked = counts.rank("á", &[spelling, row("a", "ADP", "")]);
+        assert_eq!(ranked.rows[0].lemma, "a");
+        // A spelling of another word keeps its own lemma first
+        let other = Row {
+            spelling: true,
+            ..row("i", "ADJ", "")
+        };
+        let ranked = counts.rank("i", &[row("ilustre", "ADJ", ""), other]);
+        assert_eq!(ranked.rows[0].lemma, "i");
     }
 
     #[test]
