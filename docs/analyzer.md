@@ -9,8 +9,8 @@ Morphological analyzer: for a word form it finds all [analyses](analysis.md) in 
 Exceptions:
 
 - `FileNotFoundError` - the dictionary file does not exist;
-- `OSError` - the dictionary file cannot be read: no access, the path points to a directory;
-- `ValueError` - the file is not an esMorph dictionary or is damaged;
+- `OSError` - the dictionary file cannot be read: no access, the path points to a directory, a pipe or a device;
+- `ValueError` - the file is not an esMorph dictionary or is damaged, the path has a NUL character;
 - `TypeError` - a path that is neither a string nor `PathLike`.
 
 === "Code"
@@ -34,7 +34,7 @@ Exceptions:
 | :-------- | :--- | :------ | :---------- |
 | `path` | `str` / `PathLike` | `None` | Path to the dictionary file; by default, the dictionary of the package |
 
-The object keeps the dictionary path in `path` of type `Path`, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, so dictionaries from untrusted sources should not be loaded.
+The object keeps the absolute dictionary path in `path` of type `Path`, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, so dictionaries from untrusted sources should not be loaded.
 
 ## Methods
 
@@ -94,7 +94,7 @@ Analyses of every word form, as with [`analyze`](#analyze).
 
 Exceptions:
 
-- `TypeError` - a string instead of a collection of words, a word that is not a string.
+- `TypeError` - a string or bytes instead of a collection of words, a word that is not a string.
 
 === "Code"
 
@@ -129,7 +129,7 @@ Lemmas of the most probable analyses of the word forms; a token without analyses
 
 Exceptions:
 
-- `TypeError` - a string instead of a collection of words, a word that is not a string.
+- `TypeError` - a string or bytes instead of a collection of words, a word that is not a string.
 
 === "Code"
 
@@ -186,7 +186,7 @@ The dictionary of the package is built from the English [Wiktionary](https://en.
 
 ## Threads and processes { #parallel }
 
-One analyzer can be used from several threads. `lemmatize` releases the GIL, so threads speed it up; `analyze_many` creates the analyses with the GIL, so with it threads speed it up little, and on the free-threaded Python 3.14t, which has a wheel of its own, they do. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. A pickle keeps the path of the dictionary file (none for the dictionary of the package): unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, and an analysis whose dictionary file is gone takes the dictionary of the package. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
+One analyzer can be used from several threads. `lemmatize` releases the GIL, so threads speed it up. `analyze_many` creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, `lemmatize` or processes are faster. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package): unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises `ValueError`. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
 
 === "Code"
 

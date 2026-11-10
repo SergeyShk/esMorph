@@ -732,6 +732,13 @@ impl Dictionary {
                 }
             }
         }
+        // Shares are stored in millionths: their sum may miss 1 by a few of them
+        let sum: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+        if sum > 0.0 {
+            for analysis in &mut analyses {
+                analysis.prob /= sum;
+            }
+        }
         if count > 1 {
             analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
         }

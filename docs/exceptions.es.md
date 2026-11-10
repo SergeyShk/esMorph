@@ -5,10 +5,10 @@ La biblioteca lanza excepciones integradas de Python y una propia, `FormNotFound
 | Excepción | Clase integrada | Cuándo se lanza |
 | :-------- | :-------------- | :-------------- |
 | `FormNotFoundError` | `LookupError` | El lexema no tiene una forma con los rasgos pedidos, o el diccionario no tiene el lexema del análisis ([`inflect`](inflection.md#inflect)) |
-| `ValueError` | - | El rasgo o el valor no está en el diccionario (`inflect`); el archivo no es un diccionario de esMorph o está dañado ([`Analyzer`](analyzer.md)) |
-| `TypeError` | - | Un argumento de tipo incorrecto: una palabra o un valor de rasgo que no es una cadena, una cadena en lugar de una colección de palabras ([`analyze_many`](analyzer.md#analyze_many), [`lemmatize`](analyzer.md#lemmatize)), una ruta del diccionario que no es una cadena ni `PathLike` (`Analyzer`) |
+| `ValueError` | - | El rasgo o el valor no está en el diccionario (`inflect`); el archivo no es un diccionario de esMorph o está dañado, la ruta tiene un carácter NUL ([`Analyzer`](analyzer.md)) |
+| `TypeError` | - | Un argumento de tipo incorrecto: una palabra o un valor de rasgo que no es una cadena, una cadena o bytes en lugar de una colección de palabras ([`analyze_many`](analyzer.md#analyze_many), [`lemmatize`](analyzer.md#lemmatize)), una ruta del diccionario que no es una cadena ni `PathLike` (`Analyzer`) |
 | `FileNotFoundError` | `OSError` | El archivo del diccionario no existe (`Analyzer`) |
-| `PermissionError`, `IsADirectoryError` y otras | `OSError` | El archivo del diccionario no se puede leer (`Analyzer`) |
+| `PermissionError`, `IsADirectoryError` y otras | `OSError` | El archivo del diccionario no se puede leer o no es un archivo (`Analyzer`) |
 
 Los mensajes de las excepciones están en inglés.
 
