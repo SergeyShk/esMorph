@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 420" width="780" height="420">
+<line x1="70" y1="370.0" x2="540" y2="370.0" stroke="#888" stroke-opacity="0.3"/>
+<text x="62" y="374.0" text-anchor="end" font-family="sans-serif" font-size="13" fill="#888">0.001</text>
+<line x1="70" y1="300.0" x2="540" y2="300.0" stroke="#888" stroke-opacity="0.3"/>
+<text x="62" y="304.0" text-anchor="end" font-family="sans-serif" font-size="13" fill="#888">0.01</text>
+<line x1="70" y1="230.0" x2="540" y2="230.0" stroke="#888" stroke-opacity="0.3"/>
+<text x="62" y="234.0" text-anchor="end" font-family="sans-serif" font-size="13" fill="#888">0.1</text>
+<line x1="70" y1="160.0" x2="540" y2="160.0" stroke="#888" stroke-opacity="0.3"/>
+<text x="62" y="164.0" text-anchor="end" font-family="sans-serif" font-size="13" fill="#888">1</text>
+<line x1="70" y1="90.0" x2="540" y2="90.0" stroke="#888" stroke-opacity="0.3"/>
+<text x="62" y="94.0" text-anchor="end" font-family="sans-serif" font-size="13" fill="#888">10</text>
+<line x1="70" y1="20.0" x2="540" y2="20.0" stroke="#888" stroke-opacity="0.3"/>
+<text x="62" y="24.0" text-anchor="end" font-family="sans-serif" font-size="13" fill="#888">100</text>
+<line x1="70.0" y1="20" x2="70.0" y2="370" stroke="#888" stroke-opacity="0.3"/>
+<text x="70.0" y="388" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">10</text>
+<line x1="197.1" y1="20" x2="197.1" y2="370" stroke="#888" stroke-opacity="0.3"/>
+<text x="197.1" y="388" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">100</text>
+<line x1="324.1" y1="20" x2="324.1" y2="370" stroke="#888" stroke-opacity="0.3"/>
+<text x="324.1" y="388" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">1,000</text>
+<line x1="451.2" y1="20" x2="451.2" y2="370" stroke="#888" stroke-opacity="0.3"/>
+<text x="451.2" y="388" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">10,000</text>
+<line x1="540.0" y1="20" x2="540.0" y2="370" stroke="#888" stroke-opacity="0.3"/>
+<text x="540.0" y="388" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">50,000</text>
+<text x="305.0" y="412" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">tokens</text>
+<text x="16" y="195.0" transform="rotate(-90 16 195.0)" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">seconds</text>
+<polyline points="70.0,332.1 197.1,330.6 324.1,325.7 451.2,298.8 540.0,252.7" fill="none" stroke="#e53935" stroke-width="2"/>
+<circle cx="70.0" cy="332.1" r="4.5" fill="#e53935"/>
+<circle cx="197.1" cy="330.6" r="4.5" fill="#e53935"/>
+<circle cx="324.1" cy="325.7" r="4.5" fill="#e53935"/>
+<circle cx="451.2" cy="298.8" r="4.5" fill="#e53935"/>
+<circle cx="540.0" cy="252.7" r="4.5" fill="#e53935"/>
+<line x1="556" y1="30" x2="580" y2="30" stroke="#e53935" stroke-width="2"/>
+<circle cx="568.0" cy="30.0" r="4.5" fill="#e53935"/>
+<text x="588" y="34" font-family="sans-serif" font-size="13" fill="#888">esMorph</text>
+<polyline points="70.0,192.1 197.1,191.0 324.1,189.7 451.2,186.1 540.0,189.6" fill="none" stroke="#2a78d6" stroke-width="2"/>
+<rect x="66.0" y="188.1" width="8" height="8" fill="#2a78d6"/>
+<rect x="193.1" y="187.0" width="8" height="8" fill="#2a78d6"/>
+<rect x="320.1" y="185.7" width="8" height="8" fill="#2a78d6"/>
+<rect x="447.2" y="182.1" width="8" height="8" fill="#2a78d6"/>
+<rect x="536.0" y="185.6" width="8" height="8" fill="#2a78d6"/>
+<line x1="556" y1="52" x2="580" y2="52" stroke="#2a78d6" stroke-width="2"/>
+<rect x="564.0" y="48.0" width="8" height="8" fill="#2a78d6"/>
+<text x="588" y="56" font-family="sans-serif" font-size="13" fill="#888">simplemma</text>
+<polyline points="70.0,157.4 197.1,161.6 324.1,157.7 451.2,153.0 540.0,133.7" fill="none" stroke="#199e70" stroke-width="2"/>
+<polygon points="70.0,152.4 75.0,161.4 65.0,161.4" fill="#199e70"/>
+<polygon points="197.1,156.6 202.1,165.6 192.1,165.6" fill="#199e70"/>
+<polygon points="324.1,152.7 329.1,161.7 319.1,161.7" fill="#199e70"/>
+<polygon points="451.2,148.0 456.2,157.0 446.2,157.0" fill="#199e70"/>
+<polygon points="540.0,128.7 545.0,137.7 535.0,137.7" fill="#199e70"/>
+<line x1="556" y1="74" x2="580" y2="74" stroke="#199e70" stroke-width="2"/>
+<polygon points="568.0,69.0 573.0,78.0 563.0,78.0" fill="#199e70"/>
+<text x="588" y="78" font-family="sans-serif" font-size="13" fill="#888">spaCy es_core_news_sm</text>
+<polyline points="70.0,135.3 197.1,136.1 324.1,130.3 451.2,100.2 540.0,67.1" fill="none" stroke="#c98500" stroke-width="2"/>
+<polygon points="70.0,129.8 75.5,135.3 70.0,140.8 64.5,135.3" fill="#c98500"/>
+<polygon points="197.1,130.6 202.6,136.1 197.1,141.6 191.6,136.1" fill="#c98500"/>
+<polygon points="324.1,124.8 329.6,130.3 324.1,135.8 318.6,130.3" fill="#c98500"/>
+<polygon points="451.2,94.7 456.7,100.2 451.2,105.7 445.7,100.2" fill="#c98500"/>
+<polygon points="540.0,61.6 545.5,67.1 540.0,72.6 534.5,67.1" fill="#c98500"/>
+<line x1="556" y1="96" x2="580" y2="96" stroke="#c98500" stroke-width="2"/>
+<polygon points="568.0,90.5 573.5,96.0 568.0,101.5 562.5,96.0" fill="#c98500"/>
+<text x="588" y="100" font-family="sans-serif" font-size="13" fill="#888">Stanza</text>
+</svg>
