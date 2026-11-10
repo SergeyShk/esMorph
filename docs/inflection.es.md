@@ -56,7 +56,7 @@ Varias formas pueden tener los mismos rasgos. Una variante solo sale de una vari
     [('AUX', 'ha'), ('VERB', 'hay')]
     ```
 
-Una forma de un sustantivo, un nombre propio, un adjetivo, un determinante, un pronombre o un numeral sin género o sin número concuerda con cualquiera: `grande` en femenino plural es `grandes`, y un análisis de una [regla](analysis.md#rules) sigue siendo él mismo (`ETA`). Una forma que cambia otro rasgo del análisis va después de una que no lo tiene, y una forma con el género y el número del análisis antes que una sin ellos: `chulitos` en singular es `chulito`, `lo` en dativo es `le`, y `ustedes`, que no tiene género, sigue siendo `ustedes` en femenino. Un valor de varias partes, como `Case=Acc,Nom`, se puede dar en cualquier orden. Un verbo con [clíticos](analysis.md#clitics) se flexiona como su verbo, y sus formas no llevan clíticos: `dámelo` en plural es `dad`.
+Una forma de un sustantivo, un nombre propio, un adjetivo, un determinante, un pronombre o un numeral sin género o sin número concuerda con cualquiera: `grande` en femenino plural es `grandes`, y un análisis de una [regla](analysis.md#rules) sigue siendo él mismo (`ETA`). De las formas que conservan tantos rasgos del análisis como las demás, una forma que cambia otro rasgo va después de una que no lo tiene, y una forma con el género y el número del análisis antes que una sin ellos: `chulitos` en singular es `chulito`, `lo` en dativo es `le`, `sí` en dativo es `se`, y `ustedes`, que no tiene género, sigue siendo `ustedes` en femenino. Un valor de varias partes, como `Case=Acc,Nom`, se puede dar en cualquier orden. Un verbo con [clíticos](analysis.md#clitics) se flexiona como su verbo, y sus formas no llevan clíticos: `dámelo` en plural es `dad`.
 
 === "Código"
 
