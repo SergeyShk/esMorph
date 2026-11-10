@@ -97,22 +97,23 @@ def with_table(rows: set[Row], table: set[Row]) -> set[Row]:
     }
 
 
-def table_lemmas(rows: set[Row], table: set[Row]) -> set[Row]:
+def table_lemmas(rows: set[Row], table: set[Row]) -> tuple[set[Row], set[tuple[str, str]]]:
     """
     Rows whose lemma is a form of the table with another lemma, in the terms of the table
 
     Description:
-        Such a row takes the lemma of the table, and its features if it has none: `usté`, a
-        spelling of `usted`, is a form of `tú`, `güeno` of `bueno` a form of `buen`. The lexeme of
-        such a spelling is a lexeme of the table word too: `usté` has no lemma of its own. The rows
-        of the table stay as they are
+        Such a row takes the lemma of the table and the features of the table under its own:
+        `usté`, a spelling of `usted`, is a form of `tú`, `güeno` of `bueno` a form of `buen`. The
+        lexeme of such a spelling is a lexeme of the table word too: `usté` has no lemma of its
+        own. The rows of the table stay as they are
 
     Arguments:
         rows (set[Row]): The rows
         table (set[Row]): Rows of the table
 
     Returns:
-        set[Row]: The rows
+        tuple[set[Row], set[tuple[str, str]]]: The rows; part of speech and form of the moved rows
+        that the table has not, spellings of its words
     """
     analyses: dict[tuple[str, str], list[tuple[str, str]]] = {}
     for lemma, pos, form, feats in table:
@@ -125,6 +126,7 @@ def table_lemmas(rows: set[Row], table: set[Row]) -> set[Row]:
         if others and form not in forms:
             spellings.setdefault((form, pos), []).extend(others)
     result = set()
+    moved = set()
     for row in rows:
         lemma, pos, form, feats = row
         if row in table:
@@ -139,9 +141,12 @@ def table_lemmas(rows: set[Row], table: set[Row]) -> set[Row]:
         if not others:
             result.add(row)
             continue
+        if (form, pos) not in analyses:
+            moved.add((pos, form))
         for new, table_feats in others:
-            result.add((new, pos, form, feats if feats != "_" else table_feats))
-    return result
+            merged = parse_features(table_feats) | parse_features(feats)
+            result.add((new, pos, form, format_features(merged)))
+    return result, moved
 
 
 def infinitives(rows: set[Row]) -> set[Row]:
@@ -267,7 +272,7 @@ def participle_adjectives(rows: set[Row]) -> set[Row]:
     return (rows - plain) | copies
 
 
-def apply(rows: set[Row], table: set[Row]) -> set[Row]:
+def apply(rows: set[Row], table: set[Row]) -> tuple[set[Row], set[tuple[str, str]]]:
     """
     Rows of Wiktionary in the conventions of the dictionary
 
@@ -276,10 +281,12 @@ def apply(rows: set[Row], table: set[Row]) -> set[Row]:
         table (set[Row]): Rows of the table of closed classes
 
     Returns:
-        set[Row]: The rows
+        tuple[set[Row], set[tuple[str, str]]]: The rows; part of speech and form of the spellings
+        of words of the table that it has not, as `güeno`
     """
     rows = with_table(infinitives(verb_lemmas(rows)), table)
-    rows = names_and_numerals(table_lemmas(rows, table))
+    rows, spellings = table_lemmas(rows, table)
+    rows = names_and_numerals(rows)
     # Symbols of units, which Wiktionary has not as words: `km` is a noun or a symbol
     rows |= closed_classes(UNITS)
-    return participle_adjectives(auxiliaries(absolute_superlatives(rows)))
+    return participle_adjectives(auxiliaries(absolute_superlatives(rows))), spellings

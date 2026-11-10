@@ -42,7 +42,7 @@ Every analysis knows its lexeme - the forms of the word with the same lemma and 
     'hablaron'
     ```
 
-Several forms may have the same features. A variant comes only from a variant: `hablás` in the imperative is `hablá`, while `hablas` is `habla`. Of the two forms of the imperfect subjunctive the analysis keeps its own: `hablase` in the first person plural is `hablásemos`. Otherwise a form that the treebanks have clearly more often goes first (the verb `haber` gives `hay`, the auxiliary gives `ha`), and the order of the table of the word decides the rest: `ser` gives `soy`, not `seigo`. A form of some countries only is a variant: the feminine participle of `apagar` is `apagada`, not `apaga`.
+Several forms may have the same features. A variant comes only from a variant: `hablás` in the imperative is `hablá`, while `hablas` is `habla`. A variant of a noun, an adjective, a determiner or a pronoun still gives a main form closer in spelling than its variants: `buen` in the plural is `buenos`, not the older `bones`. Of the two forms of the imperfect subjunctive the analysis keeps its own: `hablase` in the first person plural is `hablásemos`. Otherwise a form that the treebanks have clearly more often goes first (the verb `haber` gives `hay`, the auxiliary gives `ha`), and the order of the table of the word decides the rest: `ser` gives `soy`, not `seigo`. A form of some countries only is a variant: the feminine participle of `apagar` is `apagada`, not `apaga`.
 
 === "Code"
 

@@ -734,21 +734,22 @@ def rows(path: Path) -> tuple[set[conventions.Row], set[Variant], dict[conventio
     return table, variants, ranks
 
 
-def kind(row: conventions.Row, variants: set[Variant]) -> str:
+def kind(row: conventions.Row, variants: set[Variant], closed: set[conventions.Row]) -> str:
     """
     Kind of a row of the export
 
     Arguments:
         row (conventions.Row): The row
         variants (set[Variant]): The variants of `rows`
+        closed (set[conventions.Row]): Rows of the table of closed classes
 
     Returns:
         str: `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative pronoun
-        with an accent is a variant of the one without, which the spelling of 2010 prefers: `éste`
-        of `este`
+        of the table with an accent is a variant of the one without, which the spelling of 2010
+        prefers: `éste` of `este`
     """
     lemma, pos, form, feats = row
-    if pos == "PRON" and lemma in DEMONSTRATIVES:
+    if pos == "PRON" and lemma in DEMONSTRATIVES and row in closed:
         return "variant" if set(form) & ACUTE else "_"
     pos = "VERB" if pos == "AUX" else pos
     return "variant" if {(lemma, pos, form, feats), (None, pos, form, None)} & variants else "_"
@@ -783,10 +784,13 @@ def export(output: Path) -> int:
     """
     name, url, digest = SNAPSHOT
     table, variants, ranks = rows(download(url, output / "raw" / name, digest))
-    table = conventions.apply(table, conventions.closed_classes())
+    closed = conventions.closed_classes()
+    table, spellings = conventions.apply(table, closed)
+    # A spelling of a word of the table that the table has not is a variant: `güeno` of `bueno`
+    variants |= {(None, pos, form, None) for pos, form in spellings}
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
-            "\t".join((*row, kind(row, variants), rank(row, ranks))) + "\n"
+            "\t".join((*row, kind(row, variants, closed), rank(row, ranks))) + "\n"
             for row in sorted(table)
         )
     meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}

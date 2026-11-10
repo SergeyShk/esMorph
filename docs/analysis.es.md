@@ -39,7 +39,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 
 Las categorías gramaticales, los rasgos y los lemas siguen las directrices de [Universal Dependencies](https://universaldependencies.org/u/pos/) y, donde estas callan, las convenciones del mayor treebank del español, [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), así que el resultado se puede comparar con spaCy, Stanza y otras herramientas de UD:
 
-- los determinantes, los pronombres, las preposiciones y las conjunciones tienen los lemas y los rasgos de AnCora: `la` es el artículo `el` (`Definite=Def`, `PronType=Art`) o el pronombre `él`, `se` es `él` con `Reflex=Yes`, `su` es `DET` con `Poss=Yes`, `muy` es una forma de `mucho`, y lo mismo sus grafías antiguas y orales: `usté` es una forma de `tú`; un pronombre demostrativo con tilde (`éste`) es una variante del que no la lleva;
+- los determinantes, los pronombres, las preposiciones y las conjunciones tienen los lemas y los rasgos de AnCora: `la` es el artículo `el` (`Definite=Def`, `PronType=Art`) o el pronombre `él`, `se` es `él` con `Reflex=Yes`, `su` es `DET` con `Poss=Yes`, `muy` es una forma de `mucho`, y lo mismo sus grafías antiguas y orales, como variantes: `usté` es una forma de `tú`; un pronombre demostrativo con tilde (`éste`) es una variante del que no la lleva;
 - `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` y `saber` tienen análisis `AUX` y `VERB`; `hay` es ante todo el verbo `haber`;
 - un participio es un verbo con el infinitivo como lema (`VerbForm=Part`, `Tense=Past`) y un adjetivo con el masculino singular como lema (`VerbForm=Part` sin `Tense`);
 - los verbos no llevan `-se` en el lema: `quejarse` es `quejar` con el clítico `se`;

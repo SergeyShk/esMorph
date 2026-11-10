@@ -888,6 +888,9 @@ def test_inflect_irregular_words(morph, word, lemma, feats, form):
 def test_inflect_gives_a_variant_only_for_a_variant(morph):
     assert verb(morph, "hablas").inflect(Mood="Imp") == "habla"
     assert verb(morph, "hablás").inflect(Mood="Imp") == "hablá"
+    # Also for a verb whose variant changes the stem, as the vos forms of `seguir`
+    sigas = verb(morph, "sigás")
+    assert (sigas.inflect(Mood="Imp"), sigas.inflect(Mood="Ind")) == ("seguí", "seguís")
     assert morph.analyze("grandes")[0].inflect(Number="Sing") == "grande"
     # Of the two forms of the imperfect subjunctive the analysis keeps its own
     hablase = verb(morph, "hablase")
@@ -1102,6 +1105,15 @@ def test_conventions_of_the_dictionary(morph):
     assert verb("colar").inflect(Mood="Ind", Tense="Pres", Person="1", Number="Sing") == "cuelo"
     # A spelling of a word of the table has its lemma, and a word goes before its old spelling
     assert morph.lemmatize(["usté", "güeno", "á", "tambien"]) == ["tú", "buen", "a", "también"]
+    # Such a spelling has the features of the table and is a variant
+    assert len(morph.analyze("uds.")) == 1
+    assert morph.analyze("ozté")[0].inflect(Number="Plur") == "oztedes"
+    buen = morph.analyze("buen")[0]
+    forms = [form.word for form in buen.forms()]
+    assert forms[:5] == ["buen", "bueno", "buena", "buenos", "buenas"]
+    # A variant takes a main form closer in spelling than its variants
+    assert (buen.inflect(Number="Plur"), buen.inflect(Gender="Fem")) == ("buenos", "buena")
+    assert morph.analyze("weno")[0].inflect(Gender="Fem") == "wena"
     # A verb has its infinitive among its forms
     assert morph.analyze("acepillo")[0].inflect(VerbForm="Inf") == "acepillar"
     # Older contractions, initials and symbols of units

@@ -39,7 +39,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 
 Parts of speech, features and lemmas follow the [Universal Dependencies](https://universaldependencies.org/u/pos/) guidelines and, where they are silent, the conventions of the largest Spanish treebank, [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), so the output can be compared with spaCy, Stanza and other UD tools:
 
-- determiners, pronouns, prepositions and conjunctions have the lemmas and features of AnCora: `la` is the article `el` (`Definite=Def`, `PronType=Art`) or the pronoun `él`, `se` is `él` with `Reflex=Yes`, `su` is `DET` with `Poss=Yes`, `muy` is a form of `mucho`, and so are their older and spoken spellings: `usté` is a form of `tú`; a demonstrative pronoun with an accent (`éste`) is a variant of the one without;
+- determiners, pronouns, prepositions and conjunctions have the lemmas and features of AnCora: `la` is the article `el` (`Definite=Def`, `PronType=Art`) or the pronoun `él`, `se` is `él` with `Reflex=Yes`, `su` is `DET` with `Poss=Yes`, `muy` is a form of `mucho`, and so are their older and spoken spellings, as variants: `usté` is a form of `tú`; a demonstrative pronoun with an accent (`éste`) is a variant of the one without;
 - `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` and `saber` have both `AUX` and `VERB` analyses; `hay` is first of all the verb `haber`;
 - a participle is a verb with the infinitive as the lemma (`VerbForm=Part`, `Tense=Past`) and an adjective with the masculine singular as the lemma (`VerbForm=Part` without `Tense`);
 - verbs have no `-se` in the lemma: `quejarse` is `quejar` with the clitic `se`;

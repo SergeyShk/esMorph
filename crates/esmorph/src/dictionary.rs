@@ -768,8 +768,8 @@ impl Dictionary {
     /// The form of the lexeme of an analysis with the features `feats` ("name", "value"): of the
     /// forms that have them, the one that keeps most of the other features of the analysis and,
     /// for a noun, an adjective, a determiner or a pronoun, has fewest features more, then a
-    /// variant only for a variant, then a form of the tag of the analysis, then the first in the
-    /// paradigm; of the forms with equal
+    /// variant only for a variant, unless a main form of such a word is closer in spelling, then a
+    /// form of the tag of the analysis, then the first in the paradigm; of the forms with equal
     /// features, the closest in spelling to the analysis if it has such forms too, as `hablase`
     /// and `hablara`. An infinitive and a gerund
     /// asked for features they have not become finite forms: `hablar` with `Tense=Past` is
@@ -814,10 +814,7 @@ impl Dictionary {
         // not `pagada`, and `ha` stays `ha`, not `hay`
         let several = lexeme.cells.iter().filter(|&&cell| cell == own).count() > 1;
         let own_word = lexeme.spell(&self.suffixes, own_form)?;
-        let closeness = |form: usize| {
-            if !several {
-                return (0, 0);
-            }
+        let common_prefix = |form: usize| {
             let word = lexeme.spell(&self.suffixes, form).unwrap_or_default();
             let common = |same: fn(char, char) -> bool| {
                 (own_word.chars().zip(word.chars()))
@@ -827,13 +824,14 @@ impl Dictionary {
             let plain = common(|a, b| clitics::without_acute(a) == clitics::without_acute(b));
             (plain, common(|a, b| a == b))
         };
+        let closeness = |form: usize| if several { common_prefix(form) } else { (0, 0) };
         // Forms of one tag are one group in the place of its first form
         let group = |form: usize| {
             (lexeme.cells.iter())
                 .position(|&cell| cell == lexeme.cells[form])
                 .unwrap_or(form)
         };
-        let best = (0..lexeme.cells.len())
+        let candidates = (0..lexeme.cells.len())
             .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
             .filter_map(|form| {
                 let tag = self.ud.get((lexeme.cells[form] & UD_BITS) as u16)?;
@@ -865,9 +863,29 @@ impl Dictionary {
                     form,
                 );
                 fits.then_some((key, form))
-            })
-            .min()?
-            .1;
+            });
+        // The best form and the best of the other kind, a main form for a variant
+        let (mut best, mut other) = (None, None);
+        for candidate in candidates {
+            if candidate.0.2 && other.is_none_or(|known| candidate < known) {
+                other = Some(candidate);
+            }
+            if best.is_none_or(|known| candidate < known) {
+                best = Some(candidate);
+            }
+        }
+        let (key, mut best) = best?;
+        // A nominal variant takes a main form closer in spelling than its variants: `buen` in the
+        // plural is `buenos`, not the older `bones`; a verb keeps its variety: `sigás` gives `seguí`
+        if let Some((main_key, main)) = other
+            && own & VARIANT != 0
+            && matches!(tag.pos(), "NOUN" | "PROPN" | "ADJ" | "DET" | "PRON" | "NUM")
+            && !key.2
+            && (main_key.0, main_key.1) == (key.0, key.1)
+            && common_prefix(main) > common_prefix(best)
+        {
+            best = main;
+        }
         let form = self.form(&lexeme, best, analysis.forms_source())?;
         Some(with_lemma(form, &analysis.lemma))
     }
@@ -2018,6 +2036,31 @@ pub(crate) mod tests {
             "Mood=Sub|Number=Sing|Person=1|Tense=Imp|VerbForm=Fin",
         );
         assert_eq!(inflected(&dictionary, &ra, &[("Person", "3")]), "hablara");
+    }
+
+    #[test]
+    fn a_variant_takes_a_closer_main_form() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let forms = [
+            ("bueno", "Gender=Masc|Number=Sing", false),
+            ("buen", "Gender=Masc|Number=Sing", true),
+            ("bon", "Gender=Masc|Number=Sing", true),
+            ("buenos", "Gender=Masc|Number=Plur", false),
+            ("bones", "Gender=Masc|Number=Plur", true),
+        ];
+        for (form, feats, variant) in forms {
+            builder.add_form("buen", "ADJ", form, feats).unwrap();
+            if variant {
+                builder.mark_variant("buen", "ADJ", form, feats).unwrap();
+            }
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let plural = [("Number", "Plur")];
+        let buen = &dictionary.analyze("buen")[0];
+        assert_eq!(inflected(&dictionary, buen, &plural), "buenos");
+        let bon = &dictionary.analyze("bon")[0];
+        assert_eq!(inflected(&dictionary, bon, &plural), "bones");
     }
 
     #[test]
