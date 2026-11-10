@@ -4,10 +4,11 @@ Export of the Spanish entries of Wiktionary into the text table for the `esmorph
 Description:
     The snapshot of the entries (`wiktionary_snapshot.py`) lies in a dataset on Hugging Face and is
     checked by SHA-256. Every entry and every form of its table become rows "lemma, part of speech,
-    form, features, kind" in the terms of Universal Dependencies; the builder joins the rows of one
-    lemma and part of speech into a lexeme. The kind is `variant` for a variant of another form with
-    the same features (an old or regional spelling, a form of `vos`) and `_` for a main form. Only
-    the standard library is needed.
+    form, features, kind, place" in the terms of Universal Dependencies; the builder joins the rows
+    of one lemma and part of speech into a lexeme. The kind is `variant` for a variant of another
+    form with the same features (an old or regional spelling, a form of `vos`) and `_` for a main
+    form; the place is the number of the row in the table of its lexeme, `_` for a row that only
+    another entry gives. Only the standard library is needed.
 
 Example:
     uv run python scripts/export_wiktionary.py target/wiktionary
@@ -29,7 +30,7 @@ from pathlib import Path
 
 import conventions
 
-SourceRow = tuple[str, str, str, dict[str, str], bool]
+SourceRow = tuple[str, str, str, dict[str, str], bool, int | None]
 
 LICENSE = "CC BY-SA 4.0"
 # The dump of en.wiktionary.org of 2026-10-01, extracted by wiktextract on 2026-10-30 (kaikki.org)
@@ -94,6 +95,7 @@ TABLE_CLITIC = re.compile(r"^(me|te|se|nos|os) ")
 CLITIC_ENDING = re.compile(r"(me|te|se|nos|os|lo|la|le|los|las|les)$")
 REFLEXIVE_ENDING = re.compile(r"(nos|os|te|se)$")
 ACUTE = set("áéíóú")
+DEMONSTRATIVES = {"este", "ese", "aquel"}
 # Vowels of a syllable: two strong vowels are two syllables
 SYLLABLE_VOWELS = re.compile(r"[iuü]*[aeo][iuü]*|[iuü]+")
 NON_FINITE_ROWS = {"infinitive", "gerund"}
@@ -121,6 +123,8 @@ MASCULINE_PARTICIPLE = "Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part"
 WORD_SIGNS = {".", "-", "'"}
 APOCOPE = "before a noun "
 MAX_WORD = 64
+# More rows than a table of an entry has: the places of the rows of further etymologies follow
+TABLE_ROWS = 10_000
 
 
 def sha256(path: Path) -> str:
@@ -463,7 +467,8 @@ def form_of_rows(word: str, pos: str, tags: set[str], targets: list[str]) -> Ite
         targets (list[str]): The words the sense refers to
 
     Returns:
-        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant
+        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant, no
+        place in a table
     """
     target = targets[0]
     if pos == "VERB":
@@ -484,7 +489,7 @@ def form_of_rows(word: str, pos: str, tags: set[str], targets: list[str]) -> Ite
     variant = bool(tags & VARIANT_TAGS)
     for lemma in lemmas:
         for feats in features(pos, tags):
-            yield lemma, pos, word, feats, variant
+            yield lemma, pos, word, feats, variant, None
 
 
 def lemma_rows(
@@ -502,14 +507,15 @@ def lemma_rows(
         entries (set[str]): Headwords of the snapshot
 
     Returns:
-        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant
+        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant, no
+        place in a table
     """
     variant = bool(targets)
     for feats in features(pos, {"infinitive"} if pos == "VERB" else tags):
-        yield word, pos, word, feats, variant
+        yield word, pos, word, feats, variant, None
         for target in targets:
             if is_entry(target, entries):
-                yield target, pos, word, feats, True
+                yield target, pos, word, feats, True, None
 
 
 def nominal_rows(
@@ -525,11 +531,11 @@ def nominal_rows(
         gender (set[str]): Genders of the headword
 
     Returns:
-        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant: an
-        apocope before a noun is (`san` of `santo`)
+        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant (an
+        apocope before a noun is: `san` of `santo`), the place of the row in the table
     """
     feminine = any(row == {"feminine"} for _, row in forms)
-    for form, tags in forms:
+    for place, (form, tags) in enumerate(forms):
         if not tags or not tags <= NOMINAL_FORM:
             continue
         if "canonical" in tags and form.lower() != word.lower():
@@ -547,7 +553,7 @@ def nominal_rows(
         if apocope and not feminine:
             row_tags = row_tags - GENDERS
         for feats in features(pos, row_tags):
-            yield lemma, pos, form.removeprefix(APOCOPE), feats, apocope
+            yield lemma, pos, form.removeprefix(APOCOPE), feats, apocope, place
 
 
 def entry_rows(entry: dict, entries: set[str], lower_entries: set[str]) -> Iterator[SourceRow]:
@@ -567,7 +573,8 @@ def entry_rows(entry: dict, entries: set[str], lower_entries: set[str]) -> Itera
         lower_entries (set[str]): Headwords of the snapshot in lower case
 
     Returns:
-        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant
+        Iterator[SourceRow]: Lemma, part of speech, form, features, whether it is a variant, the
+        place of the row in the table of its entry
     """
     word, pos = entry["word"], PARTS_OF_SPEECH.get(entry["pos"])
     if pos is None or (word == word.upper() != word.lower() and word.lower() in lower_entries):
@@ -591,9 +598,9 @@ def entry_rows(entry: dict, entries: set[str], lower_entries: set[str]) -> Itera
             own = True
             yield from lemma_rows(word, pos, tags | gender, targets, entries)
     if own and pos == "VERB":
-        for form, tags in verb_rows(word, forms):
+        for place, (form, tags) in enumerate(verb_rows(word, forms)):
             for feats in verb_features(tags):
-                yield word, pos, form, feats, is_variant_row(tags)
+                yield word, pos, form, feats, is_variant_row(tags), place
     elif own:
         yield from nominal_rows(word, pos, forms, gender)
 
@@ -616,48 +623,101 @@ def snapshot_entries(path: Path) -> Iterator[dict]:
 Variant = tuple[str | None, str, str, str | None]
 
 
-def rows(path: Path) -> tuple[set[conventions.Row], set[Variant]]:
+def is_variant(verdicts: set[tuple[bool, bool]]) -> bool:
     """
-    Rows of the table and the variants among them
+    Whether a row is a variant by what its sources say
+
+    Arguments:
+        verdicts (set[tuple[bool, bool]]): Whether a source says it is a variant and whether the
+            source is the table of the lexeme
+
+    Returns:
+        bool: The table of the lexeme decides if it has the row: `apaga` is a participle of
+        `apagar` in Uruguay, though its own entry names no country; otherwise all sources must say
+        so
+    """
+    table = {variant for variant, own in verdicts if own}
+    return table == {True} if table else all(variant for variant, _ in verdicts)
+
+
+def normalized_lemma(lemma: str, pos: str, participles: dict[str, str]) -> str:
+    """
+    The lemma of a row by the conventions: a verb has no `-se`, a participle has its verb
+
+    Arguments:
+        lemma (str): The lemma of Wiktionary
+        pos (str): Part of speech
+        participles (dict[str, str]): Verbs of the participles that are lemmas in Wiktionary
+
+    Returns:
+        str: The lemma
+    """
+    if pos != "VERB":
+        return lemma
+    lemma = participles.get(lemma, lemma)
+    return lemma.removesuffix("se") if lemma.endswith("rse") else lemma
+
+
+def rows(path: Path) -> tuple[set[conventions.Row], set[Variant], dict[conventions.Row, int]]:
+    """
+    Rows of the table, the variants among them and their places in the tables of their lexemes
 
     Description:
-        A row is a variant if all the senses that give it say so: `fablar` is a variant in the
-        lexeme of `hablar` but not in its own, `coche` is no variant for a sense that is a clipping
-        of `cochino`. A form of a part of speech is a variant with any lemma and features if all its
-        rows say so, as `buen` of `bueno` for the table of closed classes
+        A row is a variant if the table of its lexeme says so, or, without such a table, if all
+        the senses that give it say so: `fablar` is a variant in the lexeme of `hablar` but not in
+        its own, `coche` is no variant for a sense that is a clipping of `cochino`. A form of a part
+        of speech is a variant with any lemma and features if all its rows say so, as `buen` of
+        `bueno` for the table of closed classes. The place of a row in the table of its lexeme
+        orders its forms of the same features: `soy` before `seigo`, which only an entry of its own
+        gives, `friego` before `frego`
 
     Arguments:
         path (Path): File of the snapshot
 
     Returns:
-        tuple[set[conventions.Row], set[Variant]]: Lemma, part of speech, form, features in
-        CoNLL-U notation; lemma, part of speech, form and features of the variants, `None` for any
-        lemma and features
+        tuple[set[conventions.Row], set[Variant], dict[conventions.Row, int]]: Lemma, part of
+        speech, form, features in CoNLL-U notation; lemma, part of speech, form and features of the
+        variants, `None` for any lemma and features; the places of the rows by their lemmas of the
+        conventions
     """
     entries = {entry["word"] for entry in snapshot_entries(path)}
     lower_entries = {word for word in entries if word == word.lower()}
     table = set()
-    kinds: dict[conventions.Row, set[bool]] = {}
+    kinds: dict[conventions.Row, set[tuple[bool, bool]]] = {}
+    places: dict[conventions.Row, int] = {}
     # A participle may refer to its masculine form, as `hablada` to `hablado`: its verb is `hablar`
     participles = {}
+    # Entries of one headword go in the order of their etymologies, the main one first: `colar`
+    # has `cuelo` in the first and `colo` in the second
+    etymologies: dict[tuple[str, str], int] = {}
     for entry in snapshot_entries(path):
-        for lemma, pos, form, feats, variant in entry_rows(entry, entries, lower_entries):
+        headword = (entry["word"], entry["pos"])
+        etymology = etymologies.get(headword, 0)
+        etymologies[headword] = etymology + 1
+        for lemma, pos, form, feats, variant, place in entry_rows(entry, entries, lower_entries):
+            if place is not None:
+                place += etymology * TABLE_ROWS
             lemma, form = clean(lemma), clean(form)
             if lemma and form:
                 text = "|".join(f"{name}={feats[name]}" for name in sorted(feats, key=str.lower))
-                table.add((lemma, pos, form, text or "_"))
-                kinds.setdefault((lemma, pos, form, text or "_"), set()).add(variant)
+                row = (lemma, pos, form, text or "_")
+                table.add(row)
+                kinds.setdefault(row, set()).add((variant, place is not None))
+                if place is not None:
+                    places[row] = min(place, places.get(row, place))
                 if pos == "VERB" and text == MASCULINE_PARTICIPLE and lemma != form:
                     participles.setdefault(form, lemma)
-    # Variants by the lemmas of the conventions: a verb without `-se`
-    merged: dict[Variant, set[bool]] = {}
+    # Variants and places by the lemmas of the conventions: a verb without `-se`
+    merged: dict[Variant, set[tuple[bool, bool]]] = {}
+    ranks: dict[conventions.Row, int] = {}
     for (lemma, pos, form, text), kind in kinds.items():
-        if pos == "VERB":
-            lemma = participles.get(lemma, lemma)
-            lemma = lemma.removesuffix("se") if lemma.endswith("rse") else lemma
+        lemma = normalized_lemma(lemma, pos, participles)
         for key in (lemma, pos, form, text), (None, pos, form, None):
             merged.setdefault(key, set()).update(kind)
-    variants = {key for key, kind in merged.items() if kind == {True}}
+    for (lemma, pos, form, text), place in places.items():
+        key = (normalized_lemma(lemma, pos, participles), pos, form, text)
+        ranks[key] = min(place, ranks.get(key, place))
+    variants = {key for key, kind in merged.items() if is_variant(kind)}
     table = {
         (participles.get(lemma, lemma) if pos == "VERB" else lemma, pos, form, text)
         for lemma, pos, form, text in table
@@ -671,23 +731,45 @@ def rows(path: Path) -> tuple[set[conventions.Row], set[Variant]]:
     table = {
         row for row in table if not (row[1] == "NOUN" and (row[0], row[2], row[3]) in gendered)
     }
-    return table, variants
+    return table, variants, ranks
 
 
-def kind(row: conventions.Row, variants: set[Variant]) -> str:
+def kind(row: conventions.Row, variants: set[Variant], closed: set[conventions.Row]) -> str:
     """
     Kind of a row of the export
 
     Arguments:
         row (conventions.Row): The row
         variants (set[Variant]): The variants of `rows`
+        closed (set[conventions.Row]): Rows of the table of closed classes
 
     Returns:
-        str: `variant` or `_`; an auxiliary is a variant as its verb
+        str: `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative pronoun
+        of the table with an accent is a variant of the one without, which the spelling of 2010
+        prefers: `éste` of `este`
     """
     lemma, pos, form, feats = row
+    if pos == "PRON" and lemma in DEMONSTRATIVES and row in closed:
+        return "variant" if set(form) & ACUTE else "_"
     pos = "VERB" if pos == "AUX" else pos
     return "variant" if {(lemma, pos, form, feats), (None, pos, form, None)} & variants else "_"
+
+
+def rank(row: conventions.Row, ranks: dict[conventions.Row, int]) -> str:
+    """
+    Place of a row of the export in the table of its lexeme
+
+    Arguments:
+        row (conventions.Row): The row
+        ranks (dict[conventions.Row, int]): The places of `rows`
+
+    Returns:
+        str: The place, `_` for a row that no table of its lexeme has; an auxiliary has the place
+        of its verb
+    """
+    lemma, pos, form, feats = row
+    place = ranks.get((lemma, "VERB" if pos == "AUX" else pos, form, feats))
+    return "_" if place is None else str(place)
 
 
 def export(output: Path) -> int:
@@ -701,10 +783,16 @@ def export(output: Path) -> int:
         int: Number of rows
     """
     name, url, digest = SNAPSHOT
-    table, variants = rows(download(url, output / "raw" / name, digest))
-    table = conventions.apply(table, conventions.closed_classes())
+    table, variants, ranks = rows(download(url, output / "raw" / name, digest))
+    closed = conventions.closed_classes()
+    table, spellings = conventions.apply(table, closed)
+    # A spelling of a word of the table that the table has not is a variant: `güeno` of `bueno`
+    variants |= {(None, pos, form, None) for pos, form in spellings}
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
-        out.writelines("\t".join((*row, kind(row, variants))) + "\n" for row in sorted(table))
+        out.writelines(
+            "\t".join((*row, kind(row, variants, closed), rank(row, ranks))) + "\n"
+            for row in sorted(table)
+        )
     meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}
     (output / "meta.json").write_text(json.dumps(meta, sort_keys=True), encoding="utf-8")
     return len(table)

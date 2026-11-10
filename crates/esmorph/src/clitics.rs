@@ -185,15 +185,39 @@ pub(crate) fn without_acute(c: char) -> char {
     }
 }
 
+/// Contractions and their words: `del` is `de` + `el`, and older writing joins `de` with a
+/// pronoun or a demonstrative: `desta` is `de` + `esta`
+const CONTRACTIONS: [(&str, [&str; 2]); 16] = [
+    ("al", ["a", "el"]),
+    ("del", ["de", "el"]),
+    ("dél", ["de", "él"]),
+    ("della", ["de", "ella"]),
+    ("dellas", ["de", "ellas"]),
+    ("dello", ["de", "ello"]),
+    ("dellos", ["de", "ellos"]),
+    ("desa", ["de", "esa"]),
+    ("desas", ["de", "esas"]),
+    ("deso", ["de", "eso"]),
+    ("desos", ["de", "esos"]),
+    ("desta", ["de", "esta"]),
+    ("destas", ["de", "estas"]),
+    ("deste", ["de", "este"]),
+    ("desto", ["de", "esto"]),
+    ("destos", ["de", "estos"]),
+];
+
 /// Words of a contraction: `del` is `de` + `el`
 pub(crate) fn contraction(token: &str) -> Option<[&'static str; 2]> {
-    if token.eq_ignore_ascii_case("del") {
-        Some(["de", "el"])
-    } else if token.eq_ignore_ascii_case("al") {
-        Some(["a", "el"])
-    } else {
-        None
+    // Every contraction starts with `a` or `d` and has up to six letters
+    if !matches!(token.as_bytes().first(), Some(b'a' | b'A' | b'd' | b'D')) || token.len() > 7 {
+        return None;
     }
+    CONTRACTIONS
+        .iter()
+        .find(|(form, _)| {
+            form.len() == token.len() && token.chars().flat_map(char::to_lowercase).eq(form.chars())
+        })
+        .map(|&(_, words)| words)
 }
 
 #[cfg(test)]
@@ -283,6 +307,9 @@ mod tests {
     fn contractions() {
         assert_eq!(contraction("del"), Some(["de", "el"]));
         assert_eq!(contraction("Al"), Some(["a", "el"]));
+        assert_eq!(contraction("Desta"), Some(["de", "esta"]));
+        assert_eq!(contraction("DÉL"), Some(["de", "él"]));
         assert_eq!(contraction("el"), None);
+        assert_eq!(contraction("destacado"), None);
     }
 }

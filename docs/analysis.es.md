@@ -32,14 +32,14 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
 | `prob` | `float` | Parte del análisis entre los análisis de la palabra; la suma de todos es 1 |
-| `words` | `tuple[str, ...]` | Palabras del token: un verbo y sus clíticos, las palabras de `del` y `al` o la propia palabra; el análisis describe la primera |
+| `words` | `tuple[str, ...]` | Palabras del token: un verbo y sus clíticos, las palabras de una contracción (`del`, `al`, la antigua `desta`) o la propia palabra; el análisis describe la primera |
 | `source` | `str` | De dónde viene el análisis: `"dictionary"` - la forma está en el diccionario, `"clitics"` - un verbo del diccionario con [clíticos](#clitics), `"rule"` - un [análisis por regla](#rules), `"guess"` - un [análisis estimado](#guess) de una palabra desconocida |
 
 ## Categorías y rasgos { #ud }
 
 Las categorías gramaticales, los rasgos y los lemas siguen las directrices de [Universal Dependencies](https://universaldependencies.org/u/pos/) y, donde estas callan, las convenciones del mayor treebank del español, [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), así que el resultado se puede comparar con spaCy, Stanza y otras herramientas de UD:
 
-- los determinantes, los pronombres, las preposiciones y las conjunciones tienen los lemas y los rasgos de AnCora: `la` es el artículo `el` (`Definite=Def`, `PronType=Art`) o el pronombre `él`, `se` es `él` con `Reflex=Yes`, `su` es `DET` con `Poss=Yes`, `muy` es una forma de `mucho`;
+- los determinantes, los pronombres, las preposiciones y las conjunciones tienen los lemas y los rasgos de AnCora: `la` es el artículo `el` (`Definite=Def`, `PronType=Art`) o el pronombre `él`, `se` es `él` con `Reflex=Yes`, `su` es `DET` con `Poss=Yes`, `muy` es una forma de `mucho`, y lo mismo sus grafías antiguas y orales, como variantes: `usté` es una forma de `tú`; un pronombre demostrativo con tilde (`éste`) es una variante del que no la lleva;
 - `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` y `saber` tienen análisis `AUX` y `VERB`; `hay` es ante todo el verbo `haber`;
 - un participio es un verbo con el infinitivo como lema (`VerbForm=Part`, `Tense=Past`) y un adjetivo con el masculino singular como lema (`VerbForm=Part` sin `Tense`);
 - los verbos no llevan `-se` en el lema: `quejarse` es `quejar` con el clítico `se`;
@@ -50,7 +50,7 @@ Si la categoría de una palabra depende del contexto, la palabra tiene ambos an�
 
 ## Orden de los análisis { #order }
 
-Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes.
+Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: `á` es ante todo `a`, `tambien` es `también`.
 
 === "Código"
 
@@ -66,7 +66,7 @@ Los análisis van del más probable al menos probable. `prob` es la parte de un 
 
 ## Palabras con clíticos { #clitics }
 
-Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: `díjole` es `dijo` + `le`. `del` y `al` también tienen sus dos palabras. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`, aunque unas pocas suelen ser verbos con clíticos: `verse` es ante todo `ver` + `se`.
+Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: `díjole` es `dijo` + `le`. `del` y `al` también tienen sus dos palabras, como las contracciones de `de` con un pronombre o un demostrativo en la escritura antigua: `desta` es `de` + `esta`. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`, aunque unas pocas suelen ser verbos con clíticos: `verse` es ante todo `ver` + `se`.
 
 === "Código"
 
@@ -105,7 +105,7 @@ Un token que el diccionario no tiene recibe los análisis de unas reglas, con `s
 - un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre;
 - un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`.
 
-Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una palabra sin tildes que el diccionario solo tiene con ellas suele ser un nombre (`Angel`, `Perez`), así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (`Estados`, `Comisión`), así que su nombre suele ir después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como `VI`, `XI` o `X`, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (`Mandela` es ante todo `PROPN`), mientras que un infinitivo, un gerundio, un imperativo con tilde y una forma personal suelen ser verbos (`Hacerlo`, `Déjame`, `Levantóse`). Una palabra en minúsculas rara vez es un nombre: `miró` es ante todo `mirar`, `Miró` es un nombre. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
+Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una inicial (`D.`) y una palabra sin tildes que el diccionario solo tiene con ellas (`Angel`, `Perez`) suelen ser nombres, así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (`Estados`, `Comisión`), así que su nombre suele ir después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como `VI`, `XI` o `X`, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (`Mandela` es ante todo `PROPN`), mientras que un infinitivo, un gerundio, un imperativo con tilde y una forma personal suelen ser verbos (`Hacerlo`, `Déjame`, `Levantóse`). Una palabra en minúsculas rara vez es un nombre: `miró` es ante todo `mirar`, `Miró` es un nombre. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
 
 === "Código"
 

@@ -1,11 +1,12 @@
 //! Builder of the dictionary of esMorph: `esmorph-build <export directory> <counts directory>
 //! <dictionary file>`. The export is `lexemes.tsv` (lemma, part of speech, form, features, `variant`
-//! or `_`) and `meta.json`, written by `scripts/export_wiktionary.py`; the counts are `analyses.tsv`,
-//! `pos.tsv` and `sources.json`, written by `scripts/export_ud.py`
+//! or `_`, the place in the table of the source or `_`) and `meta.json`, written by
+//! `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and `sources.json`,
+//! written by `scripts/export_ud.py`
 
 mod frequencies;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
@@ -42,30 +43,48 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
     )?);
     let table = read(&export.join("lexemes.tsv"))?;
     let mut forms: BTreeMap<&str, Vec<Row>> = BTreeMap::new();
+    // Lexemes with a main form: the others only spell other words
+    let mut main: HashSet<(&str, &str)> = HashSet::new();
     for (number, line) in table.lines().enumerate() {
         let fields: Vec<&str> = line.split('\t').collect();
-        let &[lemma, pos, form, feats, kind] = fields.as_slice() else {
+        let &[lemma, pos, form, feats, kind, rank] = fields.as_slice() else {
             return Err(Error::Build(format!(
-                "line {}: expected 5 fields, got {}",
+                "line {}: expected 6 fields, got {}",
                 number + 1,
                 fields.len()
             )));
         };
         builder.add_form(lemma, pos, form, plain(feats))?;
         match kind {
-            "_" => {}
+            "_" => {
+                main.insert((lemma, pos));
+            }
             "variant" => builder.mark_variant(lemma, pos, form, plain(feats))?,
             _ => {
                 return Err(Error::Build(format!(
-                    "line {}: the last field is `variant` or `_`, not {kind:?}",
+                    "line {}: the kind is `variant` or `_`, not {kind:?}",
                     number + 1
                 )));
             }
         }
-        forms
-            .entry(form)
-            .or_default()
-            .push(Row { lemma, pos, feats });
+        if rank != "_" {
+            let rank = rank.parse().map_err(|_| {
+                Error::Build(format!(
+                    "line {}: the place is a number or `_`, not {rank:?}",
+                    number + 1
+                ))
+            })?;
+            builder.set_rank(lemma, pos, form, plain(feats), rank)?;
+        }
+        forms.entry(form).or_default().push(Row {
+            lemma,
+            pos,
+            feats,
+            spelling: false,
+        });
+    }
+    for row in forms.values_mut().flatten() {
+        row.spelling = !main.contains(&(row.lemma, row.pos));
     }
     let counts = Counts::read(
         &read(&counts.join("analyses.tsv"))?,

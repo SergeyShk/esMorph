@@ -46,6 +46,10 @@ pub(crate) const CLITICS_NAME: [f64; 2] = [45.0 / 48.0, 4.0 / 36.0];
 /// dictionary has only with them (`Angel`, `Perez`), by AnCora and GSD train (882 of 933)
 pub(crate) const RESTORED_NAME: f64 = 882.0 / 933.0;
 
+/// Share of a name among the analyses of a capital letter with a period that the dictionary knows
+/// (`D.`, `V.`): an initial mostly, by AnCora and GSD train (48 of 63)
+pub(crate) const INITIAL_NAME: f64 = 48.0 / 63.0;
+
 /// Shares of a number and of a name among the analyses of a Roman numeral of one letter that the
 /// dictionary knows (`I`, `X`), by AnCora and GSD train: 62 and 14 of 108
 pub(crate) const ROMAN_LETTER: [f64; 2] = [62.0 / 108.0, 14.0 / 108.0];

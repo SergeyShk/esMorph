@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "esmorph"
-version = "0.1.0-dev.8"
+version = "0.1.0-dev.9"
 dependencies = [
  "bytemuck",
  "crc32fast",
@@ -36,18 +36,18 @@ dependencies = [
 
 [[package]]
 name = "esmorph-build"
-version = "0.1.0-dev.8"
+version = "0.1.0-dev.9"
 dependencies = [
  "esmorph",
 ]
 
 [[package]]
 name = "esmorph-dict-es"
-version = "0.1.0-dev.8"
+version = "0.1.0-dev.9"
 
 [[package]]
 name = "esmorph-py"
-version = "0.1.0-dev.8"
+version = "0.1.0-dev.9"
 dependencies = [
  "esmorph",
  "pyo3",

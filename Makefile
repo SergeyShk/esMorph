@@ -32,7 +32,7 @@ endif
 
 dictionary: $(DICTIONARY) ## Build the dictionary from the snapshot of Wiktionary and the counts of treebanks
 
-$(EXPORT_STAMP): $(SCRIPTS_PATH)/export_wiktionary.py $(SCRIPTS_PATH)/conventions.py data/closed-classes.tsv | deps
+$(EXPORT_STAMP): $(SCRIPTS_PATH)/export_wiktionary.py $(SCRIPTS_PATH)/conventions.py data/closed-classes.tsv data/units.tsv | deps
 	uv run python $(SCRIPTS_PATH)/export_wiktionary.py $(EXPORT_PATH)
 	touch $@
 
