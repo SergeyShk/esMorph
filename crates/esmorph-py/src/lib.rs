@@ -64,8 +64,8 @@ impl Tag {
 ///         contraction, or the word itself; the analysis describes the first of them
 ///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the
 ///         dictionary with clitics, "rule" for a token out of the dictionary (punctuation, a
-///         symbol, a number, a Roman numeral, a name) and for the name of a word with a capital
-///         letter that the dictionary has, "guess" for a guessed lowercase word
+///         symbol, a number, a Roman numeral, a name) and for the name or the Roman numeral of a
+///         word with a capital letter that the dictionary has, "guess" for a guessed lowercase word
 ///
 /// Example:
 ///     >>> from esmorph import Analyzer
