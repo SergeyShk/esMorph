@@ -192,7 +192,8 @@ impl Analysis {
     ///     str: The word form as the dictionary spells it
     ///
     /// Raises:
-    ///     FormNotFoundError: If the lexeme has no form with these features
+    ///     FormNotFoundError: If the lexeme has no form with these features, or the dictionary has
+    ///         no lexeme of the analysis
     ///     ValueError: If the dictionary has no such feature or value
     ///     TypeError: If a value is not a string
     ///
@@ -215,7 +216,11 @@ impl Analysis {
                     &value,
                 ));
             };
-            let value = value.to_str()?.to_owned();
+            // The parts of a value with several are in the order of letters: `Acc,Nom`
+            let given = value.to_str()?;
+            let mut parts: Vec<&str> = given.split(',').collect();
+            parts.sort_unstable();
+            let value = parts.join(",");
             let Some(values) = analyzer.features.get(&name) else {
                 return Err(PyValueError::new_err(format!(
                     "Unknown UD feature {name}; the dictionary has {}",
@@ -224,7 +229,7 @@ impl Analysis {
             };
             if !values.contains(&value) {
                 return Err(PyValueError::new_err(format!(
-                    "Unknown value of the feature {name}: {value}; the dictionary has {}",
+                    "Unknown value of the feature {name}: {given}; the dictionary has {}",
                     listed(values)
                 )));
             }
@@ -235,10 +240,13 @@ impl Analysis {
             .iter()
             .map(|(name, value)| (name.as_str(), value.as_str()))
             .collect();
-        if let Some(form) = self
-            .core()
-            .and_then(|found| analyzer.dictionary.inflect(&found, &pairs))
-        {
+        let Some(core) = self.core() else {
+            return Err(FormNotFoundError::new_err(format!(
+                "The dictionary of the analyzer has no lexeme of {}",
+                py_repr(py, &self.word)?
+            )));
+        };
+        if let Some(form) = analyzer.dictionary.inflect(&core, &pairs) {
             return Ok(form.word);
         }
         let feats: Vec<String> = requested
@@ -364,6 +372,18 @@ fn _analysis(
                     && analysis.source.as_str() == source
             })
             .and_then(|analysis| analysis.entry)
+            // A guessed form is a guess of its lexeme, not of its word: `blorpeás` of `blorpear`
+            .or_else(|| {
+                if source != esmorph::Source::Guess.as_str() {
+                    return None;
+                }
+                (this.dictionary.analyze(&lemma).into_iter())
+                    .flat_map(|analysis| this.dictionary.forms(&analysis))
+                    .find(|form| {
+                        form.word == word && form.ud == ud && form.source.as_str() == source
+                    })
+                    .and_then(|form| form.entry)
+            })
     });
     Ok(Analysis {
         word,

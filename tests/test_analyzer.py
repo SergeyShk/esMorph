@@ -1039,8 +1039,10 @@ def test_an_analysis_of_a_rule_is_its_only_form(morph):
     assert number.forms() == [number]
     assert number.forms()[0].prob == 1.0
     assert number.inflect(NumType="Card") == "10.000"
+    # A gender or a number it has not is any; another feature is not
+    assert number.inflect(Number="Plur") == "10.000"
     with pytest.raises(esmorph.FormNotFoundError):
-        number.inflect(Number="Plur")
+        number.inflect(NumType="Ord")
     name = morph.analyze("Josep")[0]
     assert pickle.loads(pickle.dumps(name)) == name
     assert pickle.loads(pickle.dumps(name)).forms() == [name]
@@ -1154,6 +1156,34 @@ def test_more_tokens_out_of_the_dictionary(morph):
     esbelta = morph.analyze("esbeltísima")[0]
     assert (esbelta.lemma, esbelta.pos, esbelta.feats["Degree"]) == ("esbeltísimo", "ADJ", "Abs")
     assert first("procul")[0] != "procool"
+
+
+def test_inflection_keeps_the_features_of_the_analysis(morph):
+    def pronoun(word):
+        return next(a for a in morph.analyze(word) if a.pos == "PRON")
+
+    assert pronoun("lo").inflect(Case="Dat") == "le"
+    # A pronoun without a gender or a number keeps its other features
+    assert pronoun("ustedes").inflect(Gender="Fem") == "ustedes"
+    assert pronoun("se").inflect(Number="Plur") == "se"
+    assert pronoun("os").inflect(Gender="Fem") == "os"
+    # A value that shares a part is no other value
+    assert pronoun("él").inflect(PrepCase="Npr") == "lo"
+    assert pronoun("nosotros").inflect(Number="Sing") == "yo"
+    assert morph.analyze("chulitos")[0].inflect(Number="Sing") == "chulito"
+    # A value of several parts in any order, a rule analysis without number
+    el = morph.analyze("él")[0]
+    assert el.inflect(Case="Nom,Acc") == el.inflect(Case="Acc,Nom") == "él"
+    assert morph.analyze("ETA")[0].inflect(Number="Plur") == "ETA"
+    assert morph.analyze("123")[0].inflect(Number="Plur") == "123"
+    # An analysis whose lexeme the dictionary has not, and a guessed form after pickle
+    lost = esmorph._esmorph._analysis(
+        "gatos", "perro", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary"
+    )
+    with pytest.raises(esmorph.FormNotFoundError, match="no lexeme of 'gatos'"):
+        lost.inflect(Number="Sing")
+    forms = morph.analyze("blorpear")[0].forms()
+    assert all(pickle.loads(pickle.dumps(form)).forms() == forms for form in forms)
 
 
 def test_clitics_in_literary_writing(morph):
