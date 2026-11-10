@@ -1,5 +1,7 @@
 # esMorph
 
+![esMorph](img/esmorph.svg)
+
 **esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form the analyzer finds its analyses in a dictionary built from Wiktionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - orders them by probability and builds the forms of the word: conjugation, gender and number.
 
 !!! warning "Work in progress"

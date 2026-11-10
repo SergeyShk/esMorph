@@ -1,5 +1,7 @@
 # esMorph
 
+![esMorph](img/esmorph.svg)
+
 **esMorph** es un analizador morfológico del español: un núcleo en Rust con API para Python. Para una forma de palabra el analizador busca sus análisis en un diccionario creado a partir de Wiktionary - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) -, los ordena por probabilidad y construye las formas de la palabra: conjugación, género y número.
 
 !!! warning "En desarrollo"
