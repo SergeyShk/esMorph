@@ -1132,6 +1132,10 @@ impl Analyzer {
                 },
             )
         })?;
+        // The analyzer may be verified while the description is made
+        if this.verified.load(Ordering::Relaxed) {
+            saved.get().verify.store(true, Ordering::Relaxed);
+        }
         Ok(saved.clone_ref(py))
     }
 
