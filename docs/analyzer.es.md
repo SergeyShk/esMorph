@@ -1,7 +1,7 @@
 # Analizador
 
 ``` {.python .signature}
-Analyzer(path=None)
+Analyzer(path=None, *, verify=False)
 ```
 
 Analizador morfológico: para una forma de palabra busca todos sus [análisis](analysis.md) en un diccionario creado a partir de Wiktionary - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) - y los ordena por probabilidad. Un token que el diccionario no tiene recibe los análisis de unas [reglas](analysis.md#rules), y una palabra desconocida en minúsculas se [estima](analysis.md#guess). El diccionario se carga al crear el analizador.
@@ -10,7 +10,7 @@ Excepciones:
 
 - `FileNotFoundError` - el archivo del diccionario no existe;
 - `OSError` - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio, una tubería o un dispositivo;
-- `ValueError` - el archivo no es un diccionario de esMorph o está dañado, la ruta tiene un carácter NUL;
+- `ValueError` - el archivo no es un diccionario de esMorph o está dañado (con `verify=True`, también un archivo creado a propósito), la ruta tiene un carácter NUL;
 - `TypeError` - una ruta que no es una cadena ni `PathLike`.
 
 === "Código"
@@ -33,8 +33,9 @@ Excepciones:
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |
 | `path` | `str` / `PathLike` | `None` | Ruta al archivo del diccionario; por defecto, el diccionario del paquete |
+| `verify` | `bool` | `False` | Comprobar el diccionario entero, para un archivo de una fuente no fiable; tarda decenas de milisegundos |
 
-El objeto guarda la ruta absoluta del diccionario en `path`, de tipo `Path` y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, así que no se deben cargar diccionarios de fuentes no fiables.
+El objeto guarda la ruta absoluta del diccionario en `path`, de tipo `Path` y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, que puede hacer fallar el análisis. Un diccionario de una fuente no fiable se carga con `verify=True`: entonces un archivo creado a propósito se rechaza con `ValueError`, y pickle conserva la comprobación.
 
 ## Métodos
 

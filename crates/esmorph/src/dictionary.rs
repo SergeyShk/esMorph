@@ -138,7 +138,8 @@ impl Analysis {
 /// The dictionary file is mapped into memory: processes with one dictionary share its memory, and
 /// a copy (`clone`) shares the mapped file. While a dictionary is open, its file must not be
 /// overwritten in place. A dictionary is trusted data, like code: loading rejects a damaged file,
-/// but a deliberately crafted one may make the analysis panic, though memory safety holds
+/// but a deliberately crafted one may make the analysis panic, though memory safety holds;
+/// [`Dictionary::verify`] rejects such a file
 #[derive(Clone)]
 pub struct Dictionary {
     storage: Arc<Storage>,
@@ -157,6 +158,11 @@ pub struct Dictionary {
     hosts: Vec<Host>,
     /// Whether a UD tag is of a name, by number
     names: Vec<bool>,
+    /// Whether a UD tag is of a noun, a name, an adjective, a determiner, a pronoun or a numeral,
+    /// by number
+    nominal: Vec<bool>,
+    /// Numbers of the names `Gender` and `Number` in the strings of the tags
+    gender_number: [Option<u16>; 2],
     /// Tags of the analyses by rules; `None` if the table of tags has no room for them
     rule_tags: Option<RuleTags>,
     /// Made on the first annotation and shared by the copies
@@ -241,26 +247,27 @@ impl Dictionary {
             // SAFETY: the mapping is only read; the file must not be overwritten while the dictionary
             // is open (see the documentation of `Dictionary`)
             if let Ok(map) = unsafe { memmap2::Mmap::map(&file) } {
-                return Self::from_storage(Storage::Mapped(map));
+                return Self::from_storage(Storage::Mapped(map), true);
             }
         }
-        Self::from_storage(format::read(file)?)
+        Self::from_storage(format::read(file)?, true)
     }
 
     /// Reads a dictionary from the bytes of a dictionary file; as with `open`, the bytes must come
     /// from a trusted source
     pub fn from_bytes(data: &[u8]) -> Result<Self, Error> {
-        Self::from_storage(Storage::copy(data))
+        Self::from_storage(Storage::copy(data), true)
     }
 
     /// Reads a dictionary from the data of the program (`include_bytes!`): bytes aligned to 8 are
     /// read without a copy
     pub fn from_static(data: &'static [u8]) -> Result<Self, Error> {
-        Self::from_storage(Storage::of_static(data))
+        Self::from_storage(Storage::of_static(data), true)
     }
 
-    /// The dictionary of esMorph from the crate `esmorph-dict-es`; it is checked on every call, so
-    /// it is made once and shared between threads
+    /// The dictionary of esMorph from the crate `esmorph-dict-es`; its structure is checked on every
+    /// call, so it is made once and shared between threads. Its checksum is not: the bytes are part
+    /// of the program
     #[cfg(feature = "bundled")]
     #[cfg_attr(docsrs, doc(cfg(feature = "bundled")))]
     pub fn bundled() -> Result<Self, Error> {
@@ -271,11 +278,12 @@ impl Dictionary {
                     .into(),
             ));
         }
-        Self::from_static(esmorph_dict_es::DICTIONARY)
+        Self::from_storage(Storage::of_static(esmorph_dict_es::DICTIONARY), false)
     }
 
-    fn from_storage(storage: Storage) -> Result<Self, Error> {
-        let layout = format::layout(storage.bytes())?;
+    /// The dictionary of the bytes of a file; `checked` - the checksum of the file is compared
+    fn from_storage(storage: Storage, checked: bool) -> Result<Self, Error> {
+        let layout = format::layout(storage.bytes(), checked)?;
         let storage = Arc::new(storage.native(&layout));
         let bytes = |range: &Range<usize>| &storage.bytes()[range.clone()];
         let text = |range: &Range<usize>| {
@@ -299,6 +307,8 @@ impl Dictionary {
             word_count: 0,
             hosts: Vec::new(),
             names: Vec::new(),
+            nominal: Vec::new(),
+            gender_number: [None; 2],
             rule_tags: None,
             feats: Arc::default(),
             layout,
@@ -306,13 +316,19 @@ impl Dictionary {
         };
         dictionary.check_paradigms()?;
         dictionary.table_offsets = dictionary.check_tables()?;
-        dictionary.check_records()?;
+        let forms = dictionary.table_forms();
+        dictionary.check_records(&forms)?;
+        dictionary.check_guesses(&forms)?;
+        drop(forms);
         dictionary.word_count = dictionary.words.len() + dictionary.check_variants()?;
-        dictionary.check_guesses()?;
         dictionary.rule_tags = RuleTags::add(&mut dictionary.ud);
         dictionary.names = (dictionary.ud.iter())
             .map(|tag| tag.pos() == "PROPN")
             .collect();
+        dictionary.nominal = (dictionary.ud.iter())
+            .map(|tag| NOMINAL.contains(&tag.pos()))
+            .collect();
+        dictionary.gender_number = ["Gender", "Number"].map(|name| dictionary.ud.number(name));
         dictionary.hosts = dictionary
             .ud
             .iter()
@@ -336,6 +352,26 @@ impl Dictionary {
     /// Description of the source of the dictionary
     pub fn meta(&self) -> &str {
         &self.meta
+    }
+
+    /// Checks every node of the automata as a lookup reads it, for a dictionary of a source that is
+    /// not trusted: loading checks the checksum and the structure of the tables, while a crafted
+    /// automaton with a right checksum loads and makes the analysis panic. Takes tens of
+    /// milliseconds. A panic of the walk becomes an error, so it needs the default `panic = "unwind"`;
+    /// the panic hook may still print its message
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Format`] if an automaton is damaged
+    pub fn verify(&self) -> Result<(), Error> {
+        for (name, map) in [("word forms", &self.words), ("endings", &self.guesses)] {
+            let walked =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| walk(map.as_fst())));
+            if !matches!(walked, Ok(true)) {
+                return Err(Error::Format(format!("the automaton of {name} is damaged")));
+            }
+        }
+        Ok(())
     }
 
     /// Checksum of the dictionary file: dictionaries with one checksum are one dictionary, so the
@@ -882,20 +918,37 @@ impl Dictionary {
         let own_form = usize::from(analysis.entry?.form);
         let own = *lexeme.cells.get(own_form)?;
         let tag = self.ud.get(analysis.ud)?;
-        let mut wanted: Vec<(&str, &str)> = tag.feats().collect();
+        // Names and values as numbers of the strings of the tags, compared as numbers; a name
+        // without a number is in no tag
+        let feats: Vec<(Option<u16>, Value)> = (feats.iter())
+            .map(|&(name, text)| (self.ud.number(name), self.value(text)))
+            .collect();
+        let mut wanted: Vec<(Option<u16>, Value)> = (tag.feat_pairs())
+            .map(|(name, number)| {
+                let text = tag.text(number);
+                (
+                    Some(name),
+                    Value {
+                        number: Some(number),
+                        text,
+                    },
+                )
+            })
+            .collect();
         let mut want = |name, value| match wanted.iter_mut().find(|(known, _)| *known == name) {
             Some(feat) => feat.1 = value,
             None => wanted.push((name, value)),
         };
+        let verb_form = self.ud.number("VerbForm");
         if matches!(tag.feat("VerbForm"), Some("Inf" | "Ger"))
-            && feats.iter().all(|&(name, _)| name != "VerbForm")
+            && feats.iter().all(|&(name, _)| name != verb_form)
             && feats
                 .iter()
-                .any(|&(name, value)| !has(tag.feat(name), value))
+                .any(|&(name, value)| !has_value(tag, name, value))
         {
-            want("VerbForm", "Fin");
+            want(verb_form, self.value("Fin"));
         }
-        for &(name, value) in feats {
+        for &(name, value) in &feats {
             want(name, value);
         }
         // Of the forms of one tag the closest in spelling to the analysis, if its own tag has
@@ -921,18 +974,23 @@ impl Dictionary {
                 .position(|&cell| cell == lexeme.cells[form])
                 .unwrap_or(form)
         };
-        // Whether the analysis has a feature itself
-        let kept = |name: &str| tag.feat(name).is_some();
+        let own_tag = tag;
+        let either = |name: Option<u16>| name.is_some() && self.gender_number.contains(&name);
+        let lacks = |tag: UdTag<'_>, name: Option<u16>| {
+            name.and_then(|name| tag.feat_value(name)).is_none()
+        };
         let candidates = (0..lexeme.cells.len())
             .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
             .filter_map(|form| {
-                let tag = self.ud.get((lexeme.cells[form] & UD_BITS) as u16)?;
-                let nominal = NOMINAL.contains(&tag.pos());
+                let number = (lexeme.cells[form] & UD_BITS) as u16;
+                let tag = self.ud.get(number)?;
+                let nominal = self
+                    .nominal
+                    .get(usize::from(number))
+                    .copied()
+                    .unwrap_or(false);
                 let fits = feats.iter().all(|&(name, value)| {
-                    has(tag.feat(name), value)
-                        || (nominal
-                            && matches!(name, "Gender" | "Number")
-                            && tag.feat(name).is_none())
+                    has_value(tag, name, value) || (nominal && either(name) && lacks(tag, name))
                 });
                 if !fits {
                     return None;
@@ -944,26 +1002,26 @@ impl Dictionary {
                 // `ustedes`
                 let (mut contradicted, mut missed, mut absent) = (0, 0, 0);
                 for &(name, value) in &wanted {
-                    match tag.feat(name) {
-                        Some(known) if has(Some(known), value) => {}
+                    match name.and_then(|name| tag.feat_value(name)) {
+                        Some(_) if has_value(tag, name, value) => {}
                         // A value of several parts shares one: `Acc` of `Acc,Nom`
-                        Some(known) if shares_part(known, value) => missed += 1,
+                        Some(known) if shares_part(tag.text(known), value.text) => missed += 1,
                         Some(_) => {
                             contradicted += 1;
                             missed += 1;
                         }
                         None => {
                             missed += 1;
-                            if nominal && matches!(name, "Gender" | "Number") && kept(name) {
+                            if nominal && either(name) && !lacks(own_tag, name) {
                                 absent += 1;
                             }
                         }
                     }
                 }
                 // A pronoun with a feature more is another word: `vos` is not `usted`
-                let extra = (tag.feats())
-                    .filter(|&(name, _)| nominal && !matches!(name, "Gender" | "Number"))
-                    .filter(|&(name, _)| wanted.iter().all(|&(known, _)| known != name))
+                let extra = (tag.feat_names())
+                    .filter(|&name| nominal && !either(Some(name)))
+                    .filter(|&name| wanted.iter().all(|&(known, _)| known != Some(name)))
                     .count();
                 let variant = (lexeme.cells[form] ^ own) & VARIANT != 0;
                 let key = (
@@ -1004,6 +1062,14 @@ impl Dictionary {
         }
         let form = self.form(&lexeme, best, analysis.forms_source())?;
         Some(with_lemma(form, &analysis.lemma))
+    }
+
+    /// A value of a feature with the number of its string
+    fn value<'t>(&self, text: &'t str) -> Value<'t> {
+        Value {
+            number: self.ud.number(text),
+            text,
+        }
     }
 
     /// Lexeme of an analysis: of its verb for a verb with clitics
@@ -1144,22 +1210,23 @@ impl Dictionary {
         Ok(starts)
     }
 
-    /// Lists of analyses exactly cover their section, are not longer than `MAX_LIST`, their tables
-    /// and forms exist and are word forms, not only lemmas, and their probabilities are no more
-    /// than one
-    fn check_records(&self) -> Result<(), Error> {
+    /// The flags and UD tags of the forms of every table: tables and paradigms are checked already
+    fn table_forms(&self) -> Vec<&[u32]> {
         let (tables, offsets) = (self.tables(), self.paradigm_offsets());
-        // Forms of every table: tables and paradigms are checked already
-        let table_forms: Vec<&[u32]> = self
-            .table_offsets
-            .iter()
+        (self.table_offsets.iter())
             .map(|&start| {
                 let start = start as usize;
                 let paradigm = tables[start] as usize;
                 let count = (offsets[paradigm + 1] - offsets[paradigm]) as usize;
                 &tables[start + 1..start + 1 + count]
             })
-            .collect();
+            .collect()
+    }
+
+    /// Lists of analyses exactly cover their section, are not longer than `MAX_LIST`, their tables
+    /// and forms exist and are word forms, not only lemmas, and their probabilities are no more
+    /// than one
+    fn check_records(&self, table_forms: &[&[u32]]) -> Result<(), Error> {
         let lists = self.records();
         let invalid = |msg: &str| Err(Error::Format(msg.into()));
         let mut start = 0;
@@ -1226,7 +1293,7 @@ impl Dictionary {
     /// Lists of forms for guessing exactly cover their section, are not longer than `MAX_LIST` and
     /// refer to word forms of existing tables with numbers above zero. An ending of the automaton
     /// that refers inside a list gives forms that the guessing checks as it reads them
-    fn check_guesses(&self) -> Result<(), Error> {
+    fn check_guesses(&self, table_forms: &[&[u32]]) -> Result<(), Error> {
         let invalid = |msg: &str| Err(Error::Format(msg.into()));
         let lists = self.guess_records();
         let mut start = 0;
@@ -1235,11 +1302,10 @@ impl Dictionary {
                 return invalid("a list of guesses is truncated");
             };
             let fits = |&[record, count]: &[u32; 2]| {
-                let entry = Entry {
-                    table: (record >> 16) as u16,
-                    form: record as u16,
-                };
-                count > 0 && self.cell(entry).is_some_and(|cell| cell & LEMMA_ONLY == 0)
+                count > 0
+                    && (table_forms.get((record >> 16) as usize))
+                        .and_then(|cells| cells.get((record & 0xFFFF) as usize))
+                        .is_some_and(|&cell| cell & LEMMA_ONLY == 0)
             };
             if list.is_empty() || list.len() > MAX_LIST || !list.iter().all(fits) {
                 return invalid("a wrong list of guesses");
@@ -1247,17 +1313,6 @@ impl Dictionary {
             start += 1 + 2 * list.len();
         }
         Ok(())
-    }
-
-    /// Flags and UD tag of a form of a table
-    fn cell(&self, entry: Entry) -> Option<u32> {
-        let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
-        let tables = self.tables();
-        let paradigm = self.paradigm(*tables.get(start)?)?;
-        if usize::from(entry.form) >= paradigm.len() {
-            return None;
-        }
-        tables.get(start + 1 + usize::from(entry.form)).copied()
     }
 }
 
@@ -1324,6 +1379,25 @@ fn with_lemma(mut form: Analysis, lemma: &str) -> Analysis {
 /// Whether a value of a feature is `wanted` or lists it: `Acc,Nom` has `Acc`
 fn has(value: Option<&str>, wanted: &str) -> bool {
     value.is_some_and(|value| value == wanted || value.split(',').any(|part| part == wanted))
+}
+
+/// A value of a feature: the number of its string in the strings of the tags, if it has one
+#[derive(Clone, Copy)]
+struct Value<'a> {
+    number: Option<u16>,
+    text: &'a str,
+}
+
+/// Whether a tag has the value of the feature whose name has the number `name`, as `has`: the
+/// numbers of equal strings are equal
+fn has_value(tag: UdTag<'_>, name: Option<u16>, value: Value) -> bool {
+    let Some(known) = name.and_then(|name| tag.feat_value(name)) else {
+        return false;
+    };
+    Some(known) == value.number || {
+        let text = tag.text(known);
+        text.contains(',') && text.split(',').any(|part| part == value.text)
+    }
 }
 
 /// Whether two values of a feature share a part: `Acc` and `Acc,Nom`
@@ -1412,6 +1486,69 @@ fn automaton(storage: &Arc<Storage>, range: &Range<usize>) -> Result<Map<Slice>,
         ));
     }
     Ok(map)
+}
+
+/// Reads every node of an automaton reachable from its root as `Map::get` reads it: its transitions,
+/// the lookup of every byte it has and of one it has not (and of all 256 bytes in a node with an
+/// index of bytes) and its final output. `false` if a lookup does not find a transition of the node,
+/// a transition leads to a node written after its own, as no automaton of fst does, or the outputs
+/// along a path overflow
+fn walk(fst: &fst::raw::Fst<Slice>) -> bool {
+    // fst indexes the bytes of a node with more transitions
+    const INDEXED: usize = 32;
+    let mut seen = vec![0u64; fst.as_bytes().len() / 64 + 1];
+    let mut nodes = Vec::new();
+    let mut stack = vec![fst.root().addr()];
+    while let Some(addr) = stack.pop() {
+        let Some(word) = seen.get_mut(addr / 64) else {
+            return false;
+        };
+        if *word & (1 << (addr % 64)) != 0 {
+            continue;
+        }
+        *word |= 1 << (addr % 64);
+        nodes.push(addr);
+        let node = fst.node(addr);
+        let mut inputs = [false; 256];
+        for i in 0..node.len() {
+            let transition = node.transition(i);
+            inputs[usize::from(transition.inp)] = true;
+            if transition.addr >= addr || node.find_input(transition.inp) != Some(i) {
+                return false;
+            }
+            stack.push(transition.addr);
+        }
+        // The values are kept: a lookup that the optimizer leaves out would not panic
+        if node.len() > INDEXED {
+            for byte in 0..=u8::MAX {
+                std::hint::black_box(node.find_input(byte));
+            }
+        } else if let Some(absent) = (0..=u8::MAX).find(|&byte| !inputs[usize::from(byte)]) {
+            std::hint::black_box(node.find_input(absent));
+        }
+    }
+    // The largest output from every node to the end of a key, from the nodes written first
+    nodes.sort_unstable();
+    let mut largest = vec![0u64; nodes.len()];
+    for (index, &addr) in nodes.iter().enumerate() {
+        let node = fst.node(addr);
+        let mut most = if node.is_final() {
+            node.final_output().value()
+        } else {
+            0
+        };
+        for transition in node.transitions() {
+            let Ok(next) = nodes.binary_search(&transition.addr) else {
+                return false;
+            };
+            match transition.out.value().checked_add(largest[next]) {
+                Some(total) => most = most.max(total),
+                None => return false,
+            }
+        }
+        largest[index] = most;
+    }
+    true
 }
 
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
@@ -2039,7 +2176,7 @@ pub(crate) mod tests {
     #[test]
     fn unknown_flags_of_a_table_are_an_error() {
         let clean = bytes();
-        let tables = format::layout(&clean).unwrap().tables;
+        let tables = format::layout(&clean, true).unwrap().tables;
         // The second form of the first table, `ambigúes` of `ambigú`: its UD tag and no flags
         let at = tables.start + 8;
         let mut damaged = clean.clone();
@@ -2672,11 +2809,51 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn verified_automata_never_panic() {
+        // A damaged automaton with the checksum written anew loads: `verify` rejects every one on
+        // which the analysis of the words and of guessed words would panic
+        let clean = bytes();
+        let layout = format::layout(&clean, true).unwrap();
+        let words: Vec<String> = (FORMS.iter())
+            .flat_map(|&(_, _, form, _)| {
+                [form.to_owned(), format!("zz{form}"), form.to_uppercase()]
+            })
+            .collect();
+        let analyze = |dictionary: &Dictionary| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                for word in &words {
+                    let _ = dictionary.analyze(word);
+                    let _ = dictionary.is_known(word);
+                }
+            }))
+            .is_ok()
+        };
+        let (mut rejected, mut caught) = (0, 0);
+        for at in layout.words.clone().chain(layout.guesses.clone()) {
+            for flip in [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xFF] {
+                let mut damaged = clean.clone();
+                damaged[at] ^= flip;
+                let Ok(dictionary) = Dictionary::from_bytes(&with_checksum(damaged)) else {
+                    continue;
+                };
+                if dictionary.verify().is_err() {
+                    rejected += 1;
+                    caught += usize::from(!analyze(&dictionary));
+                    continue;
+                }
+                assert!(analyze(&dictionary), "byte {at} ^ {flip:#04x}");
+            }
+        }
+        assert!(caught > 0 && rejected >= caught, "{rejected} {caught}");
+        assert!(Dictionary::from_bytes(&clean).unwrap().verify().is_ok());
+    }
+
+    #[test]
     fn damaged_files_never_panic() {
         // Any byte of any section, with the checksum written anew so the checks of the sections are
         // reached; the automata are left out: only the checksum catches damage in them
         let clean = bytes();
-        let layout = format::layout(&clean).unwrap();
+        let layout = format::layout(&clean, true).unwrap();
         let automata = |at: &usize| layout.words.contains(at) || layout.guesses.contains(at);
         for at in (16..clean.len()).filter(|at| !automata(at)) {
             for flip in [0x01, 0x10, 0xFF] {

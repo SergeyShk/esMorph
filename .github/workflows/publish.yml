@@ -459,17 +459,21 @@ jobs:
       - name: Authenticate
         id: auth
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
-      # The crates are published one by one and a published version is skipped: a rerun of the job after
-      # a failure between the crates publishes the rest
+      # The crates are published at once, the dictionary first, and a published version is left out: a
+      # rerun of the job after a failure between the crates publishes the rest
       - name: Publish crates
         run: |
           version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "esmorph") | .version')"
+          packages=()
           for crate in esmorph-dict-es esmorph; do
             if curl -sf "https://index.crates.io/es/mo/$crate" | grep -qF "\"vers\":\"$version\""; then
               echo "$crate $version is already on crates.io"
-              continue
+            else
+              packages+=(-p "$crate")
             fi
-            cargo publish --locked --allow-dirty -p "$crate"
           done
+          if [ "${#packages[@]}" -gt 0 ]; then
+            cargo publish --locked --allow-dirty "${packages[@]}"
+          fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

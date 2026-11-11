@@ -194,7 +194,7 @@ fn check_header(data: &[u8]) -> Result<(), Error> {
 
 /// Bounds of the sections of a file: the signature, the version, the lengths of the sections and
 /// the checksum are checked
-pub(crate) fn layout(data: &[u8]) -> Result<Layout, Error> {
+pub(crate) fn layout(data: &[u8], checked: bool) -> Result<Layout, Error> {
     check_header(data)?;
     if data.len() as u64 > MAX_FILE {
         return Err(too_large());
@@ -241,7 +241,7 @@ pub(crate) fn layout(data: &[u8]) -> Result<Layout, Error> {
     }
     // The checksum reads the whole file, so it comes after the quick checks
     let checksum = u32::from_le_bytes(data[12..HEADER].try_into().map_err(|_| truncated())?);
-    if crc32fast::hash(&data[HEADER..]) != checksum {
+    if checked && crc32fast::hash(&data[HEADER..]) != checksum {
         return Err(Error::Format(
             "checksum mismatch: the file is damaged".into(),
         ));
@@ -559,7 +559,7 @@ pub(crate) mod tests {
     #[test]
     fn sections_are_aligned() {
         let data = write(&sample());
-        let layout = layout(&data).unwrap();
+        let layout = layout(&data, true).unwrap();
         for (range, _) in layout.numbers() {
             assert_eq!(range.start % ALIGN, 0);
         }
@@ -576,7 +576,7 @@ pub(crate) mod tests {
         let mut sections = sample();
         sections.paradigms = vec![0x0102];
         let data = write(&sections);
-        let layout = layout(&data).unwrap();
+        let layout = layout(&data, true).unwrap();
         let storage = Storage::copy(&data);
         let swapped = storage.swapped(&layout);
         // Numbers of the file are little-endian: after the swap they read as big-endian
@@ -603,11 +603,11 @@ pub(crate) mod tests {
         for at in HEADER..data.len() {
             let mut damaged = data.clone();
             damaged[at] ^= 0x10;
-            assert!(layout(&damaged).is_err(), "{at}");
+            assert!(layout(&damaged, true).is_err(), "{at}");
         }
         let mut damaged = data.clone();
         damaged[HEADER + 8] ^= 0x10;
-        let err = layout(&damaged).err().unwrap();
+        let err = layout(&damaged, true).err().unwrap();
         assert!(err.to_string().contains("checksum"), "{err}");
         for broken in [
             &b"ESMORPH"[..],
@@ -615,12 +615,12 @@ pub(crate) mod tests {
             &data[..HEADER],
             &data[..data.len() - 1],
         ] {
-            assert!(layout(broken).is_err());
+            assert!(layout(broken, true).is_err());
         }
         let mut other = data.clone();
         other[8] = 9;
         assert!(
-            layout(&other)
+            layout(&other, true)
                 .err()
                 .unwrap()
                 .to_string()
@@ -629,7 +629,7 @@ pub(crate) mod tests {
         let mut foreign = data.clone();
         foreign[0] = b'X';
         assert!(
-            layout(&foreign)
+            layout(&foreign, true)
                 .err()
                 .unwrap()
                 .to_string()
@@ -637,7 +637,7 @@ pub(crate) mod tests {
         );
         let mut longer = data.clone();
         longer.extend_from_slice(&[0; 8]);
-        assert!(layout(&with_checksum(longer)).is_err());
+        assert!(layout(&with_checksum(longer), true).is_err());
     }
 
     #[test]
