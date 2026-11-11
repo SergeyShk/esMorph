@@ -31,7 +31,7 @@ required-features = ["cli"]
 anyseg = { version = "0.3.0", optional = true, default-features = false, features = ["es"] }
 bytemuck = "1.25.2"
 crc32fast = "1.5.3"
-esmorph-dict-es = { version = "=0.2.0-dev.2", path = "../esmorph-dict-es", optional = true }
+esmorph-dict-es = { version = "=0.2.0-dev.3", path = "../esmorph-dict-es", optional = true }
 fst = "0.4.7"
 memmap2 = "0.9.11"
 
