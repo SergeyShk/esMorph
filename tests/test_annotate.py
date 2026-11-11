@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+import anyseg
 import pytest
 from anyseg import Segmenter
 
@@ -63,6 +64,13 @@ def test_unknown_words(morph, segmenter):
     morph.annotate(document)
     assert columns(document) == [("qzxw", "qzxw", "X")]
     assert document.column("feats") == [None]
+
+
+def test_tabs_and_line_breaks_in_tokens(morph):
+    document = anyseg.Document.from_tokens("a\tb x\r\ny", [0, 4], [3, 8])
+    morph.annotate(document)
+    assert document.column("lemma") == ["a b", "x  y"]
+    assert document.column("upos") == ["X", "X"]
 
 
 def test_replaces_columns(morph, segmenter):
@@ -141,6 +149,8 @@ def test_document_protocol(morph):
         [Token("verla", [Word(-1), Word(0)])],
         [Token("verla", [Word(0), Word(1)]), Token("verla", [Word(1), Word(2)])],
         [Token("verla", [Word(1), Word(2)]), Token("verla", [Word(0)])],
+        [Token("verla", [Word(2**70), Word(2**70 + 1)])],
+        [Token("verla", [Word(-(2**70)), Word(0)])],
     ],
 )
 def test_multiword_tokens_in_order(morph, tokens):

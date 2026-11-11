@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyLookupError, PyOSError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyLookupError, PyOSError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -1087,11 +1087,12 @@ fn multiword_tokens(
         let mut range: Option<Range<usize>> = None;
         for word in token.getattr(intern!(py, "words"))?.try_iter()? {
             let index = word?.getattr(intern!(py, "index"))?;
-            let index: usize = index
-                .extract::<isize>()
-                .map_err(|_| type_error("The index of a word must be an integer", &index))?
-                .try_into()
-                .map_err(|_| unordered())?;
+            let index: usize = match index.extract::<isize>() {
+                // An index past isize is out of the document
+                Err(err) if err.is_instance_of::<PyOverflowError>(py) => return Err(unordered()),
+                Err(_) => return Err(type_error("The index of a word must be an integer", &index)),
+                Ok(index) => index.try_into().map_err(|_| unordered())?,
+            };
             range = match range {
                 None if index >= next => Some(index..index + 1),
                 Some(range) if index == range.end => Some(range.start..index + 1),
