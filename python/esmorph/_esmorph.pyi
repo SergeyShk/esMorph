@@ -1,7 +1,7 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from os import PathLike
 from pathlib import Path
-from typing import final
+from typing import Literal, Protocol, final
 
 __all__ = ["Analysis", "Analyzer", "FormNotFoundError", "__version__"]
 
@@ -67,6 +67,29 @@ def _analysis(
 def _analyzer(path: str | PathLike[str] | None = None) -> Analyzer:
     """Restores an analyzer from pickle"""
 
+class _Word(Protocol):
+    @property
+    def index(self) -> int: ...
+
+class _Token(Protocol):
+    @property
+    def text(self) -> str: ...
+    @property
+    def words(self) -> Iterable[_Word]: ...
+
+class _Document(Protocol):
+    # An anyseg.Document or an object with the same interface
+    def column(self, name: Literal["form"], /) -> Iterable[str]: ...
+    @property
+    def multiword_tokens(self) -> Iterable[_Token]: ...
+    def set_columns(
+        self,
+        *,
+        lemma: Sequence[str | None],
+        upos: Sequence[str | None],
+        feats: Sequence[str | None],
+    ) -> object: ...
+
 @final
 class Analyzer:
     """Morphological analyzer of Spanish"""
@@ -84,6 +107,9 @@ class Analyzer:
 
     def lemmatize(self, words: Iterable[str]) -> list[str]:
         """Lemmas of a list of word forms"""
+
+    def annotate(self, document: _Document) -> None:
+        """Analysis of a document of the anySeg segmenter"""
 
     def is_known(self, word: str) -> bool:
         """Whether the dictionary has the word form"""
