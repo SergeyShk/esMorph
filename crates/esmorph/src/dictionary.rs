@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::ops::Range;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use fst::Map;
 
@@ -19,7 +19,11 @@ use crate::rules::{
 };
 use crate::ud::{UdTag, UdTags};
 
+mod annotate;
 mod guess;
+
+#[doc(hidden)]
+pub use annotate::Fields;
 
 /// Where an analysis comes from
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,7 +157,12 @@ pub struct Dictionary {
     names: Vec<bool>,
     /// Tags of the analyses by rules; `None` if the table of tags has no room for them
     rule_tags: Option<RuleTags>,
+    /// Made on the first annotation and shared by the copies
+    feats: Arc<OnceLock<TagFeats>>,
 }
+
+/// The features of every UD tag in CoNLL-U, `None` without them
+type TagFeats = Box<[Option<Box<str>>]>;
 
 /// Analyses of one spelling of the host of a split
 struct HostAnalyses {
@@ -289,6 +298,7 @@ impl Dictionary {
             hosts: Vec::new(),
             names: Vec::new(),
             rule_tags: None,
+            feats: Arc::default(),
             layout,
             storage: Arc::clone(&storage),
         };
