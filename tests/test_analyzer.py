@@ -1,10 +1,13 @@
+import contextlib
 import copy
 import errno
 import gc
+import itertools
 import json
 import os
 import pickle
 import threading
+import zlib
 from pathlib import Path
 
 import pytest
@@ -816,6 +819,42 @@ def test_load_errors(morph, tmp_path):
     empty.write_bytes(b"")
     with pytest.raises(ValueError, match="signature"):
         Analyzer(empty)
+
+
+def crafted(data: bytes, at: int, flip: int) -> bytes:
+    """The dictionary with a byte of its automaton of word forms changed and the checksum anew"""
+    # Sections after the header of 16 bytes: a length of 8 bytes, the data, alignment to 8
+    start = 16
+    for _ in range(8):
+        length = int.from_bytes(data[start : start + 8], "little")
+        start = (start + 8 + length + 7) // 8 * 8
+    length = int.from_bytes(data[start : start + 8], "little")
+    damaged = bytearray(data)
+    damaged[start + 8 + length - at] ^= flip
+    damaged[12:16] = zlib.crc32(bytes(damaged[16:])).to_bytes(4, "little")
+    return bytes(damaged)
+
+
+def test_verify(morph, tmp_path):
+    assert Analyzer(verify=True).analyze("gatos")[0].lemma == "gato"
+    # A crafted automaton with a right checksum loads; verify rejects it
+    data, path = morph.path.read_bytes(), tmp_path / "crafted.dict"
+    for at, flip in itertools.product(range(22, 80), (0x08, 0x10, 0x40)):
+        path.write_bytes(crafted(data, at, flip))
+        try:
+            Analyzer(path)
+        except ValueError:
+            continue
+        with contextlib.suppress(ValueError):
+            Analyzer(path, verify=True)
+            continue
+        break
+    else:
+        pytest.fail("no crafted dictionary that loads and fails verify")
+    with pytest.raises(ValueError, match="the automaton of word forms is damaged"):
+        Analyzer(path, verify=True)
+    with pytest.raises(TypeError):
+        Analyzer(morph.path, True)
 
 
 def test_threads(morph):

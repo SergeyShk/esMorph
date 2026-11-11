@@ -97,7 +97,9 @@ class _Document(Protocol):
 class Analyzer:
     """Morphological analyzer of Spanish"""
 
-    def __new__(cls, path: str | PathLike[str] | None = None) -> Analyzer: ...
+    def __new__(
+        cls, path: str | PathLike[str] | None = None, *, verify: bool = False
+    ) -> Analyzer: ...
     @property
     def path(self) -> Path:
         """Path to the dictionary file"""

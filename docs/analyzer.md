@@ -1,7 +1,7 @@
 # Analyzer
 
 ``` {.python .signature}
-Analyzer(path=None)
+Analyzer(path=None, *, verify=False)
 ```
 
 Morphological analyzer: for a word form it finds all [analyses](analysis.md) in a dictionary built from Wiktionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and orders them by probability. A token that the dictionary does not have gets the analyses of [rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). The dictionary is loaded when the analyzer is created.
@@ -10,7 +10,7 @@ Exceptions:
 
 - `FileNotFoundError` - the dictionary file does not exist;
 - `OSError` - the dictionary file cannot be read: no access, the path points to a directory, a pipe or a device;
-- `ValueError` - the file is not an esMorph dictionary or is damaged, the path has a NUL character;
+- `ValueError` - the file is not an esMorph dictionary or is damaged (with `verify=True`, a crafted automaton too), the path has a NUL character;
 - `TypeError` - a path that is neither a string nor `PathLike`.
 
 === "Code"
@@ -33,8 +33,9 @@ Exceptions:
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |
 | `path` | `str` / `PathLike` | `None` | Path to the dictionary file; by default, the dictionary of the package |
+| `verify` | `bool` | `False` | Check every node of the automata of the dictionary, for a file of an untrusted source; takes tens of milliseconds |
 
-The object keeps the absolute dictionary path in `path` of type `Path`, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, so dictionaries from untrusted sources should not be loaded.
+The object keeps the absolute dictionary path in `path` of type `Path`, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, which may make the analysis fail. A dictionary of an untrusted source is loaded with `verify=True`: a crafted file is then rejected with `ValueError`.
 
 ## Methods
 

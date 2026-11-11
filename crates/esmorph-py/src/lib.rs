@@ -467,7 +467,8 @@ fn _analyzer(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
 /// The analyzer of the dictionary of the package, or of the file at `path`, shared in the process
 fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
     let Some(path) = path else {
-        let analyzer = PACKAGE.get_or_try_init(py, || Py::new(py, Analyzer::new(py, None)?))?;
+        let analyzer =
+            PACKAGE.get_or_try_init(py, || Py::new(py, Analyzer::new(py, None, false)?))?;
         return Ok(analyzer.clone_ref(py));
     };
     let known = (FILES.lock().unwrap_or_else(PoisonError::into_inner))
@@ -477,7 +478,7 @@ fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
         return Ok(analyzer.cast_into::<Analyzer>()?.unbind());
     }
     // The dictionary is loaded without the lock: the loading lets other threads run
-    let analyzer = Bound::new(py, Analyzer::new(py, Some(path))?)?;
+    let analyzer = Bound::new(py, Analyzer::new(py, Some(path), false)?)?;
     Analyzer::saved_path(&analyzer)?;
     Ok(analyzer.unbind())
 }
@@ -497,6 +498,9 @@ fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
 /// Arguments:
 ///     path (str | os.PathLike | None): Path to a dictionary file; by default the dictionary of the
 ///         package
+///     verify (bool): Check every node of the automata of the dictionary, for a file of a source
+///         that is not trusted: a crafted file with a right checksum may otherwise make the
+///         analysis panic. Takes tens of milliseconds
 ///
 /// Raises:
 ///     FileNotFoundError: If there is no dictionary file
@@ -529,8 +533,8 @@ struct Analyzer {
 #[pymethods]
 impl Analyzer {
     #[new]
-    #[pyo3(signature = (path=None))]
-    fn new(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Self> {
+    #[pyo3(signature = (path=None, *, verify=false))]
+    fn new(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Self> {
         let explicit = path.is_some();
         let path = match path {
             // An absolute path: pickle may restore the analyzer in another working directory
@@ -551,7 +555,13 @@ impl Analyzer {
             )));
         }
         let dictionary = py
-            .detach(|| esmorph::Dictionary::open(&path))
+            .detach(|| {
+                let dictionary = esmorph::Dictionary::open(&path)?;
+                if verify {
+                    dictionary.verify()?;
+                }
+                Ok(dictionary)
+            })
             .map_err(|err| load_error(&path, err))?;
         let tags: Vec<Arc<Tag>> = dictionary
             .ud_tags()
