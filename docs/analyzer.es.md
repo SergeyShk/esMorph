@@ -147,6 +147,46 @@ Excepciones:
 
 <div class="metric-card" markdown>
 
+### Análisis de un documento { #annotate }
+
+`annotate` · `None`
+{ .metric-meta }
+
+``` {.python .signature}
+annotate(document)
+```
+
+Rellena las columnas `lemma`, `upos` y `feats` de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/) con el análisis más probable de cada palabra, en el orden de `analyze`; los valores anteriores de estas columnas se sustituyen. Las palabras de un token multipalabra se analizan por el token: `dime` dividido en `di` + `me` es el imperativo de `decir` con el pronombre `me`, y los clíticos tras un verbo son pronombres. Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: `devuélvenos` es el imperativo de `devolver`. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría `X`. El método libera el GIL. esMorph no depende de anySeg: el documento es un `anyseg.Document` o un objeto con los mismos `column("form")`, `multiword_tokens` (un token tiene `text` y `words`, una palabra tiene `index`) y `set_columns`.
+
+| Parámetro | Tipo | Por defecto | Descripción |
+| :-------- | :--- | :---------- | :---------- |
+| `document` | `anyseg.Document` | - | Documento del segmentador (`pip install anyseg`) |
+
+Excepciones:
+
+- `ValueError` - las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden;
+- `TypeError` - una forma o el texto de un token que no es una cadena, el índice de una palabra que no es un entero.
+
+=== "Código"
+
+    ``` python
+    from anyseg import Segmenter
+
+    document = Segmenter("es").segment("Dime la verdad.")
+    morph.annotate(document)
+    [(word.form, word.lemma, word.upos) for word in document.words]
+    ```
+
+=== "Resultado"
+
+    ```
+    [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    ```
+
+</div>
+
+<div class="metric-card" markdown>
+
 ### Forma de palabra del diccionario { #is_known }
 
 `is_known` · `bool`
@@ -186,7 +226,7 @@ El diccionario del paquete se crea a partir del [Wiktionary](https://en.wiktiona
 
 ## Hilos y procesos { #parallel }
 
-Un mismo analizador se puede usar desde varios hilos. `lemmatize` libera el GIL, así que los hilos lo aceleran. `analyze_many` crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, `lemmatize` o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza `ValueError`. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
+Un mismo analizador se puede usar desde varios hilos. `lemmatize` y `annotate` liberan el GIL, así que los hilos los aceleran. `analyze_many` crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, `lemmatize` o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza `ValueError`. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
 
 === "Código"
 
