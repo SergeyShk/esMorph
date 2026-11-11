@@ -18,8 +18,14 @@ default = ["bundled"]
 bundled = ["dep:esmorph-dict-es"]
 # The analysis of a document of the anySeg segmenter: Dictionary::annotate
 anyseg = ["dep:anyseg"]
+# The esmorph command: cargo install esmorph --features cli
+cli = ["anyseg"]
 # Building dictionaries: Builder
 build = []
+
+[[bin]]
+name = "esmorph"
+required-features = ["cli"]
 
 [dependencies]
 anyseg = { version = "0.3.0", optional = true, default-features = false, features = ["es"] }

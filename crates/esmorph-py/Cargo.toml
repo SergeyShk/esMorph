@@ -14,5 +14,5 @@ name = "_esmorph"
 crate-type = ["cdylib"]
 
 [dependencies]
-esmorph = { path = "../esmorph", default-features = false }
+esmorph = { path = "../esmorph", default-features = false, features = ["cli"] }
 pyo3 = { version = "0.30.1", features = ["abi3-py311"] }

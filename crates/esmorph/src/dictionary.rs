@@ -24,6 +24,8 @@ mod guess;
 
 #[doc(hidden)]
 pub use annotate::Fields;
+#[cfg(feature = "cli")]
+pub(crate) use annotate::{one_line, set_fields};
 
 /// Where an analysis comes from
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

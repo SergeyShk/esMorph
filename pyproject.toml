@@ -42,6 +42,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+esmorph = "esmorph.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/SergeyShk/esMorph"
 Repository = "https://github.com/SergeyShk/esMorph"
