@@ -73,12 +73,7 @@ impl Dictionary {
                     .and_then(Option::as_deref);
                 (analysis.lemma, tag.pos(), feats)
             }
-            // A lemma of CoNLL-U holds no tab or line break: a space, as in the form there
-            _ => (
-                word.to_lowercase().replace(['\t', '\n', '\r'], " "),
-                "X",
-                None,
-            ),
+            _ => (one_line(&word.to_lowercase()), "X", None),
         }
     }
 
@@ -132,6 +127,19 @@ impl Dictionary {
         document
             .set_columns(columns, None)
             .map_err(|err| crate::Error::Document(err.to_string()))
+    }
+}
+
+/// A word as one line of CoNLL-U, as anySeg writes a form there: a tab or a line break (CR LF
+/// together) is a space
+fn one_line(word: &str) -> String {
+    const BREAKS: [char; 8] = [
+        '\t', '\n', '\r', '\u{b}', '\u{c}', '\u{85}', '\u{2028}', '\u{2029}',
+    ];
+    if word.contains(BREAKS) {
+        word.replace("\r\n", " ").replace(BREAKS, " ")
+    } else {
+        word.to_owned()
     }
 }
 
@@ -293,15 +301,21 @@ mod tests {
         dictionary.annotate(&mut document).unwrap();
         assert_eq!(document.column(Column::Lemma, 0), Some("devolver"));
         // A token with a tab or a line break inside
-        let text = "a\tb x\r\ny".to_owned();
+        let text = "a\tb x\r\ny z\u{2028}w".to_owned();
         let tokens = vec![
             anyseg::Span { start: 0, end: 3 },
             anyseg::Span { start: 4, end: 8 },
+            anyseg::Span { start: 9, end: 14 },
         ];
         let mut spaced = anyseg::Document::from_tokens(text, tokens, None).unwrap();
         dictionary.annotate(&mut spaced).unwrap();
-        assert_eq!(spaced.column(Column::Lemma, 0), Some("a b"));
-        assert_eq!(spaced.column(Column::Lemma, 1), Some("x  y"));
+        let lemmas: Vec<_> = (0..3)
+            .map(|word| spaced.column(Column::Lemma, word))
+            .collect();
+        assert_eq!(lemmas, [Some("a b"), Some("x y"), Some("z w")]);
+        // The lemma is the form that anySeg writes in CoNLL-U
+        let conllu = spaced.to_conllu();
+        assert!(conllu.contains("\tx y\tx y\t"), "{conllu}");
         let mut empty = Segmenter::new("es").unwrap().segment("");
         dictionary.annotate(&mut empty).unwrap();
         assert_eq!(empty.word_count(), 0);
