@@ -44,6 +44,15 @@ fn main() -> Result<(), esmorph::Error> {
 }
 ```
 
+## The esmorph command
+
+The feature `cli` builds the command `esmorph`, which analyzes text from files and the standard input and writes lemmas, CoNLL-U, TSV or JSON Lines:
+
+```bash
+cargo install esmorph --features cli
+echo "Dime la verdad del caso." | esmorph
+```
+
 ## Documents of anySeg
 
 With the feature `anyseg` the dictionary fills the columns of the words of a document of the segmenter [anySeg](https://crates.io/crates/anyseg), whose crate is `esmorph::anyseg`:

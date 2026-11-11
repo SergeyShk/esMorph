@@ -5,10 +5,17 @@ use super::{Analysis, Dictionary};
 use crate::alphabet;
 use crate::clitics;
 
-/// The fields of a word in CoNLL-U: the lemma, the part of speech and the features, `None` without
-/// them
+/// The fields of a word in CoNLL-U by its most probable analysis
 #[doc(hidden)]
-pub type Fields<'d> = (String, &'d str, Option<&'d str>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fields<'d> {
+    pub lemma: String,
+    pub pos: &'d str,
+    /// `None` without features
+    pub feats: Option<&'d str>,
+    /// The probability of the analysis; 0 without analyses
+    pub prob: f64,
+}
 
 impl Dictionary {
     /// The fields of CoNLL-U of the most probable analysis of every word of a token, pushed to
@@ -30,12 +37,13 @@ impl Dictionary {
         let host = if rest.is_empty() {
             None
         } else {
-            (self.analyze(token).into_iter()).find(|analysis| {
+            let fitting = (self.analyze(token).into_iter()).filter(|analysis| {
                 analysis.words.len() == words.len()
                     && (analysis.words.iter())
                         .zip(words)
                         .all(|(known, word)| same_word(known, word.as_ref()))
-            })
+            });
+            most_probable(fitting.collect())
         };
         let host = host.or_else(|| self.analyze(first).into_iter().next());
         let verb = host.as_ref().is_some_and(|analysis| {
@@ -46,12 +54,13 @@ impl Dictionary {
             let word = word.as_ref();
             let analyses = self.analyze(word);
             let pronoun = verb && clitics::is_clitic(&word.to_lowercase());
-            let analysis = match analyses.iter().position(|analysis| {
-                pronoun && (self.ud_tag(analysis.ud)).is_some_and(|tag| tag.pos() == "PRON")
-            }) {
-                Some(at) => analyses.into_iter().nth(at),
-                None => analyses.into_iter().next(),
-            };
+            let pronouns: Vec<Analysis> = (analyses.iter())
+                .filter(|analysis| {
+                    pronoun && (self.ud_tag(analysis.ud)).is_some_and(|tag| tag.pos() == "PRON")
+                })
+                .cloned()
+                .collect();
+            let analysis = most_probable(pronouns).or_else(|| analyses.into_iter().next());
             fields.push(self.fields(word, analysis));
         }
     }
@@ -71,10 +80,33 @@ impl Dictionary {
                 let feats = feats
                     .get(usize::from(analysis.ud))
                     .and_then(Option::as_deref);
-                (analysis.lemma, tag.pos(), feats)
+                Fields {
+                    pos: tag.pos(),
+                    feats,
+                    prob: analysis.prob,
+                    lemma: analysis.lemma,
+                }
             }
-            _ => (one_line(&word.to_lowercase()), "X", None),
+            _ => Fields {
+                lemma: one_line(&word.to_lowercase()),
+                pos: "X",
+                feats: None,
+                prob: 0.0,
+            },
         }
+    }
+
+    /// The fields of every word of a document of the anySeg segmenter, as `annotate` gives them
+    #[cfg(feature = "anyseg")]
+    pub(crate) fn document_fields(&self, document: &anyseg::Document) -> Vec<Fields<'_>> {
+        let mut fields = Vec::with_capacity(document.word_count());
+        let mut words = Vec::new();
+        for (token, span) in document.tokens().iter().enumerate() {
+            words.clear();
+            words.extend(document.token_words(token).map(|word| document.form(word)));
+            self.token_fields(span.slice(document.text()), &words, &mut fields);
+        }
+        fields
     }
 
     /// Fills the columns LEMMA, UPOS and FEATS of the words of a document of the anySeg segmenter
@@ -105,34 +137,48 @@ impl Dictionary {
     #[cfg(feature = "anyseg")]
     #[cfg_attr(docsrs, doc(cfg(feature = "anyseg")))]
     pub fn annotate(&self, document: &mut anyseg::Document) -> Result<(), crate::Error> {
-        use anyseg::Column;
-
-        let mut fields = Vec::with_capacity(document.word_count());
-        let mut words = Vec::new();
-        for (token, span) in document.tokens().iter().enumerate() {
-            words.clear();
-            words.extend(document.token_words(token).map(|word| document.form(word)));
-            self.token_fields(span.slice(document.text()), &words, &mut fields);
-        }
-        let lemmas: Vec<Option<&str>> = (fields.iter())
-            .map(|(lemma, _, _)| Some(lemma.as_str()))
-            .collect();
-        let parts: Vec<Option<&str>> = fields.iter().map(|&(_, pos, _)| Some(pos)).collect();
-        let feats: Vec<Option<&str>> = fields.iter().map(|&(_, _, feats)| feats).collect();
-        let columns = [
-            (Column::Lemma, lemmas),
-            (Column::Upos, parts),
-            (Column::Feats, feats),
-        ];
-        document
-            .set_columns(columns, None)
-            .map_err(|err| crate::Error::Document(err.to_string()))
+        let fields = self.document_fields(document);
+        set_fields(document, &fields)
     }
+}
+
+/// The columns LEMMA, UPOS and FEATS of the words of a document from their fields
+#[cfg(feature = "anyseg")]
+pub(crate) fn set_fields(
+    document: &mut anyseg::Document,
+    fields: &[Fields],
+) -> Result<(), crate::Error> {
+    use anyseg::Column;
+
+    let lemmas: Vec<Option<&str>> = fields
+        .iter()
+        .map(|word| Some(word.lemma.as_str()))
+        .collect();
+    let parts: Vec<Option<&str>> = fields.iter().map(|word| Some(word.pos)).collect();
+    let feats: Vec<Option<&str>> = fields.iter().map(|word| word.feats).collect();
+    let columns = [
+        (Column::Lemma, lemmas),
+        (Column::Upos, parts),
+        (Column::Feats, feats),
+    ];
+    document
+        .set_columns(columns, None)
+        .map_err(|err| crate::Error::Document(err.to_string()))
+}
+
+/// The first of the analyses that a choice is limited to, with its share among them
+fn most_probable(analyses: Vec<Analysis>) -> Option<Analysis> {
+    let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+    let mut first = analyses.into_iter().next()?;
+    if total > 0.0 {
+        first.prob /= total;
+    }
+    Some(first)
 }
 
 /// A word as one line of CoNLL-U, as anySeg writes a form there: a tab or a line break (CR LF
 /// together) is a space
-fn one_line(word: &str) -> String {
+pub(crate) fn one_line(word: &str) -> String {
     const BREAKS: [char; 8] = [
         '\t', '\n', '\r', '\u{b}', '\u{c}', '\u{85}', '\u{2028}', '\u{2029}',
     ];
@@ -164,7 +210,13 @@ mod tests {
         let mut fields = Vec::new();
         dictionary.token_fields(token, words, &mut fields);
         (fields.into_iter())
-            .map(|(lemma, pos, feats)| (lemma, pos.to_owned(), feats.map(str::to_owned)))
+            .map(|word| {
+                (
+                    word.lemma,
+                    word.pos.to_owned(),
+                    word.feats.map(str::to_owned),
+                )
+            })
             .collect()
     }
 

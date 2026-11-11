@@ -36,6 +36,7 @@ It analyzes 1.2 million tokens per second from Python, 28 times faster than spaC
 * **[Tokens out of the dictionary](https://sergeyshk.github.io/esMorph/analysis/#rules)** - punctuation, numbers, ordinals, Roman numerals, names, addresses and abbreviations by rules
 * **[Unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess)** - analyses by the ending, a hyphen or a prefix, and the forms of guessed words
 * **[Inflection](https://sergeyshk.github.io/esMorph/inflection/)** - the forms of a lexeme and the form with given UD features
+* **[The esmorph command](https://sergeyshk.github.io/esMorph/cli/)** - lemmas, CoNLL-U, TSV or JSON Lines of text, tokens or CoNLL-U from files and the standard input
 * **[Comparison](https://sergeyshk.github.io/esMorph/comparison/)** - accuracy, inflection and speed compared with simplemma, spaCy, Stanza, ablaut and verbecc
 
 > [!NOTE]
@@ -96,7 +97,17 @@ The analyzer is created once: it loads the dictionary, and then it can be used i
 
 `analyze_many` analyzes a list of words; `lemmatize` gives their lemmas, and `annotate` fills the lemmas, parts of speech and features of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, both without the GIL. The analyzer and the analyses are pickled, so they work with `multiprocessing` and joblib.
 
-See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/), [word analysis](https://sergeyshk.github.io/esMorph/analysis/).
+The `esmorph` command, installed with the package, analyzes text from files and the standard input:
+
+```bash
+echo "Dime la verdad del caso." | esmorph
+```
+
+```
+decir yo el verdad de el caso .
+```
+
+See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/), [word analysis](https://sergeyshk.github.io/esMorph/analysis/), [the esmorph command](https://sergeyshk.github.io/esMorph/cli/).
 
 <details>
 <summary><b>Parts of speech and features of Universal Dependencies</b></summary>

@@ -13,6 +13,7 @@ nav:
     - Analyzer: analyzer.md
     - Word analysis: analysis.md
     - Inflection: inflection.md
+    - The esmorph command: cli.md
 
 theme:
   name: material
@@ -74,6 +75,7 @@ plugins:
             Analyzer: Analizador
             Word analysis: Análisis de palabras
             Inflection: Flexión
+            The esmorph command: El comando esmorph
 
 extra:
   social:

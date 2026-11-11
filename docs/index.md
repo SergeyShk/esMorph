@@ -35,6 +35,14 @@
 
     [:octicons-arrow-right-24: Inflection](inflection.md)
 
+-   :material-console:{ .lg .middle } __Command line__
+
+    ---
+
+    The `esmorph` command: lemmas, CoNLL-U, TSV or JSON Lines of text, tokens or CoNLL-U files
+
+    [:octicons-arrow-right-24: The esmorph command](cli.md)
+
 -   :material-speedometer:{ .lg .middle } __Comparison__
 
     ---

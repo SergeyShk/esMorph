@@ -806,15 +806,15 @@ impl Analyzer {
             Vec::with_capacity(fields.len()),
             Vec::with_capacity(fields.len()),
         );
-        for (lemma, pos, features) in fields {
+        for word in fields {
             let mut string = |text| {
                 (strings.entry(text))
                     .or_insert_with(|| PyString::new(py, text))
                     .clone()
             };
-            lemmas.push(lemma);
-            parts.push(string(pos));
-            feats.push(features.map(string));
+            lemmas.push(word.lemma);
+            parts.push(string(word.pos));
+            feats.push(word.feats.map(string));
         }
         let columns = PyDict::new(py);
         columns.set_item(intern!(py, "lemma"), lemmas)?;
@@ -981,6 +981,15 @@ fn load_error(path: &Path, err: esmorph::Error) -> PyErr {
         Some(errno) => PyOSError::new_err((errno, message, filename)),
         None => PyOSError::new_err(format!("{message}: {filename}")),
     }
+}
+
+/// The command `esmorph` with `args`: its exit code. The core parses the arguments, reads the files
+/// and writes the result; the default dictionary is the one of the package
+#[pyfunction]
+fn _main(py: Python<'_>, args: Vec<std::ffi::OsString>) -> PyResult<u8> {
+    let path = default_path(py)?;
+    let version = package_version();
+    Ok(py.detach(|| esmorph::cli::run(args, &version, Some(&path))))
 }
 
 fn default_path(py: Python<'_>) -> PyResult<PathBuf> {
@@ -1150,6 +1159,7 @@ fn _esmorph(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("FormNotFoundError", m.py().get_type::<FormNotFoundError>())?;
     m.add_function(wrap_pyfunction!(_analysis, m)?)?;
     m.add_function(wrap_pyfunction!(_analyzer, m)?)?;
+    m.add_function(wrap_pyfunction!(_main, m)?)?;
     m.add("__version__", package_version())?;
     m.add(
         "__all__",

@@ -15,13 +15,16 @@
 //!
 //! Features: `bundled` (on by default) - the dictionary of esMorph from the crate
 //! `esmorph-dict-es`, `anyseg` - the analysis of a document of the anySeg segmenter
-//! (`Dictionary::annotate`, the crate is `esmorph::anyseg`), `build` - building dictionaries
-//! (`Builder`)
+//! (`Dictionary::annotate`, the crate is `esmorph::anyseg`), `cli` - the command `esmorph`
+//! (`cargo install esmorph --features cli`), `build` - building dictionaries (`Builder`)
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod alphabet;
 #[cfg(any(test, feature = "build"))]
 mod builder;
+#[cfg(feature = "cli")]
+#[cfg_attr(docsrs, doc(cfg(feature = "cli")))]
+pub mod cli;
 mod clitics;
 mod dictionary;
 mod error;

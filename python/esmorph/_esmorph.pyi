@@ -67,6 +67,9 @@ def _analysis(
 def _analyzer(path: str | PathLike[str] | None = None) -> Analyzer:
     """Restores an analyzer from pickle"""
 
+def _main(args: list[str]) -> int:
+    """The esmorph command with the arguments: its exit code"""
+
 class _Word(Protocol):
     @property
     def index(self) -> int: ...
