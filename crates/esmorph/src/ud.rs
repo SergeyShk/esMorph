@@ -44,6 +44,28 @@ impl<'d> UdTag<'d> {
             .map(move |&[name, value]| (self.string(name), self.string(value)))
     }
 
+    /// Numbers of the names of the features in the strings of the tags
+    pub(crate) fn feat_names(self) -> impl Iterator<Item = u16> + 'd {
+        (self.feat_numbers().as_chunks::<2>().0.iter()).map(|&[name, _]| name)
+    }
+
+    /// Features as numbers of their names and values in the strings of the tags
+    pub(crate) fn feat_pairs(self) -> impl Iterator<Item = (u16, u16)> + 'd {
+        (self.feat_numbers().as_chunks::<2>().0.iter()).map(|&[name, value]| (name, value))
+    }
+
+    /// Number of the value of the feature whose name has the number `name`
+    pub(crate) fn feat_value(self, name: u16) -> Option<u16> {
+        (self.feat_numbers().as_chunks::<2>().0.iter())
+            .find(|&&[known, _]| known == name)
+            .map(|&[_, value]| value)
+    }
+
+    /// A string of the tags by its number
+    pub(crate) fn text(self, number: u16) -> &'d str {
+        self.string(number)
+    }
+
     /// Value of the feature `name`
     pub fn feat(self, name: &str) -> Option<&'d str> {
         self.feats()
@@ -101,6 +123,8 @@ impl fmt::Debug for UdTag<'_> {
 pub(crate) struct UdTags {
     /// Different strings of the tags: equal strings of a file get one number
     strings: Vec<Box<str>>,
+    /// Number of every string
+    numbers: HashMap<Box<str>, u16>,
     /// Start of every tag in `data` and the common end
     bounds: Vec<u32>,
     data: Vec<u16>,
@@ -110,6 +134,7 @@ impl Default for UdTags {
     fn default() -> Self {
         UdTags {
             strings: Vec::new(),
+            numbers: HashMap::new(),
             bounds: vec![0],
             data: Vec::new(),
         }
@@ -122,6 +147,7 @@ impl UdTags {
         let invalid = |msg: &str| Err(Error::Format(msg.into()));
         let mut tags = UdTags {
             strings: Vec::new(),
+            numbers: HashMap::new(),
             bounds: vec![0],
             data: Vec::with_capacity(data.len()),
         };
@@ -168,11 +194,19 @@ impl UdTags {
         if tags.len() > usize::from(u16::MAX) + 1 {
             return invalid("more than 65 536 UD tags");
         }
+        tags.numbers = (numbers.into_iter())
+            .map(|(text, number)| (text.into(), number))
+            .collect();
         Ok(tags)
     }
 
     pub fn len(&self) -> usize {
         self.bounds.len() - 1
+    }
+
+    /// Number of a string of the tags
+    pub fn number(&self, text: &str) -> Option<u16> {
+        self.numbers.get(text).copied()
     }
 
     pub fn get(&self, number: u16) -> Option<UdTag<'_>> {
@@ -203,11 +237,12 @@ impl UdTags {
         }
         let number = u16::try_from(self.len()).ok()?;
         let mut string = |text: &str| -> Option<u16> {
-            match self.strings.iter().position(|known| &**known == text) {
-                Some(at) => u16::try_from(at).ok(),
+            match self.numbers.get(text) {
+                Some(&at) => Some(at),
                 None => {
                     let at = u16::try_from(self.strings.len()).ok()?;
                     self.strings.push(text.into());
+                    self.numbers.insert(text.into(), at);
                     Some(at)
                 }
             }

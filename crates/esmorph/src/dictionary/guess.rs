@@ -394,7 +394,7 @@ mod tests {
                 .unwrap();
         }
         let clean = builder.build().unwrap();
-        let layout = crate::format::layout(&clean).unwrap();
+        let layout = crate::format::layout(&clean, true).unwrap();
         // The automata are left out: only the checksum catches damage in them
         let automata = |at: &usize| layout.words.contains(at) || layout.guesses.contains(at);
         for at in (16..clean.len()).filter(|at| !automata(at)) {
