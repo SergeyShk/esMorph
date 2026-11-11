@@ -37,12 +37,13 @@ impl Dictionary {
         let host = if rest.is_empty() {
             None
         } else {
-            (self.analyze(token).into_iter()).find(|analysis| {
+            let fitting = (self.analyze(token).into_iter()).filter(|analysis| {
                 analysis.words.len() == words.len()
                     && (analysis.words.iter())
                         .zip(words)
                         .all(|(known, word)| same_word(known, word.as_ref()))
-            })
+            });
+            most_probable(fitting.collect())
         };
         let host = host.or_else(|| self.analyze(first).into_iter().next());
         let verb = host.as_ref().is_some_and(|analysis| {
@@ -53,12 +54,13 @@ impl Dictionary {
             let word = word.as_ref();
             let analyses = self.analyze(word);
             let pronoun = verb && clitics::is_clitic(&word.to_lowercase());
-            let analysis = match analyses.iter().position(|analysis| {
-                pronoun && (self.ud_tag(analysis.ud)).is_some_and(|tag| tag.pos() == "PRON")
-            }) {
-                Some(at) => analyses.into_iter().nth(at),
-                None => analyses.into_iter().next(),
-            };
+            let pronouns: Vec<Analysis> = (analyses.iter())
+                .filter(|analysis| {
+                    pronoun && (self.ud_tag(analysis.ud)).is_some_and(|tag| tag.pos() == "PRON")
+                })
+                .cloned()
+                .collect();
+            let analysis = most_probable(pronouns).or_else(|| analyses.into_iter().next());
             fields.push(self.fields(word, analysis));
         }
     }
@@ -162,6 +164,16 @@ pub(crate) fn set_fields(
     document
         .set_columns(columns, None)
         .map_err(|err| crate::Error::Document(err.to_string()))
+}
+
+/// The first of the analyses that a choice is limited to, with its share among them
+fn most_probable(analyses: Vec<Analysis>) -> Option<Analysis> {
+    let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+    let mut first = analyses.into_iter().next()?;
+    if total > 0.0 {
+        first.prob /= total;
+    }
+    Some(first)
 }
 
 /// A word as one line of CoNLL-U, as anySeg writes a form there: a tab or a line break (CR LF

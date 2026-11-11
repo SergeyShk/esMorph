@@ -78,14 +78,14 @@ echo "Dímelo del mar." | esmorph -f conllu
 
 ### tsv
 
-La palabra, el lema, la categoría, los rasgos y la probabilidad del análisis separados por tabulaciones, sin encabezado; una línea en blanco separa las oraciones.
+La palabra, el lema, la categoría, los rasgos y la probabilidad del análisis separados por tabulaciones, sin encabezado; una línea en blanco separa las oraciones. La probabilidad de una palabra de un token multipalabra es su parte entre los análisis que encajan con el token: el verbo `di` de `dime` entre los análisis con estas palabras, el clítico `la` de `verla` entre los de un pronombre.
 
 ``` bash
 echo "Dime la verdad." | esmorph -f tsv
 ```
 
 ```
-Di	decir	VERB	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	0.0625
+Di	decir	VERB	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	1
 me	yo	PRON	Case=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs	0.45766
 la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.9774450451099099
 verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.999997

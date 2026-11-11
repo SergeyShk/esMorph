@@ -78,14 +78,14 @@ echo "Dímelo del mar." | esmorph -f conllu
 
 ### tsv
 
-The word, lemma, part of speech, features and probability of the analysis separated by tabs, without a header; a blank line separates sentences.
+The word, lemma, part of speech, features and probability of the analysis separated by tabs, without a header; a blank line separates sentences. The probability of a word of a multiword token is its share among the analyses that fit the token: the verb `di` of `dime` among the analyses with these words, the clitic `la` of `verla` among those of a pronoun.
 
 ``` bash
 echo "Dime la verdad." | esmorph -f tsv
 ```
 
 ```
-Di	decir	VERB	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	0.0625
+Di	decir	VERB	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	1
 me	yo	PRON	Case=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs	0.45766
 la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.9774450451099099
 verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.999997

@@ -790,11 +790,33 @@ impl Writer<'_> {
                 let ready = std::mem::replace(&mut self.lines, rest);
                 let first = std::mem::replace(&mut self.first_line, self.next_line);
                 self.ready = 0;
-                let documents = read_conllu(&ready)
-                    .map_err(|err| Failure::Input(first + err.line - 1, err.message))?;
+                let (documents, error) = match read_conllu(&ready) {
+                    Ok(documents) => (documents, None),
+                    Err(err) => {
+                        // The sentences before the wrong one are written, up to the blank line
+                        // before it
+                        let end = (ready.split_inclusive('\n'))
+                            .take(err.line.saturating_sub(1))
+                            .scan(0, |at, line| {
+                                *at += line.len();
+                                Some((*at, line))
+                            })
+                            .filter(|(_, line)| line.trim().is_empty())
+                            .last()
+                            .map_or(0, |(at, _)| at);
+                        let before = read_conllu(&ready[..end]).unwrap_or_default();
+                        (
+                            before,
+                            Some(Failure::Input(first + err.line - 1, err.message)),
+                        )
+                    }
+                };
                 for document in documents {
                     let count = document.sentence_count();
                     self.write_sentences(document, count)?;
+                }
+                if let Some(failure) = error {
+                    return Err(failure);
                 }
             }
         }
@@ -871,7 +893,11 @@ impl Writer<'_> {
         if count == 0 {
             return Ok(());
         }
-        let fields = self.dictionary.document_fields(&document);
+        // JSON Lines gives all analyses of the tokens, not the fields of the words
+        let fields = match self.format {
+            Format::Jsonl => Vec::new(),
+            _ => self.dictionary.document_fields(&document),
+        };
         if self.format == Format::Conllu {
             set_fields(&mut document, &fields).map_err(io::Error::other)?;
             // CoNLL-U goes back with its comments, multiword token lines and empty nodes
@@ -1119,7 +1145,8 @@ fn json_string(out: &mut String, text: &str) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if u32::from(c) < 0x20 => {
+            // Line breaks of Unicode too: a reader of lines would cut a line of JSON Lines there
+            c if u32::from(c) < 0x20 || matches!(c, '\u{85}' | '\u{2028}' | '\u{2029}') => {
                 let _ = write!(out, "\\u{:04x}", u32::from(c));
             }
             c => out.push(c),
@@ -1238,7 +1265,7 @@ mod tests {
     fn formats() {
         assert_eq!(
             output(&["-f", "tsv"], "Dime la verdad."),
-            "Di\tdecir\tVERB\tMood=Imp|Number=Sing|Person=2|VerbForm=Fin\t0.0625\n\
+            "Di\tdecir\tVERB\tMood=Imp|Number=Sing|Person=2|VerbForm=Fin\t1\n\
              me\tyo\tPRON\tCase=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs\t0.45766\n\
              la\tel\tDET\tDefinite=Def|Gender=Fem|Number=Sing|PronType=Art\t0.9774450451099099\n\
              verdad\tverdad\tNOUN\tGender=Fem|Number=Sing\t0.999997\n\
@@ -1258,6 +1285,9 @@ mod tests {
             ),
             "{jsonl}"
         );
+        // The probability of a word chosen by its token or as a clitic is among the analyses that fit
+        let tsv = output(&["-f", "tsv"], "Quiero verla.");
+        assert!(tsv.contains("\nla\tél\tPRON\tCase=Acc|Gender=Fem|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs\t1\n"), "{tsv}");
         // A token without analyses has none
         assert_eq!(
             lines[1],
@@ -1340,6 +1370,15 @@ mod tests {
         assert_eq!(out, "mar\n".repeat(INPUT_BUFFER));
         let line = 2 * INPUT_BUFFER + 1;
         assert!(err.contains(&format!("-: line {line}: ")), "{err}");
+        // The sentences of the piece before the wrong one are written
+        let few = sentence.repeat(2) + "1\tmar\n" + sentence;
+        let (code, out, err) = command(&["-i", "conllu"], few.as_bytes());
+        assert_eq!((code, out.as_str()), (1, "mar\nmar\n"));
+        assert!(err.contains("-: line 5: "), "{err}");
+        let wrong_text = format!("{sentence}# text = mares\n{sentence}");
+        let (code, out, err) = command(&["-i", "conllu"], wrong_text.as_bytes());
+        assert_eq!((code, out.as_str()), (1, "mar\n"));
+        assert!(err.contains("-: line 3: "), "{err}");
     }
 
     #[test]
@@ -1647,7 +1686,7 @@ mod tests {
     #[test]
     fn escapes_json() {
         let mut out = String::new();
-        json_string(&mut out, "a\"b\\c\n\t\r\u{1}ñ");
-        assert_eq!(out, "\"a\\\"b\\\\c\\n\\t\\r\\u0001ñ\"");
+        json_string(&mut out, "a\"b\\c\n\t\r\u{1}ñ\u{85}\u{2028}\u{2029}");
+        assert_eq!(out, "\"a\\\"b\\\\c\\n\\t\\r\\u0001ñ\\u0085\\u2028\\u2029\"");
     }
 }
