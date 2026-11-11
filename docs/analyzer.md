@@ -225,6 +225,21 @@ Exceptions:
 
 The dictionary of the package is built from the English [Wiktionary](https://en.wiktionary.org) of October 2026: 676 thousand word forms of 117 thousand lexemes. Symbols of units (`km`, `kg`) come from a table of their own, and determiners, pronouns, prepositions, conjunctions and numerals in words from a table after the treebank [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), whose conventions the lemmas and features follow ([Word analysis](analysis.md#ud)). The probabilities of analyses come from the training parts of UD Spanish AnCora and [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD); word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) license.
 
+The property `dictionary_info` describes the dictionary of the analyzer: the source and its snapshot with its SHA-256, the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, the number of word forms and the checksum of the file. The dictionary is new on every call.
+
+=== "Code"
+
+    ``` python
+    info = morph.dictionary_info
+    info["source"], info["license"], sorted(info["treebanks"])
+    ```
+
+=== "Result"
+
+    ```
+    ('Wiktionary', 'CC BY-SA 4.0', ['UD_Spanish-AnCora', 'UD_Spanish-GSD'])
+    ```
+
 ## Threads and processes { #parallel }
 
 One analyzer can be used from several threads. `lemmatize` and `annotate` release the GIL, so threads speed them up. `analyze_many` creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, `lemmatize` or processes are faster. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises `ValueError`. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
