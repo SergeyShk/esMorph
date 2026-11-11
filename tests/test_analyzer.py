@@ -3,9 +3,10 @@ import copy
 import errno
 import gc
 import itertools
-import json
 import os
 import pickle
+import subprocess
+import sys
 import threading
 import zlib
 from pathlib import Path
@@ -770,11 +771,29 @@ def test_analyzer_repr_and_path(morph, tmp_path):
 
 
 def test_dictionary_description(morph):
-    meta = json.loads(morph._meta())
-    assert meta["source"] == "Wiktionary"
-    assert meta["counts"]["release"] == "r2.18"
-    assert set(meta["counts"]["treebanks"]) == {"UD_Spanish-AnCora", "UD_Spanish-GSD"}
-    assert meta["license"] == "CC BY-SA 4.0"
+    info = morph.dictionary_info
+    assert set(info) == {
+        "source",
+        "snapshot",
+        "sha256",
+        "license",
+        "ud_release",
+        "treebanks",
+        "word_forms",
+        "checksum",
+    }
+    assert info["source"] == "Wiktionary"
+    assert info["ud_release"] == "r2.18"
+    assert info["treebanks"] == {
+        "UD_Spanish-AnCora": "CC BY 4.0",
+        "UD_Spanish-GSD": "CC BY-SA 4.0",
+    }
+    assert info["license"] == "CC BY-SA 4.0"
+    assert info["snapshot"].endswith(".jsonl.xz") and len(info["sha256"]) == 64
+    assert info["word_forms"] > 600_000 and 0 <= info["checksum"] < 2**32
+    # A new dictionary every time
+    info["source"] = "x"
+    assert morph.dictionary_info["source"] == "Wiktionary"
 
 
 def test_dictionary_paths(morph, tmp_path, monkeypatch):
@@ -868,6 +887,14 @@ def test_verify(morph, tmp_path):
     with pytest.raises(ValueError, match="the automaton of word forms is damaged"):
         esmorph._esmorph._analyzer(path, True)
     assert esmorph._esmorph._analyzer(path).path == path
+    # An analyzer verified after its analyses were pickled pickles them verified
+    later = tmp_path / "later.dict"
+    later.write_bytes(data)
+    unverified = esmorph._esmorph._analyzer(later)
+    unverified.analyze("gatos")[0].__reduce__()
+    assert esmorph._esmorph._analyzer(later, True) is unverified
+    saved = unverified.analyze("gatos")[0].__reduce__()[1][7]
+    assert saved.__reduce__()[1] == (later, True)
     for restore in (
         lambda: esmorph._esmorph._analyzer(path, True),
         lambda: esmorph._esmorph._analysis(*state[:7], path, None, True),
@@ -1080,6 +1107,51 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     assert gone.inflect(Number="Sing") == "gato"
     with pytest.raises(FileNotFoundError):
         esmorph._esmorph._analyzer(tmp_path / "x")
+    # A list keeps the analyzer once; a pickle with the path of the file, of an earlier version,
+    # takes the analyzer of the file too
+    analyses = own.analyze_many(["gatos", "hablamos", "casa"] * 100)
+    data = pickle.dumps(analyses)
+    assert data.count(path.parent.name.encode()) == 1
+    assert pickle.loads(data) == analyses
+    older = esmorph._esmorph._analysis(
+        "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary", str(path)
+    )
+    assert older.__reduce__()[1][7].__reduce__()[1] == (path, False)
+    assert pickle.loads(pickle.dumps(older)) == older
+    # Analyses of a file that is gone come with the dictionary of the package
+    gone_path = tmp_path / "gone.dict"
+    gone_path.write_bytes(morph.path.read_bytes())
+    data = pickle.dumps(Analyzer(gone_path).analyze_many(["gatos", "hablamos"]))
+    gc.collect()
+    gone_path.unlink()
+    restored = pickle.loads(data)
+    assert restored[0][0].inflect(Number="Sing") == "gato"
+
+
+THREADS = """
+import pickle, sys, threading
+from esmorph import Analyzer
+
+def work(path):
+    for _ in range(30):
+        pickle.loads(pickle.dumps(Analyzer(path).analyze("gatos")))
+
+threads = [threading.Thread(target=work, args=(path,)) for path in sys.argv[1:]]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+"""
+
+
+def test_pickle_from_threads(morph, tmp_path):
+    # Analyzers of files pickled from several threads at once in a new interpreter, where the first
+    # pickle of a path imports pathlib: no thread waits for another forever
+    paths = []
+    for number in range(4):
+        paths.append(tmp_path / f"{number}.dict")
+        paths[-1].write_bytes(morph.path.read_bytes())
+    subprocess.run([sys.executable, "-c", THREADS, *map(str, paths)], check=True, timeout=60)
 
 
 def test_an_analysis_of_another_dictionary_has_no_forms(morph):

@@ -225,6 +225,21 @@ Excepciones:
 
 El diccionario del paquete se crea a partir del [Wiktionary](https://en.wiktionary.org) en inglés de octubre de 2026: 676 mil formas de palabra de 117 mil lexemas. Los símbolos de unidades (`km`, `kg`) vienen de una tabla propia, y los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras, de una tabla según el treebank [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), cuyas convenciones siguen los lemas y los rasgos ([Análisis de palabras](analysis.md#ud)). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD); las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
+La propiedad `dictionary_info` describe el diccionario del analizador: la fuente y su instantánea con su SHA-256, la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo.
+
+=== "Código"
+
+    ``` python
+    info = morph.dictionary_info
+    info["source"], info["license"], sorted(info["treebanks"])
+    ```
+
+=== "Resultado"
+
+    ```
+    ('Wiktionary', 'CC BY-SA 4.0', ['UD_Spanish-AnCora', 'UD_Spanish-GSD'])
+    ```
+
 ## Hilos y procesos { #parallel }
 
 Un mismo analizador se puede usar desde varios hilos. `lemmatize` y `annotate` liberan el GIL, así que los hilos los aceleran. `analyze_many` crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, `lemmatize` o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza `ValueError`. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
