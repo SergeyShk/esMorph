@@ -36,6 +36,7 @@ Analiza 1.2 millones de tokens por segundo desde Python, 28 veces más rápido q
 * **[Tokens fuera del diccionario](https://sergeyshk.github.io/esMorph/es/analysis/#rules)** - puntuación, números, ordinales, números romanos, nombres, direcciones y abreviaturas por reglas
 * **[Palabras desconocidas](https://sergeyshk.github.io/esMorph/es/analysis/#guess)** - análisis por la terminación, un guion o un prefijo, y las formas de las palabras adivinadas
 * **[Flexión](https://sergeyshk.github.io/esMorph/es/inflection/)** - las formas de un lexema y la forma con los rasgos de UD dados
+* **[El comando esmorph](https://sergeyshk.github.io/esMorph/es/cli/)** - lemas, CoNLL-U, TSV o JSON Lines de texto, tokens o CoNLL-U de archivos y de la entrada estándar
 * **[Comparación](https://sergeyshk.github.io/esMorph/es/comparison/)** - precisión, flexión y velocidad frente a simplemma, spaCy, Stanza, ablaut y verbecc
 
 > [!NOTE]
@@ -96,7 +97,17 @@ El analizador se crea una vez: carga el diccionario, y luego se puede usar en to
 
 `analyze_many` analiza una lista de palabras; `lemmatize` da sus lemas, y `annotate` rellena los lemas, las categorías y los rasgos de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), ambos sin el GIL. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib.
 
-Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esMorph/es/analyzer/), [análisis de palabras](https://sergeyshk.github.io/esMorph/es/analysis/).
+El comando `esmorph`, que se instala con el paquete, analiza texto de archivos y de la entrada estándar:
+
+```bash
+echo "Dime la verdad del caso." | esmorph
+```
+
+```
+decir yo el verdad de el caso .
+```
+
+Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esMorph/es/analyzer/), [análisis de palabras](https://sergeyshk.github.io/esMorph/es/analysis/), [el comando esmorph](https://sergeyshk.github.io/esMorph/es/cli/).
 
 <details>
 <summary><b>Categorías y rasgos de Universal Dependencies</b></summary>

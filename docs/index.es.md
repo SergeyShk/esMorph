@@ -35,6 +35,14 @@
 
     [:octicons-arrow-right-24: Flexión](inflection.md)
 
+-   :material-console:{ .lg .middle } __Línea de comandos__
+
+    ---
+
+    El comando `esmorph`: lemas, CoNLL-U, TSV o JSON Lines de archivos de texto, tokens o CoNLL-U
+
+    [:octicons-arrow-right-24: El comando esmorph](cli.md)
+
 -   :material-speedometer:{ .lg .middle } __Comparación__
 
     ---
