@@ -76,6 +76,7 @@ else
 endif
 	cargo clippy --workspace --all-targets -- -D warnings
 	cargo clippy -p $(PACKAGE) --no-default-features -- -D warnings
+	cargo clippy -p $(PACKAGE) --all-features --all-targets -- -D warnings
 
 test: deps dictionary ## Run the tests
 	uv run pytest

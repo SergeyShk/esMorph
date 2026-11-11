@@ -11,6 +11,7 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 - Tokens out of the dictionary by rules: punctuation, symbols, numbers, Roman numerals, names and acronyms.
 - Unknown lowercase words guessed by their last part after a hyphen, a known prefix or their ending, with their forms.
 - The dictionary is mapped into memory or read from the data of the program without copies.
+- Documents of the [anySeg](https://crates.io/crates/anyseg) segmenter get the lemma, the part of speech and the features of every word in one call.
 
 ## Installation
 
@@ -39,6 +40,27 @@ fn main() -> Result<(), esmorph::Error> {
     let hablar = &dictionary.analyze("hablar")[0];
     let past = [("Tense", "Past"), ("Person", "3"), ("Number", "Plur")];
     assert_eq!(dictionary.inflect(hablar, &past).unwrap().word, "hablaron");
+    Ok(())
+}
+```
+
+## Documents of anySeg
+
+With the feature `anyseg` the dictionary fills the columns of the words of a document of the segmenter [anySeg](https://crates.io/crates/anyseg), whose crate is `esmorph::anyseg`:
+
+```toml
+[dependencies]
+esmorph = { version = "0.2", features = ["anyseg"] }
+```
+
+```rust
+use esmorph::anyseg::{Column, Segmenter};
+
+fn main() -> Result<(), esmorph::Error> {
+    let dictionary = esmorph::Dictionary::bundled()?;
+    let mut document = Segmenter::new("es").unwrap().segment("Dime la verdad.");
+    dictionary.annotate(&mut document)?;
+    assert_eq!(document.column(Column::Lemma, 0), Some("decir"));
     Ok(())
 }
 ```

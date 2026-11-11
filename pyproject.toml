@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "esmorph"
-version = "0.1.0"
+version = "0.2.0.dev1"
 description = "Fast Spanish morphological analyzer written in Rust with a Python API"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -66,7 +66,8 @@ cache-keys = [
 ]
 
 [dependency-groups]
-test = ["pytest>=8.3", "pytest-cov>=6.0"]
+# anyseg - documents for Analyzer.annotate
+test = ["pytest>=8.3", "pytest-cov>=6.0", "anyseg>=0.3"]
 lint = ["mypy>=1.14", "pre-commit>=4.0", "ruff>=0.9"]
 docs = [
     "mkdocs>=1.6",

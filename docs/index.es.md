@@ -15,7 +15,7 @@
 
     ---
 
-    Lema, categoría y rasgos de UD, probabilidad del análisis; listas de palabras y lematización sin el GIL
+    Lema, categoría y rasgos de UD, probabilidad del análisis; listas de palabras, lematización y documentos del segmentador anySeg sin el GIL
 
     [:octicons-arrow-right-24: Analizador](analyzer.md)
 

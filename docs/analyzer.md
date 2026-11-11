@@ -147,6 +147,46 @@ Exceptions:
 
 <div class="metric-card" markdown>
 
+### Analysis of a document { #annotate }
+
+`annotate` · `None`
+{ .metric-meta }
+
+``` {.python .signature}
+annotate(document)
+```
+
+Fills the columns `lemma`, `upos` and `feats` of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter with the most probable analysis of every word, as `analyze` orders them; the earlier values of these columns are replaced. The words of a multiword token are analyzed by the token: `dime` split into `di` + `me` is the imperative of `decir` with the pronoun `me`, and clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the analysis of the whole token: `devuélvenos` is the imperative of `devolver`. A word without analyses gets its lower case as the lemma and the part of speech `X`. The method releases the GIL. esMorph does not depend on anySeg: the document is an `anyseg.Document` or an object with the same `column("form")`, `multiword_tokens` (a token has `text` and `words`, a word has `index`) and `set_columns`.
+
+| Parameter | Type | Default | Description |
+| :-------- | :--- | :------ | :---------- |
+| `document` | `anyseg.Document` | - | Document of the segmenter (`pip install anyseg`) |
+
+Exceptions:
+
+- `ValueError` - the words of the multiword tokens are not consecutive words of the document in order;
+- `TypeError` - a form or the text of a token that is not a string, the index of a word that is not an integer.
+
+=== "Code"
+
+    ``` python
+    from anyseg import Segmenter
+
+    document = Segmenter("es").segment("Dime la verdad.")
+    morph.annotate(document)
+    [(word.form, word.lemma, word.upos) for word in document.words]
+    ```
+
+=== "Result"
+
+    ```
+    [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    ```
+
+</div>
+
+<div class="metric-card" markdown>
+
 ### Word form in the dictionary { #is_known }
 
 `is_known` · `bool`
@@ -186,7 +226,7 @@ The dictionary of the package is built from the English [Wiktionary](https://en.
 
 ## Threads and processes { #parallel }
 
-One analyzer can be used from several threads. `lemmatize` releases the GIL, so threads speed it up. `analyze_many` creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, `lemmatize` or processes are faster. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises `ValueError`. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
+One analyzer can be used from several threads. `lemmatize` and `annotate` release the GIL, so threads speed them up. `analyze_many` creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, `lemmatize` or processes are faster. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises `ValueError`. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
 
 === "Code"
 

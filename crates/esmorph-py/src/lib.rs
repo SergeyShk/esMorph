@@ -3,11 +3,13 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::ErrorKind;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyLookupError, PyOSError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyLookupError, PyOSError, PyOverflowError, PyTypeError, PyValueError};
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
@@ -738,6 +740,90 @@ impl Analyzer {
         Ok(result)
     }
 
+    /// Analysis of a document of the anySeg segmenter
+    ///
+    /// Description:
+    ///     Fills the columns lemma, upos and feats of the words of the document with the most
+    ///     probable analysis of every word, as analyze orders them. The words of a multiword token
+    ///     are analyzed by the token: "dime" split into "di" and "me" is the imperative of "decir"
+    ///     with the pronoun "me", and clitics after a verb are pronouns. A token that the segmenter
+    ///     leaves as one word gets the analysis of the whole token: "devuélvenos" is the imperative
+    ///     of "devolver". A word without analyses gets its lower case as the lemma and the part of
+    ///     speech X; the earlier values of the columns are replaced. The document is an
+    ///     anyseg.Document or an object with the same column("form"), multiword_tokens (a token has
+    ///     text and words, a word has index) and set_columns. The analysis goes without the GIL
+    ///
+    /// Arguments:
+    ///     document (anyseg.Document): The document
+    ///
+    /// Raises:
+    ///     ValueError: If the words of the multiword tokens are not consecutive words of the
+    ///         document in order
+    ///     TypeError: If a form or the text of a token is not a string or the index of a word is
+    ///         not an integer
+    ///
+    /// Example:
+    ///     >>> from anyseg import Segmenter
+    ///     >>> from esmorph import Analyzer
+    ///     >>> document = Segmenter("es").segment("Dime la verdad.")
+    ///     >>> Analyzer().annotate(document)
+    ///     >>> [(word.form, word.lemma, word.upos) for word in document.words]
+    ///     [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    fn annotate(&self, py: Python<'_>, document: &Bound<'_, PyAny>) -> PyResult<()> {
+        let mut words = Words::new(&document.call_method1(intern!(py, "column"), ("form",))?)?;
+        let mut forms = Vec::new();
+        while words.next_chunk()? {
+            forms.append(&mut words.texts);
+        }
+        let tokens = multiword_tokens(document, forms.len())?;
+        let mut fields = Vec::with_capacity(forms.len());
+        let (mut word, mut multiword) = (0, tokens.iter().peekable());
+        while word < forms.len() {
+            // Chunks of about CHUNK words: Ctrl+C is checked between them
+            let end = (word + CHUNK).min(forms.len());
+            py.detach(|| {
+                while word < end {
+                    match multiword.next_if(|(_, range)| range.start == word) {
+                        Some((text, range)) => {
+                            self.dictionary
+                                .token_fields(text, &forms[range.clone()], &mut fields);
+                            word = range.end;
+                        }
+                        None => {
+                            let form = forms[word].as_str();
+                            self.dictionary.token_fields(form, &[form], &mut fields);
+                            word += 1;
+                        }
+                    }
+                }
+            });
+            py.check_signals()?;
+        }
+        // A part of speech and features of the dictionary are one string object for all words
+        let mut strings: HashMap<&str, Bound<'_, PyString>> = HashMap::new();
+        let (mut lemmas, mut parts, mut feats) = (
+            Vec::with_capacity(fields.len()),
+            Vec::with_capacity(fields.len()),
+            Vec::with_capacity(fields.len()),
+        );
+        for (lemma, pos, features) in fields {
+            let mut string = |text| {
+                (strings.entry(text))
+                    .or_insert_with(|| PyString::new(py, text))
+                    .clone()
+            };
+            lemmas.push(lemma);
+            parts.push(string(pos));
+            feats.push(features.map(string));
+        }
+        let columns = PyDict::new(py);
+        columns.set_item(intern!(py, "lemma"), lemmas)?;
+        columns.set_item(intern!(py, "upos"), parts)?;
+        columns.set_item(intern!(py, "feats"), feats)?;
+        document.call_method(intern!(py, "set_columns"), (), Some(&columns))?;
+        Ok(())
+    }
+
     /// Whether the dictionary has the word form
     ///
     /// Description:
@@ -973,6 +1059,55 @@ impl<'py> Words<'py> {
             .ok()?;
         Some(&self.originals[at].1)
     }
+}
+
+/// The multiword tokens of a document: the text of every token and its words, consecutive words
+/// of the `count` words of the document in order
+fn multiword_tokens(
+    document: &Bound<'_, PyAny>,
+    count: usize,
+) -> PyResult<Vec<(String, Range<usize>)>> {
+    let py = document.py();
+    let unordered = || {
+        PyValueError::new_err(
+            "The words of the multiword tokens must be consecutive words of the document in order",
+        )
+    };
+    let (mut tokens, mut next) = (Vec::new(), 0);
+    for token in document
+        .getattr(intern!(py, "multiword_tokens"))?
+        .try_iter()?
+    {
+        let token = token?;
+        let text = token.getattr(intern!(py, "text"))?;
+        let Ok(text) = text.cast::<PyString>() else {
+            return Err(type_error("The text of a token must be a string", &text));
+        };
+        let text = lossy(text)?.0;
+        let mut range: Option<Range<usize>> = None;
+        for word in token.getattr(intern!(py, "words"))?.try_iter()? {
+            let index = word?.getattr(intern!(py, "index"))?;
+            let index: usize = match index.extract::<isize>() {
+                // An index past isize is out of the document
+                Err(err) if err.is_instance_of::<PyOverflowError>(py) => return Err(unordered()),
+                Err(_) => return Err(type_error("The index of a word must be an integer", &index)),
+                Ok(index) => index.try_into().map_err(|_| unordered())?,
+            };
+            range = match range {
+                None if index >= next => Some(index..index + 1),
+                Some(range) if index == range.end => Some(range.start..index + 1),
+                _ => return Err(unordered()),
+            };
+        }
+        // A token without words gives no words
+        let Some(range) = range else { continue };
+        if range.end > count {
+            return Err(unordered());
+        }
+        next = range.end;
+        tokens.push((text, range));
+    }
+    Ok(tokens)
 }
 
 /// A Python string as a Rust string, and whether it changed: a lone surrogate (`surrogateescape`,

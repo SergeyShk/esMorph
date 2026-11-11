@@ -15,7 +15,7 @@
 
     ---
 
-    Lemma, UD part of speech and features, probability of the analysis; lists of words and lemmatization without the GIL
+    Lemma, UD part of speech and features, probability of the analysis; lists of words, lemmatization and documents of the anySeg segmenter without the GIL
 
     [:octicons-arrow-right-24: Analyzer](analyzer.md)
 

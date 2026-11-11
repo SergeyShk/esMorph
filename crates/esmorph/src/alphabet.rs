@@ -12,7 +12,7 @@ use crate::Error;
 pub(crate) const MAX_KEY: usize = 64;
 
 /// The plain vowel of an accented one
-fn plain(letter: char) -> Option<char> {
+pub(crate) fn plain(letter: char) -> Option<char> {
     match letter {
         'á' => Some('a'),
         'é' => Some('e'),

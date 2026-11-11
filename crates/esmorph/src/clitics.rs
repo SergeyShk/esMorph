@@ -28,6 +28,11 @@ const HOMONYMS: [&str; 4] = ["verme", "verse", "verte", "vete"];
 /// keep one in 27
 pub(crate) const HOMONYM_SHARE: f64 = 26.0 / 27.0;
 
+/// Whether a word in lower case is a clitic: `la` after a verb is a pronoun, not an article
+pub(crate) fn is_clitic(word: &str) -> bool {
+    CLITICS.iter().any(|&(clitic, _)| clitic == word)
+}
+
 /// Whether a word of the dictionary is mostly a verb with clitics
 pub(crate) fn homonym(token: &str) -> bool {
     HOMONYMS.iter().any(|word| token.eq_ignore_ascii_case(word))

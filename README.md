@@ -30,7 +30,7 @@
 
 It analyzes 1.2 million tokens per second from Python, 28 times faster than spaCy, and lemmatizes as fast as simplemma, whose lemmas are right less often on the UD test sets of AnCora, PUD and COSER. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
 
-* **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, lists of words and lemmatization, checking a word form against the dictionary
+* **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, lists of words and lemmatization, documents of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, checking a word form against the dictionary
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/analysis/#ud)** - parts of speech, features and lemmas by the UD guidelines and the AnCora conventions
 * **[Verbs with clitics](https://sergeyshk.github.io/esMorph/analysis/#clitics)** - a verb with enclitic pronouns and its words: `dámelo` is `da` + `me` + `lo`
 * **[Tokens out of the dictionary](https://sergeyshk.github.io/esMorph/analysis/#rules)** - punctuation, numbers, ordinals, Roman numerals, names, addresses and abbreviations by rules
@@ -94,7 +94,7 @@ The analyzer is created once: it loads the dictionary, and then it can be used i
 (True, False)
 ```
 
-`analyze_many` analyzes a list of words, and `lemmatize` gives their lemmas without the GIL. The analyzer and the analyses are pickled, so they work with `multiprocessing` and joblib.
+`analyze_many` analyzes a list of words; `lemmatize` gives their lemmas, and `annotate` fills the lemmas, parts of speech and features of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, both without the GIL. The analyzer and the analyses are pickled, so they work with `multiprocessing` and joblib.
 
 See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/), [word analysis](https://sergeyshk.github.io/esMorph/analysis/).
 

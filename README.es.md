@@ -30,7 +30,7 @@
 
 Analiza 1.2 millones de tokens por segundo desde Python, 28 veces más rápido que spaCy, y lematiza tan rápido como simplemma, cuyos lemas aciertan menos en los conjuntos de prueba de UD de AnCora, PUD y COSER. Las categorías, los rasgos y los lemas siguen la guía de UD y las convenciones del treebank AnCora, así que los resultados se pueden comparar con spaCy, Stanza y otras herramientas de UD.
 
-* **[Analizador](https://sergeyshk.github.io/esMorph/es/analyzer/)** - los análisis de una forma de palabra por probabilidad, listas de palabras y lematización, comprobación de una forma de palabra en el diccionario
+* **[Analizador](https://sergeyshk.github.io/esMorph/es/analyzer/)** - los análisis de una forma de palabra por probabilidad, listas de palabras y lematización, documentos del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), comprobación de una forma de palabra en el diccionario
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/es/analysis/#ud)** - categorías, rasgos y lemas según la guía de UD y las convenciones de AnCora
 * **[Verbos con clíticos](https://sergeyshk.github.io/esMorph/es/analysis/#clitics)** - un verbo con pronombres enclíticos y sus palabras: `dámelo` es `da` + `me` + `lo`
 * **[Tokens fuera del diccionario](https://sergeyshk.github.io/esMorph/es/analysis/#rules)** - puntuación, números, ordinales, números romanos, nombres, direcciones y abreviaturas por reglas
@@ -94,7 +94,7 @@ El analizador se crea una vez: carga el diccionario, y luego se puede usar en to
 (True, False)
 ```
 
-`analyze_many` analiza una lista de palabras, y `lemmatize` da sus lemas sin el GIL. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib.
+`analyze_many` analiza una lista de palabras; `lemmatize` da sus lemas, y `annotate` rellena los lemas, las categorías y los rasgos de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), ambos sin el GIL. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib.
 
 Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esMorph/es/analyzer/), [análisis de palabras](https://sergeyshk.github.io/esMorph/es/analysis/).
 

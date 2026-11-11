@@ -48,6 +48,8 @@ jobs:
           cargo clippy --workspace --all-targets --locked -- -D warnings
           # The workspace turns on the feature build: the module builds the core without it
           cargo clippy -p esmorph --no-default-features --locked -- -D warnings
+          # No member of the workspace turns on the feature anyseg
+          cargo clippy -p esmorph --all-features --all-targets --locked -- -D warnings
       - name: Rustdoc
         run: cargo doc --no-deps --all-features -p esmorph -p esmorph-dict-es --locked
         env:
@@ -136,7 +138,9 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Check
-        run: cargo check --workspace --all-targets --locked
+        run: |
+          cargo check --workspace --all-targets --locked
+          cargo check -p esmorph --all-features --all-targets --locked
 
   docs:
     runs-on: ubuntu-latest

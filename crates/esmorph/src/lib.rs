@@ -14,7 +14,9 @@
 //! ```
 //!
 //! Features: `bundled` (on by default) - the dictionary of esMorph from the crate
-//! `esmorph-dict-es`, `build` - building dictionaries (`Builder`)
+//! `esmorph-dict-es`, `anyseg` - the analysis of a document of the anySeg segmenter
+//! (`Dictionary::annotate`, the crate is `esmorph::anyseg`), `build` - building dictionaries
+//! (`Builder`)
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod alphabet;
@@ -27,14 +29,19 @@ mod format;
 mod rules;
 mod ud;
 
+#[cfg(feature = "anyseg")]
+#[cfg_attr(docsrs, doc(cfg(feature = "anyseg")))]
+pub use anyseg;
 #[cfg(feature = "build")]
 #[cfg_attr(docsrs, doc(cfg(feature = "build")))]
 pub use builder::Builder;
+#[doc(hidden)]
+pub use dictionary::Fields;
 pub use dictionary::{Analysis, Dictionary, Entry, Source};
 pub use error::Error;
 pub use ud::UdTag;
 
 /// Examples of the README of the crate are doc tests
-#[cfg(all(doctest, feature = "bundled"))]
+#[cfg(all(doctest, feature = "bundled", feature = "anyseg"))]
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;

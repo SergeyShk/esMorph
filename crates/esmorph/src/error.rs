@@ -10,6 +10,8 @@ pub enum Error {
     Format(String),
     /// Wrong data for building a dictionary
     Build(String),
+    /// A document of the anySeg segmenter did not take the analyses
+    Document(String),
 }
 
 impl fmt::Display for Error {
@@ -18,6 +20,9 @@ impl fmt::Display for Error {
             Error::Io(err) => write!(f, "{err}"),
             Error::Format(msg) => write!(f, "wrong dictionary format: {msg}"),
             Error::Build(msg) => write!(f, "dictionary build error: {msg}"),
+            Error::Document(msg) => {
+                write!(f, "the analyses are not written to the document: {msg}")
+            }
         }
     }
 }
