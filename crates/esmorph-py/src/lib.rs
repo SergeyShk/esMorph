@@ -13,7 +13,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyLookupError, PyOSError, PyOverflowError, PyTypeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::sync::PyOnceLock;
+use pyo3::sync::{MutexExt, PyOnceLock};
 use pyo3::types::{
     PyByteArray, PyBytes, PyDict, PyFloat, PyIterator, PyList, PyString, PyTuple, PyWeakrefMethods,
     PyWeakrefReference,
@@ -33,6 +33,7 @@ static FILES: Mutex<BTreeMap<PathBuf, Py<PyWeakrefReference>>> = Mutex::new(BTre
 /// The functions that restore an analysis and an analyzer from pickle
 static RESTORE_ANALYSIS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static RESTORE_ANALYZER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static RESTORE_ANALYSES_ANALYZER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 create_exception!(
     esmorph,
@@ -416,8 +417,8 @@ impl Analysis {
                 self.prob,
                 self.words.clone(),
                 self.source.to_owned(),
-                // The analyzer itself: pickle keeps it once for all the analyses of a list
-                Some(analyzer.clone_ref(py).into_any()),
+                // Pickle keeps the analyzer once for all the analyses of a list
+                Some(Analyzer::saved_for_analyses(analyzer.bind(py))?.into_any()),
                 (self.entry.get())
                     .map(|&entry| saved_entry(analyzer.get().dictionary.checksum(), entry)),
                 analyzer.get().verified.load(Ordering::Relaxed),
@@ -482,21 +483,20 @@ fn _analysis(
             "Unknown source of an analysis: {source}"
         )));
     };
-    // The analyzer itself, or the path of its dictionary in a pickle of an earlier version
+    // The analyzer restored by pickle, its description, or the path of its dictionary in a pickle
+    // of an earlier version
     let analyzer = match path {
-        Some(path) => match path.cast::<Analyzer>() {
-            Ok(analyzer) => Ok(analyzer.clone()),
-            Err(_) => {
-                shared(py, Some(path.extract()?), verify).map(|analyzer| analyzer.into_bound(py))
+        Some(path) => match (path.cast::<Analyzer>(), path.cast::<SavedAnalyzer>()) {
+            (Ok(analyzer), _) => analyzer.clone().unbind(),
+            (_, Ok(saved)) => {
+                let saved = saved.get();
+                _analyses_analyzer(py, saved.path.clone(), saved.verify)?
             }
+            _ => _analyses_analyzer(py, Some(path.extract()?), verify)?,
         },
-        None => shared(py, None, verify).map(|analyzer| analyzer.into_bound(py)),
-    };
-    let analyzer = match analyzer {
-        Ok(analyzer) => analyzer,
-        Err(err) if !err.is_instance_of::<PyOSError>(py) => return Err(err),
-        Err(_) => shared(py, None, verify)?.into_bound(py),
-    };
+        None => _analyses_analyzer(py, None, verify)?,
+    }
+    .into_bound(py);
     // The tag of the dictionary is shared by its analyses
     let this = analyzer.get();
     let tag = Tag { pos, feats };
@@ -541,6 +541,42 @@ fn _analyzer(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py
     shared(py, path, verify)
 }
 
+/// The analyzer of analyses in pickle: kept once for all the analyses of a list, it restores the
+/// analyzer of the dictionary of the package or of the file at `path`, and if that file cannot be
+/// read, the analyzer of the dictionary of the package
+#[pyclass(frozen, module = "esmorph")]
+struct SavedAnalyzer {
+    path: Option<PathBuf>,
+    verify: bool,
+}
+
+#[pymethods]
+impl SavedAnalyzer {
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, SavedState)> {
+        let restore = restorer(py, &RESTORE_ANALYSES_ANALYZER, "_analyses_analyzer")?;
+        Ok((restore, (self.path.clone(), self.verify)))
+    }
+}
+
+/// Arguments of `_analyses_analyzer`: the path of the dictionary of a file and whether it is
+/// verified
+type SavedState = (Option<PathBuf>, bool);
+
+/// Restores the analyzer of analyses from pickle, as `SavedAnalyzer` describes it
+#[pyfunction]
+#[pyo3(signature = (path=None, verify=false))]
+fn _analyses_analyzer(
+    py: Python<'_>,
+    path: Option<PathBuf>,
+    verify: bool,
+) -> PyResult<Py<Analyzer>> {
+    match path.map(|path| shared(py, Some(path), verify)) {
+        Some(Ok(analyzer)) => Ok(analyzer),
+        Some(Err(err)) if !err.is_instance_of::<PyOSError>(py) => Err(err),
+        _ => shared(py, None, verify),
+    }
+}
+
 /// The analyzer of the dictionary of the package, or of the file at `path`, shared in the process;
 /// with `verify` its dictionary is verified, once
 fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<Analyzer>> {
@@ -548,7 +584,8 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
         None => (PACKAGE.get_or_try_init(py, || Py::new(py, Analyzer::new(py, None, false)?))?)
             .clone_ref(py),
         Some(path) => {
-            let known = (FILES.lock().unwrap_or_else(PoisonError::into_inner))
+            let known = (FILES.lock_py_attached(py))
+                .unwrap_or_else(PoisonError::into_inner)
                 .get(&path)
                 .and_then(|reference| reference.bind(py).upgrade());
             match known {
@@ -616,6 +653,8 @@ struct Analyzer {
     explicit: bool,
     /// The path that pickle saves, made once: one object for all analyses of a list
     saved: PyOnceLock<Option<Py<PyAny>>>,
+    /// The analyzer of its analyses in pickle, made once: one object for all analyses of a list
+    saved_for_analyses: PyOnceLock<Py<SavedAnalyzer>>,
     /// The dictionary is verified: pickle keeps it
     verified: AtomicBool,
 }
@@ -681,6 +720,7 @@ impl Analyzer {
             path,
             explicit,
             saved: PyOnceLock::new(),
+            saved_for_analyses: PyOnceLock::new(),
             verified: AtomicBool::new(verify),
         })
     }
@@ -966,7 +1006,7 @@ impl Analyzer {
     ///
     /// Returns:
     ///     dict: The keys source, snapshot, sha256, license, ud_release, treebanks, word_forms and
-    ///     checksum; a new dictionary every time
+    ///     checksum; every access returns a new dict
     ///
     /// Example:
     ///     >>> from esmorph import Analyzer
@@ -1057,15 +1097,35 @@ impl Analyzer {
             if !this.explicit {
                 return Ok(None);
             }
+            // Python objects are made before the lock: the code they run may wait for another
+            // thread, and the lock is taken detached from the interpreter
             let reference = PyWeakrefReference::new(analyzer)?.unbind();
-            let mut files = FILES.lock().unwrap_or_else(PoisonError::into_inner);
+            let path = this.path.clone().into_pyobject(py)?.into_any().unbind();
+            let mut files = FILES
+                .lock_py_attached(py)
+                .unwrap_or_else(PoisonError::into_inner);
             files.retain(|_, known| known.bind(py).upgrade().is_some());
             files.insert(this.path.clone(), reference);
-            Ok(Some(
-                this.path.clone().into_pyobject(py)?.into_any().unbind(),
-            ))
+            Ok(Some(path))
         })?;
         Ok(saved.as_ref().map(|path| path.clone_ref(py)))
+    }
+
+    /// The analyzer of its analyses in pickle, made once
+    fn saved_for_analyses(analyzer: &Bound<'_, Analyzer>) -> PyResult<Py<SavedAnalyzer>> {
+        let py = analyzer.py();
+        let this = analyzer.get();
+        let path = Analyzer::saved_path(analyzer)?.and(Some(this.path.clone()));
+        let saved = this.saved_for_analyses.get_or_try_init(py, || {
+            Py::new(
+                py,
+                SavedAnalyzer {
+                    path,
+                    verify: this.verified.load(Ordering::Relaxed),
+                },
+            )
+        })?;
+        Ok(saved.clone_ref(py))
     }
 
     /// Analyses for Python; `handle` is the handle of this analyzer
@@ -1342,6 +1402,7 @@ fn _esmorph(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("FormNotFoundError", m.py().get_type::<FormNotFoundError>())?;
     m.add_function(wrap_pyfunction!(_analysis, m)?)?;
     m.add_function(wrap_pyfunction!(_analyzer, m)?)?;
+    m.add_function(wrap_pyfunction!(_analyses_analyzer, m)?)?;
     m.add_function(wrap_pyfunction!(_main, m)?)?;
     m.add("__version__", package_version())?;
     m.add(

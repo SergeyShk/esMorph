@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Sequence
 from os import PathLike
 from pathlib import Path
-from typing import Literal, Protocol, TypedDict, final
+from typing import Literal, Protocol, Required, TypedDict, final
 
 __all__ = ["Analysis", "Analyzer", "FormNotFoundError", "__version__"]
 
@@ -100,8 +100,8 @@ class DictionaryInfo(TypedDict, total=False):
     license: str
     ud_release: str
     treebanks: dict[str, str]
-    word_forms: int
-    checksum: int
+    word_forms: Required[int]
+    checksum: Required[int]
 
 @final
 class Analyzer:

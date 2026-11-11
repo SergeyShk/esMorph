@@ -1106,7 +1106,35 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     older = esmorph._esmorph._analysis(
         "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary", str(path)
     )
-    assert older.__reduce__()[1][7] is own
+    assert older.__reduce__()[1][7].__reduce__()[1] == (path, False)
+    assert pickle.loads(pickle.dumps(older)) == older
+    # Analyses of a file that is gone come with the dictionary of the package
+    gone_path = tmp_path / "gone.dict"
+    gone_path.write_bytes(morph.path.read_bytes())
+    data = pickle.dumps(Analyzer(gone_path).analyze_many(["gatos", "hablamos"]))
+    gc.collect()
+    gone_path.unlink()
+    restored = pickle.loads(data)
+    assert restored[0][0].inflect(Number="Sing") == "gato"
+
+
+def test_pickle_from_threads(morph, tmp_path):
+    # Analyzers of files pickled from several threads at once: no thread waits for another forever
+    paths = []
+    for number in range(4):
+        paths.append(tmp_path / f"{number}.dict")
+        paths[-1].write_bytes(morph.path.read_bytes())
+
+    def work(path):
+        for _ in range(30):
+            pickle.loads(pickle.dumps(Analyzer(path).analyze("gatos")))
+
+    threads = [threading.Thread(target=work, args=(path,)) for path in paths]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=120)
+    assert not any(thread.is_alive() for thread in threads)
 
 
 def test_an_analysis_of_another_dictionary_has_no_forms(morph):
