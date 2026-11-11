@@ -11,7 +11,7 @@ resolution-markers = [
 requirements = [
     { name = "ablaut", specifier = "==0.11.0" },
     { name = "es-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.8.0/es_core_news_sm-3.8.0-py3-none-any.whl" },
-    { name = "esmorph", index = "https://test.pypi.org/simple/" },
+    { name = "esmorph" },
     { name = "simplemma", specifier = "==2.0.0" },
     { name = "spacy", specifier = "==3.8.16" },
     { name = "stanza", specifier = "==1.15.0" },
@@ -407,18 +407,18 @@ wheels = [
 
 [[package]]
 name = "esmorph"
-version = "0.1.0.dev7"
-source = { registry = "https://test.pypi.org/simple/" }
-sdist = { url = "https://test-files.pythonhosted.org/packages/fd/94/4e833389c22f81672525faa8ef06ceec8fb82f9bdf190ca5a0564f1474ea/esmorph-0.1.0.dev7.tar.gz", hash = "sha256:6b882a68b956466c2db65d15039174dd837fcbe7eed780236bfc0510980daf98", size = 3154613, upload-time = "2026-11-09T03:20:07.722Z" }
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/2c/4465facf353acaa5fbd0cbea46720983a380ccfa0fda95481be55eed999b/esmorph-0.1.0.tar.gz", hash = "sha256:7f48799102b99736b3dda1cf1a576c47c982a27bba53ec05122f9b52a3b2c0f4", size = 3327771, upload-time = "2026-11-10T23:06:43.304Z" }
 wheels = [
-    { url = "https://test-files.pythonhosted.org/packages/5f/cf/167fc0ceccc11421340aa3d16a573efbf90adef62c26cbb59d12af0e6dea/esmorph-0.1.0.dev7-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:496a543ba89a7d2fbf9141369b6effde1ba77514647319b107b0ed0daabcb81a", size = 3363585, upload-time = "2026-11-09T03:19:45.614Z" },
-    { url = "https://test-files.pythonhosted.org/packages/e2/b1/70f91916e99eb0a0cbf2572df367299ede10f046adda51386830678a2449/esmorph-0.1.0.dev7-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:dd6e4ce03c315ea2c17f064411d9c795da4891d47c90ac822c3876f09dc2ed49", size = 3336689, upload-time = "2026-11-09T03:19:47.872Z" },
-    { url = "https://test-files.pythonhosted.org/packages/ef/e3/cc37dbebeccf2af4e30a41bd42d669204040f6217836fe41b689637951e6/esmorph-0.1.0.dev7-cp311-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:fdae321cad4ce367bfca1477925e6ab3cf7c010e5d6f8ff12172db9e675e2083", size = 3379422, upload-time = "2026-11-09T03:19:49.303Z" },
-    { url = "https://test-files.pythonhosted.org/packages/39/bf/c2c871dc51ba7652d263e7107afb3d4ad10cfeb3555cbcf26bddbac1692b/esmorph-0.1.0.dev7-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3b988a658d7f05b289e40bf95028fa0aab39edffa80e4b67145bfe6e617c9b63", size = 3384533, upload-time = "2026-11-09T03:19:50.537Z" },
-    { url = "https://test-files.pythonhosted.org/packages/80/95/56156cd5a3b8a742a48f1360bb33cef42f81679b2c8a521234699cd583aa/esmorph-0.1.0.dev7-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:ec33fe0d460f63bc3b6cf057b61a0aac9df6de9bbbac6975a5219c8c857e9f03", size = 3556694, upload-time = "2026-11-09T03:19:51.768Z" },
-    { url = "https://test-files.pythonhosted.org/packages/d9/fd/bae2d7840538bbe6e90f2e322070d4389cb00eefab385ba4148274ffe172/esmorph-0.1.0.dev7-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:38b99804fe34e92da3a05edc26f7f8ba75cbf974b8ada68b90afbc976419dcdc", size = 3595395, upload-time = "2026-11-09T03:19:52.971Z" },
-    { url = "https://test-files.pythonhosted.org/packages/79/3b/aa99b8dc3aa4d2c6b759b8fe0acd59756ba11ec3e05ae9571224b5c2e50e/esmorph-0.1.0.dev7-cp311-abi3-win_amd64.whl", hash = "sha256:03026598e2c770d72aec3c1fccc061a6662bf32f2a592b4d1ec2468796bf6042", size = 3282223, upload-time = "2026-11-09T03:19:54.458Z" },
-    { url = "https://test-files.pythonhosted.org/packages/1b/30/cd946ab3326ba4b17937a8d6fcfbe293b78d6a7f47fe9e119cf733c3508b/esmorph-0.1.0.dev7-cp311-abi3-win_arm64.whl", hash = "sha256:81e5210ca239585edd7838d1c682669bccd9fe28a4cff6794236cae098e95f6b", size = 3268551, upload-time = "2026-11-09T03:19:55.684Z" },
+    { url = "https://files.pythonhosted.org/packages/44/15/84f8948b8afaea93d5b1f96dff72055c09c9d44f0a2584f6dafb3afe4a55/esmorph-0.1.0-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:d712834fa9db5157a582e7a01c2a6c96bc6581a825137d4ed9cdfa6da7d2bd62", size = 3394614, upload-time = "2026-11-10T23:06:15.227Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/48/901ac0be7877bcc42d4816f2e4f181746329500b8f1ec27bbb31157217a5/esmorph-0.1.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:e152a4b761898870a656550ddddced8b983d8da8403012308ff94c7c67d3a838", size = 3368205, upload-time = "2026-11-10T23:06:17.29Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/81/b3cf839d3c9cd6bd88c9eed798aacfd05c116e036212559b613ee6a4efe2/esmorph-0.1.0-cp311-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:11852c51d174a7f978ac398ba0cf24e1d6df3ffa87d48650720a6f81f5e5dbde", size = 3412669, upload-time = "2026-11-10T23:06:19.062Z" },
+    { url = "https://files.pythonhosted.org/packages/db/1c/020d707df9eb31606041cb342de3d2f3e61e827faaf4b1f17ae8dc4a74d6/esmorph-0.1.0-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cd3bb328a6879d21a16ce02d1f64c760b87fc655a2943ee72b7795e64ed53f5b", size = 3417977, upload-time = "2026-11-10T23:06:20.63Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/66/78efa04da0a64d5bb55216aa83f4f391ac7c40cd64b3780792dee5320f64/esmorph-0.1.0-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:93069b914a51fed6a7d1b38f7fde968e0c50769e2b70ffbe87318c9b883c75bc", size = 3590750, upload-time = "2026-11-10T23:06:22.35Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/58/b18426d9e963916e199e959dad3ddc89456890855b0ae2bb39f1ddffbdbb/esmorph-0.1.0-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:1f32b687a425178aa4d9d71b2b5175df974dc319b3deb7206121039b9321cfde", size = 3628729, upload-time = "2026-11-10T23:06:24.148Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/b5/dcb8a22dadcf610c63a7160c624444baea60351e46268ddb998b2412f076/esmorph-0.1.0-cp311-abi3-win_amd64.whl", hash = "sha256:941e169bc8f6cbbe75895c57fc0ee50f4f34f2ef28399a434cc1187e8f9d7347", size = 3312434, upload-time = "2026-11-10T23:06:26.067Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/e5/43c40a181982226e9256267021dc33d302eab12241bf9cc027775c120682/esmorph-0.1.0-cp311-abi3-win_arm64.whl", hash = "sha256:38f51433d7ab8d109a7961635784cb6793459a03b7ae6563a07e4073b03f8500", size = 3298585, upload-time = "2026-11-10T23:06:27.968Z" },
 ]
 
 [[package]]

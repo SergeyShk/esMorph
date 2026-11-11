@@ -9,14 +9,6 @@
 #     "ablaut==0.11.0",
 #     "verbecc==2.0.3",
 # ]
-#
-# [[tool.uv.index]]
-# name = "testpypi"
-# url = "https://test.pypi.org/simple/"
-# explicit = true
-#
-# [tool.uv.sources]
-# esmorph = { index = "testpypi" }
 # ///
 """
 Comparison of esMorph with other tools: accuracy on the test parts of UD treebanks, verb
