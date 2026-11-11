@@ -5,6 +5,8 @@ import gc
 import itertools
 import os
 import pickle
+import subprocess
+import sys
 import threading
 import zlib
 from pathlib import Path
@@ -885,6 +887,14 @@ def test_verify(morph, tmp_path):
     with pytest.raises(ValueError, match="the automaton of word forms is damaged"):
         esmorph._esmorph._analyzer(path, True)
     assert esmorph._esmorph._analyzer(path).path == path
+    # An analyzer verified after its analyses were pickled pickles them verified
+    later = tmp_path / "later.dict"
+    later.write_bytes(data)
+    unverified = esmorph._esmorph._analyzer(later)
+    unverified.analyze("gatos")[0].__reduce__()
+    assert esmorph._esmorph._analyzer(later, True) is unverified
+    saved = unverified.analyze("gatos")[0].__reduce__()[1][7]
+    assert saved.__reduce__()[1] == (later, True)
     for restore in (
         lambda: esmorph._esmorph._analyzer(path, True),
         lambda: esmorph._esmorph._analysis(*state[:7], path, None, True),
@@ -1118,23 +1128,30 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     assert restored[0][0].inflect(Number="Sing") == "gato"
 
 
+THREADS = """
+import pickle, sys, threading
+from esmorph import Analyzer
+
+def work(path):
+    for _ in range(30):
+        pickle.loads(pickle.dumps(Analyzer(path).analyze("gatos")))
+
+threads = [threading.Thread(target=work, args=(path,)) for path in sys.argv[1:]]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+"""
+
+
 def test_pickle_from_threads(morph, tmp_path):
-    # Analyzers of files pickled from several threads at once: no thread waits for another forever
+    # Analyzers of files pickled from several threads at once in a new interpreter, where the first
+    # pickle of a path imports pathlib: no thread waits for another forever
     paths = []
     for number in range(4):
         paths.append(tmp_path / f"{number}.dict")
         paths[-1].write_bytes(morph.path.read_bytes())
-
-    def work(path):
-        for _ in range(30):
-            pickle.loads(pickle.dumps(Analyzer(path).analyze("gatos")))
-
-    threads = [threading.Thread(target=work, args=(path,)) for path in paths]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=120)
-    assert not any(thread.is_alive() for thread in threads)
+    subprocess.run([sys.executable, "-c", THREADS, *map(str, paths)], check=True, timeout=60)
 
 
 def test_an_analysis_of_another_dictionary_has_no_forms(morph):

@@ -490,7 +490,7 @@ fn _analysis(
             (Ok(analyzer), _) => analyzer.clone().unbind(),
             (_, Ok(saved)) => {
                 let saved = saved.get();
-                _analyses_analyzer(py, saved.path.clone(), saved.verify)?
+                _analyses_analyzer(py, saved.path.clone(), saved.verify.load(Ordering::Relaxed))?
             }
             _ => _analyses_analyzer(py, Some(path.extract()?), verify)?,
         },
@@ -547,14 +547,18 @@ fn _analyzer(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py
 #[pyclass(frozen, module = "esmorph")]
 struct SavedAnalyzer {
     path: Option<PathBuf>,
-    verify: bool,
+    /// Set when the analyzer is verified, also after the first pickle
+    verify: AtomicBool,
 }
 
 #[pymethods]
 impl SavedAnalyzer {
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, SavedState)> {
         let restore = restorer(py, &RESTORE_ANALYSES_ANALYZER, "_analyses_analyzer")?;
-        Ok((restore, (self.path.clone(), self.verify)))
+        Ok((
+            restore,
+            (self.path.clone(), self.verify.load(Ordering::Relaxed)),
+        ))
     }
 }
 
@@ -604,6 +608,9 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
         py.detach(|| this.dictionary.verify())
             .map_err(|err| load_error(&this.path, err))?;
         this.verified.store(true, Ordering::Relaxed);
+        if let Some(saved) = this.saved_for_analyses.get(py) {
+            saved.get().verify.store(true, Ordering::Relaxed);
+        }
     }
     Ok(analyzer)
 }
@@ -1121,7 +1128,7 @@ impl Analyzer {
                 py,
                 SavedAnalyzer {
                     path,
-                    verify: this.verified.load(Ordering::Relaxed),
+                    verify: AtomicBool::new(this.verified.load(Ordering::Relaxed)),
                 },
             )
         })?;
