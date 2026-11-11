@@ -855,6 +855,25 @@ def test_verify(morph, tmp_path):
         Analyzer(path, verify=True)
     with pytest.raises(TypeError):
         Analyzer(morph.path, True)
+    # Pickle keeps the check: an analyzer or an analysis of a verified dictionary is restored with
+    # it, so a file replaced by a crafted one is rejected, even if the process has it unverified
+    good = tmp_path / "good.dict"
+    good.write_bytes(data)
+    verified = Analyzer(good, verify=True)
+    assert verified.__reduce__()[1] == (good, True)
+    assert pickle.loads(pickle.dumps(verified)) is verified
+    analysis = verified.analyze("gatos")[0]
+    state = analysis.__reduce__()[1]
+    assert state[-1] is True
+    with pytest.raises(ValueError, match="the automaton of word forms is damaged"):
+        esmorph._esmorph._analyzer(path, True)
+    assert esmorph._esmorph._analyzer(path).path == path
+    for restore in (
+        lambda: esmorph._esmorph._analyzer(path, True),
+        lambda: esmorph._esmorph._analysis(*state[:7], path, None, True),
+    ):
+        with pytest.raises(ValueError, match="the automaton of word forms is damaged"):
+            restore()
 
 
 def test_threads(morph):

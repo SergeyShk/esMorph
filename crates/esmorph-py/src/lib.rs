@@ -5,6 +5,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::ErrorKind;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use pyo3::create_exception;
@@ -358,6 +359,7 @@ impl Analysis {
                 Analyzer::saved_path(self.analyzer.bind(py))?,
                 (self.entry.get())
                     .map(|&entry| saved_entry(self.analyzer.get().dictionary.checksum(), entry)),
+                self.analyzer.get().verified.load(Ordering::Relaxed),
             ),
         ))
     }
@@ -390,13 +392,15 @@ type AnalysisState = (
     String,
     SavedPath,
     SavedEntry,
+    bool,
 );
 
 /// Restores an analysis from pickle with the analyzer of `path` (`None` for the dictionary of the
-/// package); if that file cannot be read, with the dictionary of the package. The form of its table
-/// is taken from `entry` if that is for the same dictionary, otherwise found on first use
+/// package), verified with `verify`; if that file cannot be read, with the dictionary of the
+/// package. The form of its table is taken from `entry` if that is for the same dictionary,
+/// otherwise found on first use
 #[pyfunction]
-#[pyo3(signature = (word, lemma, pos, feats, prob, words, source, path=None, entry=None))]
+#[pyo3(signature = (word, lemma, pos, feats, prob, words, source, path=None, entry=None, verify=false))]
 #[allow(clippy::too_many_arguments)]
 fn _analysis(
     py: Python<'_>,
@@ -409,16 +413,17 @@ fn _analysis(
     source: &str,
     path: Option<PathBuf>,
     entry: SavedEntry,
+    verify: bool,
 ) -> PyResult<Py<Analysis>> {
     let Some(source) = self::source(source).map(esmorph::Source::as_str) else {
         return Err(PyValueError::new_err(format!(
             "Unknown source of an analysis: {source}"
         )));
     };
-    let analyzer = match path.map(|path| shared(py, Some(path))) {
+    let analyzer = match path.map(|path| shared(py, Some(path), verify)) {
         Some(Ok(analyzer)) => analyzer,
         Some(Err(err)) if !err.is_instance_of::<PyOSError>(py) => return Err(err),
-        _ => shared(py, None)?,
+        _ => shared(py, None, verify)?,
     };
     // The tag of the dictionary is shared by its analyses
     let this = analyzer.get();
@@ -457,30 +462,41 @@ fn _analysis(
 }
 
 /// Restores an analyzer from pickle: the analyzer of the dictionary of the package or of the file
-/// at `path` that the process has, otherwise a new one
+/// at `path` that the process has, otherwise a new one; `verify` - the dictionary is verified
 #[pyfunction]
-#[pyo3(signature = (path=None))]
-fn _analyzer(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
-    shared(py, path)
+#[pyo3(signature = (path=None, verify=false))]
+fn _analyzer(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<Analyzer>> {
+    shared(py, path, verify)
 }
 
-/// The analyzer of the dictionary of the package, or of the file at `path`, shared in the process
-fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
-    let Some(path) = path else {
-        let analyzer =
-            PACKAGE.get_or_try_init(py, || Py::new(py, Analyzer::new(py, None, false)?))?;
-        return Ok(analyzer.clone_ref(py));
+/// The analyzer of the dictionary of the package, or of the file at `path`, shared in the process;
+/// with `verify` its dictionary is verified, once
+fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<Analyzer>> {
+    let analyzer = match path {
+        None => (PACKAGE.get_or_try_init(py, || Py::new(py, Analyzer::new(py, None, false)?))?)
+            .clone_ref(py),
+        Some(path) => {
+            let known = (FILES.lock().unwrap_or_else(PoisonError::into_inner))
+                .get(&path)
+                .and_then(|reference| reference.bind(py).upgrade());
+            match known {
+                Some(analyzer) => analyzer.cast_into::<Analyzer>()?.unbind(),
+                None => {
+                    // The dictionary is loaded without the lock: the loading lets other threads run
+                    let analyzer = Bound::new(py, Analyzer::new(py, Some(path), verify)?)?;
+                    Analyzer::saved_path(&analyzer)?;
+                    analyzer.unbind()
+                }
+            }
+        }
     };
-    let known = (FILES.lock().unwrap_or_else(PoisonError::into_inner))
-        .get(&path)
-        .and_then(|reference| reference.bind(py).upgrade());
-    if let Some(analyzer) = known {
-        return Ok(analyzer.cast_into::<Analyzer>()?.unbind());
+    let this = analyzer.get();
+    if verify && !this.verified.load(Ordering::Relaxed) {
+        py.detach(|| this.dictionary.verify())
+            .map_err(|err| load_error(&this.path, err))?;
+        this.verified.store(true, Ordering::Relaxed);
     }
-    // The dictionary is loaded without the lock: the loading lets other threads run
-    let analyzer = Bound::new(py, Analyzer::new(py, Some(path), false)?)?;
-    Analyzer::saved_path(&analyzer)?;
-    Ok(analyzer.unbind())
+    Ok(analyzer)
 }
 
 /// Morphological analyzer of Spanish
@@ -498,9 +514,9 @@ fn shared(py: Python<'_>, path: Option<PathBuf>) -> PyResult<Py<Analyzer>> {
 /// Arguments:
 ///     path (str | os.PathLike | None): Path to a dictionary file; by default the dictionary of the
 ///         package
-///     verify (bool): Check every node of the automata of the dictionary, for a file of a source
-///         that is not trusted: a crafted file with a right checksum may otherwise make the
-///         analysis panic. Takes tens of milliseconds
+///     verify (bool): Check the whole dictionary, for a file of a source that is not trusted: a
+///         deliberately crafted file with a right checksum may otherwise make the analysis fail.
+///         Takes tens of milliseconds; pickle keeps it
 ///
 /// Raises:
 ///     FileNotFoundError: If there is no dictionary file
@@ -528,6 +544,8 @@ struct Analyzer {
     explicit: bool,
     /// The path that pickle saves, made once: one object for all analyses of a list
     saved: PyOnceLock<Option<Py<PyAny>>>,
+    /// The dictionary is verified: pickle keeps it
+    verified: AtomicBool,
 }
 
 #[pymethods]
@@ -591,12 +609,14 @@ impl Analyzer {
             path,
             explicit,
             saved: PyOnceLock::new(),
+            verified: AtomicBool::new(verify),
         })
     }
 
-    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<(Bound<'py, PyAny>, (SavedPath,))> {
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<(Bound<'py, PyAny>, (SavedPath, bool))> {
         let restore = restorer(slf.py(), &RESTORE_ANALYZER, "_analyzer")?;
-        Ok((restore, (Analyzer::saved_path(slf)?,)))
+        let verified = slf.get().verified.load(Ordering::Relaxed);
+        Ok((restore, (Analyzer::saved_path(slf)?, verified)))
     }
 
     /// Path to the dictionary file
