@@ -1,12 +1,13 @@
 //! Python module `esmorph._esmorph`
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::ErrorKind;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyLookupError, PyOSError, PyOverflowError, PyTypeError, PyValueError};
@@ -55,6 +56,41 @@ impl Tag {
     }
 }
 
+/// The analyzer of the analyses of one thread. Analyses hold their analyzer through the handle of
+/// their thread: in Python without the GIL a reference count of a shared object that several
+/// threads change slows the analysis several times
+struct Handle {
+    analyzer: Py<Analyzer>,
+}
+
+/// How many handles a thread keeps: a thread uses few analyzers by turns, and a long list would
+/// make unpickling thousands of analyses quadratic
+const HANDLE_SLOTS: usize = 4;
+
+/// Handles of the analyzers of a thread: the address of the analyzer object and a weak reference,
+/// so a handle lives as long as its analyses and does not keep the analyzer longer; a new handle
+/// takes the place of a dead one or the next place in turn
+struct Handles {
+    slots: [(usize, Weak<Handle>); HANDLE_SLOTS],
+    next: usize,
+}
+
+thread_local! {
+    static HANDLES: RefCell<Handles> = const {
+        RefCell::new(Handles {
+            slots: [const { (0, Weak::new()) }; HANDLE_SLOTS],
+            next: 0,
+        })
+    };
+}
+
+/// The tag of an analysis: the number of a tag of the dictionary of its analyzer, whose objects it
+/// shares, or its own for an analysis pickled with another dictionary
+enum AnalysisTag {
+    Dictionary(u16),
+    Own(Box<Tag>),
+}
+
 /// Analysis of a word form
 ///
 /// Description:
@@ -96,23 +132,38 @@ struct Analysis {
     prob: f64,
     #[pyo3(get)]
     source: &'static str,
-    tag: Arc<Tag>,
+    tag: AnalysisTag,
     /// Words of a token of several; empty for one word
     words: Vec<String>,
-    /// The analyzer that gave the analysis: its dictionary has the forms of the lexeme
-    analyzer: Py<Analyzer>,
-    /// Number of the tag in the dictionary of the analyzer; `None` if it has no such tag
-    ud: Option<u16>,
+    /// The analyzer that gave the analysis, through the handle of a thread: its dictionary has
+    /// the forms of the lexeme
+    handle: Arc<Handle>,
     /// The form of the inflection table of the analysis; an unpickled analysis finds it on first use
     entry: OnceLock<Option<esmorph::Entry>>,
 }
 
 impl Analysis {
+    /// Part of speech and features of the analysis
+    fn tag(&self) -> &Tag {
+        match &self.tag {
+            AnalysisTag::Dictionary(ud) => &self.handle.analyzer.get().tags[usize::from(*ud)],
+            AnalysisTag::Own(tag) => tag,
+        }
+    }
+
+    /// Number of the tag in the dictionary of the analyzer; `None` if it has no such tag
+    fn ud(&self) -> Option<u16> {
+        match self.tag {
+            AnalysisTag::Dictionary(ud) => Some(ud),
+            AnalysisTag::Own(_) => None,
+        }
+    }
+
     /// The analysis as the core has it: the forms of its lexeme come from it. An analysis of a
     /// lexeme that the dictionary does not have (pickled with another one) has none
     fn core(&self) -> Option<esmorph::Analysis> {
         let source = source(self.source)?;
-        let ud = self.ud?;
+        let ud = self.ud()?;
         let entry = *self.entry.get_or_init(|| self.find_entry(ud, source));
         if entry.is_none() && source != esmorph::Source::Rule {
             return None;
@@ -131,7 +182,7 @@ impl Analysis {
     /// The form of the table of an unpickled analysis: the one of the same analysis in the
     /// dictionary of its analyzer
     fn find_entry(&self, ud: u16, source: esmorph::Source) -> Option<esmorph::Entry> {
-        let dictionary = &self.analyzer.get().dictionary;
+        let dictionary = &self.handle.analyzer.get().dictionary;
         // The lemma of a name may differ in case: `Madrid` of the token `madrid`
         let lemma = self.lemma.to_lowercase();
         (dictionary.analyze(&self.word).into_iter())
@@ -176,13 +227,13 @@ fn source(name: &str) -> Option<esmorph::Source> {
 impl Analysis {
     #[getter]
     fn pos(&self) -> &str {
-        &self.tag.pos
+        &self.tag().pos
     }
 
     #[getter]
     fn feats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let feats = PyDict::new(py);
-        for (name, value) in self.tag.pairs() {
+        for (name, value) in self.tag().pairs() {
             feats.set_item(name, value)?;
         }
         Ok(feats)
@@ -217,8 +268,8 @@ impl Analysis {
         let Some(found) = self.core() else {
             return Ok(Vec::new());
         };
-        let analyzer = self.analyzer.get();
-        analyzer.convert(py, &self.analyzer, analyzer.dictionary.forms(&found))
+        let analyzer = self.handle.analyzer.get();
+        analyzer.convert(py, &self.handle, analyzer.dictionary.forms(&found))
     }
 
     /// The form with the given features
@@ -250,7 +301,7 @@ impl Analysis {
     ///     'hablaron'
     #[pyo3(signature = (**feats))]
     fn inflect(&self, py: Python<'_>, feats: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
-        let analyzer = self.analyzer.get();
+        let analyzer = self.handle.analyzer.get();
         let mut requested: Vec<(String, String)> = Vec::new();
         for (name, value) in feats.into_iter().flatten() {
             let name: String = name.extract()?;
@@ -309,7 +360,7 @@ impl Analysis {
             "Analysis(word={}, lemma={}, pos={}, feats={}, prob={}, words={}, source={})",
             py_repr(py, &self.word)?,
             py_repr(py, &self.lemma)?,
-            py_repr(py, &self.tag.pos)?,
+            py_repr(py, &self.tag().pos)?,
             self.feats(py)?.repr()?,
             // Six significant digits: a tiny probability is not 0.000000
             PyFloat::new(
@@ -326,14 +377,21 @@ impl Analysis {
         let other = other.get();
         self.word == other.word
             && self.lemma == other.lemma
-            && self.tag == other.tag
+            && self.tag() == other.tag()
             && self.words == other.words
             && self.source == other.source
     }
 
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
-        (&self.word, &self.lemma, &self.tag, &self.words, self.source).hash(&mut hasher);
+        (
+            &self.word,
+            &self.lemma,
+            self.tag(),
+            &self.words,
+            self.source,
+        )
+            .hash(&mut hasher);
         hasher.finish()
     }
 
@@ -346,20 +404,23 @@ impl Analysis {
     }
 
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, AnalysisState)> {
+        let analyzer = &self.handle.analyzer;
+        let tag = self.tag();
         Ok((
             restorer(py, &RESTORE_ANALYSIS, "_analysis")?,
             (
                 self.word.clone(),
                 self.lemma.clone(),
-                self.tag.pos.clone(),
-                self.tag.feats.clone(),
+                tag.pos.clone(),
+                tag.feats.clone(),
                 self.prob,
                 self.words.clone(),
                 self.source.to_owned(),
-                Analyzer::saved_path(self.analyzer.bind(py))?,
+                // The analyzer itself: pickle keeps it once for all the analyses of a list
+                Some(analyzer.clone_ref(py).into_any()),
                 (self.entry.get())
-                    .map(|&entry| saved_entry(self.analyzer.get().dictionary.checksum(), entry)),
-                self.analyzer.get().verified.load(Ordering::Relaxed),
+                    .map(|&entry| saved_entry(analyzer.get().dictionary.checksum(), entry)),
+                analyzer.get().verified.load(Ordering::Relaxed),
             ),
         ))
     }
@@ -378,7 +439,8 @@ fn saved_entry(checksum: u32, entry: Option<esmorph::Entry>) -> u64 {
     u64::from(checksum) << 32 | low
 }
 
-/// The path of a dictionary that pickle saves: `None` for the dictionary of the package
+/// The path of a dictionary that pickle saves (`None` for the dictionary of the package) or, for an
+/// analysis, the analyzer itself
 type SavedPath = Option<Py<PyAny>>;
 
 /// Arguments of `_analysis`: the fields of an analysis and the path of its dictionary for pickle
@@ -411,7 +473,7 @@ fn _analysis(
     prob: f64,
     words: Vec<String>,
     source: &str,
-    path: Option<PathBuf>,
+    path: Option<&Bound<'_, PyAny>>,
     entry: SavedEntry,
     verify: bool,
 ) -> PyResult<Py<Analysis>> {
@@ -420,19 +482,30 @@ fn _analysis(
             "Unknown source of an analysis: {source}"
         )));
     };
-    let analyzer = match path.map(|path| shared(py, Some(path), verify)) {
-        Some(Ok(analyzer)) => analyzer,
-        Some(Err(err)) if !err.is_instance_of::<PyOSError>(py) => return Err(err),
-        _ => shared(py, None, verify)?,
+    // The analyzer itself, or the path of its dictionary in a pickle of an earlier version
+    let analyzer = match path {
+        Some(path) => match path.cast::<Analyzer>() {
+            Ok(analyzer) => Ok(analyzer.clone()),
+            Err(_) => {
+                shared(py, Some(path.extract()?), verify).map(|analyzer| analyzer.into_bound(py))
+            }
+        },
+        None => shared(py, None, verify).map(|analyzer| analyzer.into_bound(py)),
+    };
+    let analyzer = match analyzer {
+        Ok(analyzer) => analyzer,
+        Err(err) if !err.is_instance_of::<PyOSError>(py) => return Err(err),
+        Err(_) => shared(py, None, verify)?.into_bound(py),
     };
     // The tag of the dictionary is shared by its analyses
     let this = analyzer.get();
     let tag = Tag { pos, feats };
     let ud = this.tag_numbers.get(&tag).copied();
-    let tag = ud.map_or_else(
-        || Arc::new(tag),
-        |ud| Arc::clone(&this.tags[usize::from(ud)]),
-    );
+    let handle = Analyzer::handle(&analyzer);
+    let tag = match ud {
+        Some(ud) => AnalysisTag::Dictionary(ud),
+        None => AnalysisTag::Own(Box::new(tag)),
+    };
     // The form of its table, unless pickle has it for this dictionary, is found on first use:
     // unpickling a list of analyses stays cheap
     let entry = match entry {
@@ -454,8 +527,7 @@ fn _analysis(
             source,
             tag,
             words,
-            analyzer,
-            ud,
+            handle,
             entry,
         },
     )
@@ -659,7 +731,11 @@ impl Analyzer {
     fn analyze(slf: &Bound<'_, Self>, word: &Bound<'_, PyAny>) -> PyResult<Vec<Py<Analysis>>> {
         let word = text(word)?;
         let this = slf.get();
-        this.convert(slf.py(), slf.as_unbound(), this.dictionary.analyze(&word))
+        this.convert(
+            slf.py(),
+            &Analyzer::handle(slf),
+            this.dictionary.analyze(&word),
+        )
     }
 
     /// Analyses of a list of word forms
@@ -689,6 +765,7 @@ impl Analyzer {
     ) -> PyResult<Bound<'py, PyList>> {
         let py = slf.py();
         let this = slf.get();
+        let handle = Analyzer::handle(slf);
         let mut words = Words::new(words)?;
         let result = PyList::empty(py);
         while words.next_chunk()? {
@@ -698,7 +775,7 @@ impl Analyzer {
                     .collect::<Vec<_>>()
             });
             for analyses in analyses {
-                result.append(this.convert(py, slf.as_unbound(), analyses)?)?;
+                result.append(this.convert(py, &handle, analyses)?)?;
             }
             py.check_signals()?;
         }
@@ -879,9 +956,51 @@ impl Analyzer {
         Ok(self.dictionary.is_known(&text(word)?))
     }
 
-    /// Description of the source of the dictionary in JSON (for checking the dictionary in tests)
-    fn _meta(&self) -> &str {
-        self.dictionary.meta()
+    /// Description of the dictionary
+    ///
+    /// Description:
+    ///     The source of the dictionary and its snapshot with its SHA-256, the license, the
+    ///     release of Universal Dependencies and the treebanks of the counts of analyses with their
+    ///     licenses, as far as the dictionary describes them, and always the number of word forms
+    ///     and the checksum of the file
+    ///
+    /// Returns:
+    ///     dict: The keys source, snapshot, sha256, license, ud_release, treebanks, word_forms and
+    ///     checksum; a new dictionary every time
+    ///
+    /// Example:
+    ///     >>> from esmorph import Analyzer
+    ///     >>> info = Analyzer().dictionary_info
+    ///     >>> info["source"], info["license"], sorted(info["treebanks"])
+    ///     ('Wiktionary', 'CC BY-SA 4.0', ['UD_Spanish-AnCora', 'UD_Spanish-GSD'])
+    #[getter]
+    fn dictionary_info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let info = PyDict::new(py);
+        // The description is JSON of the builder; another one has none of these keys
+        let meta = py
+            .import(intern!(py, "json"))?
+            .call_method1(intern!(py, "loads"), (self.dictionary.meta(),));
+        if let Ok(meta) = meta
+            && let Ok(meta) = meta.cast::<PyDict>()
+        {
+            for key in ["source", "snapshot", "sha256", "license"] {
+                if let Some(value) = meta.get_item(key)? {
+                    info.set_item(key, value)?;
+                }
+            }
+            if let Some(counts) = meta.get_item("counts")?
+                && let Ok(counts) = counts.cast::<PyDict>()
+            {
+                for (key, name) in [("release", "ud_release"), ("treebanks", "treebanks")] {
+                    if let Some(value) = counts.get_item(key)? {
+                        info.set_item(name, value)?;
+                    }
+                }
+            }
+        }
+        info.set_item("word_forms", self.dictionary.len())?;
+        info.set_item("checksum", self.dictionary.checksum())?;
+        Ok(info)
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -893,6 +1012,42 @@ impl Analyzer {
 }
 
 impl Analyzer {
+    /// The handle of the analyzer for the analyses of this thread: one per analyzer and thread
+    /// while its analyses live
+    fn handle(slf: &Bound<'_, Self>) -> Arc<Handle> {
+        let address = slf.as_ptr() as usize;
+        let new = || {
+            Arc::new(Handle {
+                analyzer: slf.clone().unbind(),
+            })
+        };
+        // A thread that is ending has no handles: the handle is made without keeping it
+        HANDLES
+            .try_with(|handles| {
+                let mut handles = handles.borrow_mut();
+                let found = (handles.slots.iter())
+                    .filter(|(known, _)| *known == address)
+                    .find_map(|(_, handle)| handle.upgrade());
+                if let Some(handle) = found {
+                    return handle;
+                }
+                let slot = match (handles.slots.iter())
+                    .position(|(_, handle)| handle.strong_count() == 0)
+                {
+                    Some(slot) => slot,
+                    None => {
+                        let slot = handles.next;
+                        handles.next = (slot + 1) % HANDLE_SLOTS;
+                        slot
+                    }
+                };
+                let handle = new();
+                handles.slots[slot] = (address, Arc::downgrade(&handle));
+                handle
+            })
+            .unwrap_or_else(|_| new())
+    }
+
     /// The path that pickle saves for an analyzer: `None` for the dictionary of the package. An
     /// analyzer of a file becomes the one that unpickling in this process takes for its path
     fn saved_path(analyzer: &Bound<'_, Analyzer>) -> PyResult<SavedPath> {
@@ -913,27 +1068,25 @@ impl Analyzer {
         Ok(saved.as_ref().map(|path| path.clone_ref(py)))
     }
 
-    /// Analyses for Python; `analyzer` is this analyzer
+    /// Analyses for Python; `handle` is the handle of this analyzer
     fn convert(
         &self,
         py: Python<'_>,
-        analyzer: &Py<Analyzer>,
+        handle: &Arc<Handle>,
         analyses: Vec<esmorph::Analysis>,
     ) -> PyResult<Vec<Py<Analysis>>> {
         analyses
             .into_iter()
-            .filter_map(|analysis| {
-                Some(Analysis {
-                    tag: Arc::clone(self.tags.get(usize::from(analysis.ud))?),
-                    source: analysis.source.as_str(),
-                    prob: analysis.prob,
-                    word: analysis.word,
-                    lemma: analysis.lemma,
-                    words: analysis.words,
-                    analyzer: analyzer.clone_ref(py),
-                    ud: Some(analysis.ud),
-                    entry: OnceLock::from(analysis.entry),
-                })
+            .filter(|analysis| usize::from(analysis.ud) < self.tags.len())
+            .map(|analysis| Analysis {
+                tag: AnalysisTag::Dictionary(analysis.ud),
+                source: analysis.source.as_str(),
+                prob: analysis.prob,
+                word: analysis.word,
+                lemma: analysis.lemma,
+                words: analysis.words,
+                handle: Arc::clone(handle),
+                entry: OnceLock::from(analysis.entry),
             })
             .map(|analysis| untracked(py, analysis))
             .collect()

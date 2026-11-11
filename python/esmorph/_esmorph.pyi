@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Sequence
 from os import PathLike
 from pathlib import Path
-from typing import Literal, Protocol, final
+from typing import Literal, Protocol, TypedDict, final
 
 __all__ = ["Analysis", "Analyzer", "FormNotFoundError", "__version__"]
 
@@ -93,6 +93,16 @@ class _Document(Protocol):
         feats: Sequence[str | None],
     ) -> object: ...
 
+class DictionaryInfo(TypedDict, total=False):
+    source: str
+    snapshot: str
+    sha256: str
+    license: str
+    ud_release: str
+    treebanks: dict[str, str]
+    word_forms: int
+    checksum: int
+
 @final
 class Analyzer:
     """Morphological analyzer of Spanish"""
@@ -103,6 +113,10 @@ class Analyzer:
     @property
     def path(self) -> Path:
         """Path to the dictionary file"""
+
+    @property
+    def dictionary_info(self) -> DictionaryInfo:
+        """Description of the dictionary"""
 
     def analyze(self, word: str) -> list[Analysis]:
         """Analyses of a word form"""

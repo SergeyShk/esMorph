@@ -3,7 +3,6 @@ import copy
 import errno
 import gc
 import itertools
-import json
 import os
 import pickle
 import threading
@@ -770,11 +769,29 @@ def test_analyzer_repr_and_path(morph, tmp_path):
 
 
 def test_dictionary_description(morph):
-    meta = json.loads(morph._meta())
-    assert meta["source"] == "Wiktionary"
-    assert meta["counts"]["release"] == "r2.18"
-    assert set(meta["counts"]["treebanks"]) == {"UD_Spanish-AnCora", "UD_Spanish-GSD"}
-    assert meta["license"] == "CC BY-SA 4.0"
+    info = morph.dictionary_info
+    assert set(info) == {
+        "source",
+        "snapshot",
+        "sha256",
+        "license",
+        "ud_release",
+        "treebanks",
+        "word_forms",
+        "checksum",
+    }
+    assert info["source"] == "Wiktionary"
+    assert info["ud_release"] == "r2.18"
+    assert info["treebanks"] == {
+        "UD_Spanish-AnCora": "CC BY 4.0",
+        "UD_Spanish-GSD": "CC BY-SA 4.0",
+    }
+    assert info["license"] == "CC BY-SA 4.0"
+    assert info["snapshot"].endswith(".jsonl.xz") and len(info["sha256"]) == 64
+    assert info["word_forms"] > 600_000 and 0 <= info["checksum"] < 2**32
+    # A new dictionary every time
+    info["source"] = "x"
+    assert morph.dictionary_info["source"] == "Wiktionary"
 
 
 def test_dictionary_paths(morph, tmp_path, monkeypatch):
@@ -1080,6 +1097,16 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     assert gone.inflect(Number="Sing") == "gato"
     with pytest.raises(FileNotFoundError):
         esmorph._esmorph._analyzer(tmp_path / "x")
+    # A list keeps the analyzer once; a pickle with the path of the file, of an earlier version,
+    # takes the analyzer of the file too
+    analyses = own.analyze_many(["gatos", "hablamos", "casa"] * 100)
+    data = pickle.dumps(analyses)
+    assert data.count(path.parent.name.encode()) == 1
+    assert pickle.loads(data) == analyses
+    older = esmorph._esmorph._analysis(
+        "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary", str(path)
+    )
+    assert older.__reduce__()[1][7] is own
 
 
 def test_an_analysis_of_another_dictionary_has_no_forms(morph):
