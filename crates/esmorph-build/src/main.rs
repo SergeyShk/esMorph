@@ -473,6 +473,54 @@ mod tests {
     }
 
     #[test]
+    fn the_context_model() {
+        // The weights of the repository: the description names their data, a dictionary with a tag
+        // they have not seen is refused, and damaged weights name their file
+        let weights = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/es-context.bin");
+        let dir = std::env::temp_dir().join(format!("esmorph-build-model-{}", std::process::id()));
+        let (export, counts) = (dir.join("export"), dir.join("counts"));
+        fs::create_dir_all(&export).unwrap();
+        fs::create_dir_all(&counts).unwrap();
+        fs::write(export.join("meta.json"), "{}").unwrap();
+        for name in ["analyses.tsv", "pos.tsv"] {
+            fs::write(counts.join(name), "").unwrap();
+        }
+        fs::write(counts.join("sources.json"), "{}").unwrap();
+        let lexemes = export.join("lexemes.tsv");
+        fs::write(&lexemes, "casa\tNOUN\tcasa\t_\t_\t_\n").unwrap();
+        let output = dir.join("es.dict");
+        build(&export, &counts, &output, Some(&weights)).unwrap();
+        let dictionary = esmorph::Dictionary::open(&output).unwrap();
+        assert!(dictionary.has_context());
+        assert!(json_object(dictionary.meta()), "{}", dictionary.meta());
+        assert!(dictionary.meta().contains(", \"context\": {\""));
+        assert_eq!(
+            dictionary
+                .analyze_sentence(&["casa", "casa"])
+                .unwrap()
+                .len(),
+            2
+        );
+        let other = dir.join("other.dict");
+        fs::write(&lexemes, "casa\tNOUN\tcasa\tFoo=Bar\t_\t_\n").unwrap();
+        let message = build(&export, &counts, &other, Some(&weights))
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("without the tags F=Foo=Bar"), "{message}");
+        assert!(!other.exists());
+        let truncated = dir.join("truncated.bin");
+        fs::write(&truncated, &fs::read(&weights).unwrap()[..1000]).unwrap();
+        let message = build(&export, &counts, &other, Some(&truncated))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("truncated.bin: context model"),
+            "{message}"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_missing_file_names_its_path() {
         let error = read(Path::new("no/such/file.tsv")).unwrap_err();
         assert!(error.to_string().contains("no/such/file.tsv"), "{error}");

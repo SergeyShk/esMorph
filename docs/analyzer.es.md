@@ -122,7 +122,7 @@ Excepciones:
 analyze_sentence(words)
 ```
 
-Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyze), ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y `prob` es su puntuación en esta oración. Los tokens son los de una oración en orden, tal como los toma `analyze`: una contracción (`del`) o un verbo con clíticos (`dámelo`) es un solo token. Una oración de un token se analiza como con `analyze`, y una de más de 256 tokens, por partes de 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.
+Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyze), ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y `prob` es su puntuación en esta oración. Los tokens son los de una oración en orden, tal como los toma `analyze`: una contracción (`del`) o un verbo con clíticos (`dámelo`) es un solo token. Una oración de un token se analiza como con `analyze`, y una de más de 256 tokens, por partes de unos 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |

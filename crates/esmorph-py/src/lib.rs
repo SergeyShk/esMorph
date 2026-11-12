@@ -941,8 +941,8 @@ impl Analyzer {
     ///     The analyses of analyze ordered by the context model: the first is the one the model
     ///     chose by the tokens around, the probability is its score in this sentence. The tokens
     ///     are those of one sentence in order, as analyze takes them ("del", "dámelo"); a sentence
-    ///     of one token is analyzed as analyze, one longer than 256 tokens by parts of 256. The
-    ///     analysis goes without the GIL
+    ///     of one token is analyzed as analyze, one longer than 256 tokens by parts of about 256.
+    ///     The analysis goes without the GIL
     ///
     /// Arguments:
     ///     words (Iterable[str]): The tokens of the sentence
@@ -979,9 +979,10 @@ impl Analyzer {
             (this.dictionary.analyze_sentence::<&str>(&[]))
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
         }
-        // Pieces of CHUNK tokens, a multiple of the parts the model analyzes: Ctrl+C is checked
-        // between them
-        for (number, piece) in texts.chunks(CHUNK).enumerate() {
+        // Pieces of about CHUNK tokens by the parts the model analyzes: Ctrl+C is checked between
+        // them
+        for (number, range) in esmorph::sentence_parts(texts.len(), CHUNK).enumerate() {
+            let piece = &texts[range];
             let sentence = py
                 .detach(|| this.dictionary.analyze_sentence_part(piece, number == 0))
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
@@ -1085,15 +1086,13 @@ impl Analyzer {
         let mut lemma_strings: HashMap<String, Bound<'_, PyString>> = HashMap::new();
         let (lemmas, parts, feats) = (PyList::empty(py), PyList::empty(py), PyList::empty(py));
         let mut fields = Vec::with_capacity(CHUNK);
-        // Sentences by pieces of at most CHUNK tokens, a multiple of the parts the model analyzes,
-        // and whether a piece starts its sentence
+        // Sentences by pieces of about CHUNK tokens by the parts the model analyzes, and whether a
+        // piece starts its sentence
         let mut pieces: Vec<(Range<usize>, bool)> = Vec::new();
         for sentence in bounds.windows(2) {
-            for start in (sentence[0]..sentence[1]).step_by(CHUNK) {
-                pieces.push((
-                    start..(start + CHUNK).min(sentence[1]),
-                    start == sentence[0],
-                ));
+            for range in esmorph::sentence_parts(sentence[1] - sentence[0], CHUNK) {
+                let start = range.start == 0;
+                pieces.push((sentence[0] + range.start..sentence[0] + range.end, start));
             }
         }
         let mut piece = 0;

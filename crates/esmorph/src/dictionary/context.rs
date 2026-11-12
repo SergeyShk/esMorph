@@ -27,6 +27,9 @@ const MAX_WORDS: usize = 4;
 /// Largest sizes from the file: a damaged file does not ask for gigabytes
 const MAX_DIM: usize = 4096;
 const MAX_ROWS: usize = 1 << 22;
+/// Largest weight: a trained model has weights below 10, and with larger ones the sums of a
+/// crafted file would overflow to infinity and give probabilities NaN
+const MAX_WEIGHT: f32 = 1e4;
 
 /// A matrix of f32 by rows
 #[derive(Debug)]
@@ -137,11 +140,19 @@ impl Tiled {
     }
 }
 
-/// `sums += value · column`
+/// `sums += value · column`, by a fused multiply-add where the processor has it: a quarter less
+/// time, and the last bits differ from a processor without it
 #[inline(always)]
 fn axpy(sums: &mut [f32; TILE], column: &[f32; TILE], value: f32) {
     for (sum, &weight) in sums.iter_mut().zip(column) {
-        *sum += value * weight;
+        #[cfg(any(target_arch = "aarch64", target_feature = "fma"))]
+        {
+            *sum = value.mul_add(weight, *sum);
+        }
+        #[cfg(not(any(target_arch = "aarch64", target_feature = "fma")))]
+        {
+            *sum += value * weight;
+        }
     }
 }
 
@@ -269,6 +280,10 @@ impl<'a> Reader<'a> {
                         })
                         .collect()
                 };
+                // NaN fails the comparison too
+                if !data.iter().all(|weight| weight.abs() <= MAX_WEIGHT) {
+                    return Err(invalid("a weight is out of range"));
+                }
                 Ok(Value::Matrix(Matrix { rows, cols, data }))
             }
             3 => {
@@ -575,7 +590,8 @@ impl Context {
     /// Analyses of the tokens of a sentence by the score of the model, highest first; the
     /// probability is the share in the context. The model sees the first `kmax` analyses of a
     /// token, the others follow them with the probability 0. `words` are the tokens normalized as
-    /// `analyze` reads them, `first` - whether they start the sentence
+    /// `analyze` reads them, `first` - whether they start the sentence: its start is the first
+    /// token with a letter or a digit, after a dash of a dialogue, a quote or a bracket
     pub fn rank(
         &self,
         words: &[&str],
@@ -590,12 +606,14 @@ impl Context {
         let (d, dc) = (model.input.rows, model.tag_in.cols);
         let din = model.input.cols;
         let mut x = vec![0.0f32; n * din];
+        let lead = (words.iter().position(|word| kind(word) != 0)).filter(|_| first);
+        let (mut normal, mut key) = (String::new(), String::new());
         for (t, (word, list)) in words.iter().zip(&analyses).enumerate() {
             // Input of a token: the shape, the mean of the tags of its analyses, the word and its
             // endings
             let row = &mut x[t * din..(t + 1) * din];
             let (shape_row, rest) = row.split_at_mut(model.shape.cols);
-            shape_row.copy_from_slice(model.shape.row(shape(word, first && t == 0)));
+            shape_row.copy_from_slice(model.shape.row(shape(word, lead == Some(t))));
             let (mean, rest) = rest.split_at_mut(dc);
             let seen = &list[..list.len().min(model.kmax)];
             for analysis in seen {
@@ -604,13 +622,14 @@ impl Context {
             for value in mean.iter_mut() {
                 *value /= seen.len().max(1) as f32;
             }
-            let normal = word.to_lowercase();
+            lowercase(word, &mut normal);
             let (word_row, rest) = rest.split_at_mut(model.word.cols);
-            let number = model.words.get(&normal).copied().unwrap_or(1);
+            let number = model.words.get(normal.as_str()).copied().unwrap_or(1);
             word_row.copy_from_slice(model.word.row(number as usize));
-            let suffix_rows = rest.chunks_exact_mut(model.suffix.cols);
-            for (key, out) in suffixes(&normal, model.suffix_max).zip(suffix_rows) {
-                let number = model.suffixes.get(&key).copied().unwrap_or(1);
+            let letters = normal.chars().count();
+            for (n, out) in (1..=model.suffix_max).zip(rest.chunks_exact_mut(model.suffix.cols)) {
+                suffix_key(&normal, letters, n, &mut key);
+                let number = model.suffixes.get(key.as_str()).copied().unwrap_or(1);
                 out.copy_from_slice(model.suffix.row(number as usize));
             }
         }
@@ -627,7 +646,7 @@ impl Context {
         let mut query = vec![0.0f32; dc];
         let mut normed = vec![0.0f32; d];
         let mut result = Vec::with_capacity(n);
-        for (t, list) in analyses.into_iter().enumerate() {
+        for (t, mut list) in analyses.into_iter().enumerate() {
             let h = &hidden[t * d..(t + 1) * d];
             let mean = h.iter().sum::<f32>() / d as f32;
             let variance = h.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / d as f32;
@@ -637,10 +656,15 @@ impl Context {
             }
             model.query.apply(&normed, &mut query);
             add(&mut query, &model.query_bias);
-            let scores: Vec<f32> = (list.iter().take(model.kmax))
-                .map(|analysis| self.score(&query, analysis))
-                .collect();
-            result.push(reorder(list, &scores));
+            let seen = list.len().min(model.kmax);
+            for analysis in &mut list[..seen] {
+                analysis.prob = f64::from(self.score(&query, analysis));
+            }
+            for analysis in &mut list[seen..] {
+                analysis.prob = 0.0;
+            }
+            softmax(&mut list[..seen]);
+            result.push(list);
         }
         result
     }
@@ -657,27 +681,21 @@ impl Context {
     }
 }
 
-/// Analyses by the scores `scores` of the first of them, highest first, with the probabilities of
-/// softmax; the others follow them with the probability 0. Equal scores keep the dictionary order
-fn reorder(list: Vec<Analysis>, scores: &[f32]) -> Vec<Analysis> {
-    let top = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let exps: Vec<f64> = scores.iter().map(|&s| f64::from(s - top).exp()).collect();
-    let total: f64 = exps.iter().sum();
-    let mut order: Vec<usize> = (0..scores.len()).collect();
-    order.sort_by(|&a, &b| scores[b].total_cmp(&scores[a]));
-    let mut slots: Vec<Option<Analysis>> = list.into_iter().map(Some).collect();
-    let mut result = Vec::with_capacity(slots.len());
-    for index in order {
-        if let Some(mut analysis) = slots[index].take() {
-            analysis.prob = exps[index] / total;
-            result.push(analysis);
-        }
+/// Analyses with their scores in `prob` by the score, highest first, with the probabilities of
+/// softmax; equal scores keep the dictionary order
+fn softmax(analyses: &mut [Analysis]) {
+    analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
+    let Some(top) = analyses.first().map(|analysis| analysis.prob) else {
+        return;
+    };
+    let mut total = 0.0;
+    for analysis in analyses.iter_mut() {
+        analysis.prob = (analysis.prob - top).exp();
+        total += analysis.prob;
     }
-    for mut analysis in slots.into_iter().flatten() {
-        analysis.prob = 0.0;
-        result.push(analysis);
+    for analysis in analyses {
+        analysis.prob /= total;
     }
-    result
 }
 
 /// A layer of a BiLSTM: the output of a token is the states of the forward and the backward
@@ -726,14 +744,29 @@ fn bilstm(layer: &[Lstm; 2], input: &[f32], n: usize, d: usize) -> Vec<f32> {
     output
 }
 
-/// Endings of a word of 1..=`max` letters with the start mark `^`: the key is the length and the
-/// ending
-fn suffixes(word: &str, max: usize) -> impl Iterator<Item = String> {
-    let marked: Vec<char> = std::iter::once('^').chain(word.chars()).collect();
-    (1..=max).map(move |n| {
-        let tail: String = marked[marked.len().saturating_sub(n)..].iter().collect();
-        format!("{n}{tail}")
-    })
+/// A word in lower case, as `str::to_lowercase` gives it, into `out`
+fn lowercase(word: &str, out: &mut String) {
+    out.clear();
+    // Only the final sigma depends on the letters around it
+    if word.contains('Σ') {
+        out.push_str(&word.to_lowercase());
+    } else {
+        out.extend(word.chars().flat_map(char::to_lowercase));
+    }
+}
+
+/// Key of the ending of `n` letters of a word of `letters` letters with the start mark `^`: the
+/// length and the ending
+fn suffix_key(word: &str, letters: usize, n: usize, key: &mut String) {
+    key.clear();
+    let _ = write!(key, "{n}");
+    if n > letters {
+        key.push('^');
+        key.push_str(word);
+    } else {
+        let start = (word.char_indices().nth(letters - n)).map_or(0, |(at, _)| at);
+        key.push_str(&word[start..]);
+    }
 }
 
 /// Shape of a token, as `shape` of `scripts/train_context.py`: no letters and digits, ASCII
@@ -859,6 +892,10 @@ pub(crate) mod tests {
 
     /// A dictionary of `la` (an article and a pronoun) and `vio` with the model of `weights`
     pub(crate) fn dictionary(model: Option<Vec<u8>>) -> Dictionary {
+        Dictionary::from_bytes(&dictionary_bytes(model)).unwrap()
+    }
+
+    fn dictionary_bytes(model: Option<Vec<u8>>) -> Vec<u8> {
         let mut builder = Builder::new();
         builder.meta("{}");
         let article = "Definite=Def|Gender=Fem|Number=Sing|PronType=Art";
@@ -870,7 +907,7 @@ pub(crate) mod tests {
         if let Some(model) = model {
             builder.context(model).unwrap();
         }
-        Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+        builder.build().unwrap()
     }
 
     fn pos<'d>(dictionary: &'d Dictionary, analysis: &Analysis) -> &'d str {
@@ -958,6 +995,75 @@ pub(crate) mod tests {
         assert_eq!(parts, whole);
         let alone = dictionary.analyze_sentence(tail).unwrap();
         assert_ne!(alone[0][0].prob, whole[crate::SENTENCE_CHUNK][0].prob);
+    }
+
+    #[test]
+    fn verify_reads_the_model() {
+        // A model damaged under a right checksum: loading takes it, `verify` does not
+        let data = dictionary_bytes(Some(weights(&[("P=PRON", 1234.5)])));
+        assert!(Dictionary::from_bytes(&data).unwrap().verify().is_ok());
+        let damage = |pattern: &[u8], with: &[u8]| {
+            let mut damaged = data.clone();
+            let at = (damaged.windows(pattern.len()))
+                .position(|window| window == pattern)
+                .unwrap();
+            damaged[at..at + with.len()].copy_from_slice(with);
+            Dictionary::from_bytes(&crate::format::tests::with_checksum(damaged)).unwrap()
+        };
+        for weight in [f32::NAN, f32::INFINITY, 3e38] {
+            let wrong = damage(&1234.5f32.to_le_bytes(), &weight.to_le_bytes());
+            let err = wrong.verify().unwrap_err();
+            assert!(err.to_string().contains("out of range"), "{weight}: {err}");
+            let err = wrong.analyze_sentence(&["la", "vio"]).unwrap_err();
+            assert!(matches!(err, Error::Format(_)), "{err}");
+        }
+        let unsigned = damage(MAGIC, b"X");
+        let err = unsigned.verify().unwrap_err();
+        assert!(err.to_string().contains("no signature"), "{err}");
+    }
+
+    #[test]
+    fn weights_out_of_range() {
+        // An int8 matrix: rows, columns, the scale of every row and its values
+        let int8 = |scale: f32| {
+            let mut data = vec![2];
+            data.extend(1u32.to_le_bytes());
+            data.extend(2u32.to_le_bytes());
+            data.extend(scale.to_le_bytes());
+            data.extend([100, 156]);
+            Reader { data: &data, at: 0 }.value().map(|_| ())
+        };
+        assert!(int8(0.04).is_ok());
+        for scale in [1e37, f32::NAN] {
+            let err = int8(scale).unwrap_err();
+            assert!(err.to_string().contains("out of range"), "{scale}: {err}");
+        }
+    }
+
+    #[cfg(feature = "bundled")]
+    #[test]
+    fn sentence_after_a_dash() {
+        // A dash of a dialogue, a quote or a bracket before its first word: the word still starts
+        // the sentence and is not taken for a name
+        let dictionary = Dictionary::bundled().unwrap();
+        for (sentence, wanted) in [
+            (&["Mira", "lo", "que", "has", "hecho", "."][..], "VERB"),
+            (&["Señor", ",", "venga", "."], "NOUN"),
+            (&["Pobre", "mujer", "."], "ADJ"),
+        ] {
+            for lead in ["—", "--", "«", "(", "¡", "\""] {
+                let words: Vec<&str> = std::iter::once(lead)
+                    .chain(sentence.iter().copied())
+                    .collect();
+                let analyses = dictionary.analyze_sentence(&words).unwrap();
+                assert_eq!(
+                    pos(&dictionary, &analyses[1][0]),
+                    wanted,
+                    "{lead} {}",
+                    words[1]
+                );
+            }
+        }
     }
 
     #[test]
@@ -1051,10 +1157,27 @@ pub(crate) mod tests {
 
     #[test]
     fn word_suffixes() {
-        let keys: Vec<String> = suffixes("casa", 4).collect();
-        assert_eq!(keys, ["1a", "2sa", "3asa", "4casa"]);
-        let keys: Vec<String> = suffixes("él", 4).collect();
-        assert_eq!(keys, ["1l", "2él", "3^él", "4^él"]);
+        let keys = |word: &str| -> Vec<String> {
+            let mut key = String::new();
+            (1..=4)
+                .map(|n| {
+                    suffix_key(word, word.chars().count(), n, &mut key);
+                    key.clone()
+                })
+                .collect()
+        };
+        assert_eq!(keys("casa"), ["1a", "2sa", "3asa", "4casa"]);
+        assert_eq!(keys("él"), ["1l", "2él", "3^él", "4^él"]);
+        assert_eq!(keys(""), ["1^", "2^", "3^", "4^"]);
+    }
+
+    #[test]
+    fn lower_case() {
+        let mut out = String::new();
+        for word in ["CASA", "Ñandú", "İstanbul", "ΣΟΦΟΣ", "ΣΑ Σ", "ǅ"] {
+            lowercase(word, &mut out);
+            assert_eq!(out, word.to_lowercase());
+        }
     }
 
     #[test]

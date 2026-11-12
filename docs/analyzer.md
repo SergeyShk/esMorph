@@ -122,7 +122,7 @@ Exceptions:
 analyze_sentence(words)
 ```
 
-The analyses of the tokens of a sentence, as [`analyze`](#analyze) gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and `prob` is its score in this sentence. The tokens are those of one sentence in order, as `analyze` takes them: a contraction (`del`) or a verb with clitics (`dámelo`) is one token. A sentence of one token is analyzed as `analyze`, and one longer than 256 tokens by parts of 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.
+The analyses of the tokens of a sentence, as [`analyze`](#analyze) gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and `prob` is its score in this sentence. The tokens are those of one sentence in order, as `analyze` takes them: a contraction (`del`) or a verb with clitics (`dámelo`) is one token. A sentence of one token is analyzed as `analyze`, and one longer than 256 tokens by parts of about 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |

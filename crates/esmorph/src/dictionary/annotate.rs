@@ -1,7 +1,7 @@
 //! The fields of CoNLL-U of the words of a token and the analysis of a document of the anySeg
 //! segmenter
 
-use super::{Analysis, Dictionary, SENTENCE_CHUNK, normalized};
+use super::{Analysis, Dictionary, SENTENCE_CHUNK, normalized, sentence_parts};
 use crate::Error;
 use crate::alphabet;
 use crate::clitics;
@@ -38,8 +38,8 @@ impl Dictionary {
     /// The fields of CoNLL-U of the words of the tokens of a sentence, each token - its text and
     /// its words, as `token_fields` gives them. With `context` the analyses of the tokens are
     /// ordered by the context model, without it as `analyze` orders them. `start` - whether the
-    /// tokens start the sentence: a sentence given by parts of a multiple of `SENTENCE_CHUNK`
-    /// tokens gets the fields of the whole; the analyses are kept by parts of `SENTENCE_CHUNK`
+    /// tokens start the sentence: a sentence given by pieces of `sentence_parts` of a multiple of
+    /// `SENTENCE_CHUNK` tokens gets the fields of the whole; the analyses are kept by parts
     ///
     /// # Errors
     ///
@@ -52,7 +52,8 @@ impl Dictionary {
         start: bool,
         fields: &mut Vec<Fields<'d>>,
     ) -> Result<(), Error> {
-        for (number, part) in tokens.chunks(SENTENCE_CHUNK).enumerate() {
+        for (number, range) in sentence_parts(tokens.len(), SENTENCE_CHUNK).enumerate() {
+            let part = &tokens[range];
             let texts: Vec<&str> = (part.iter())
                 .map(|(token, words)| token_text(token, words))
                 .collect();
