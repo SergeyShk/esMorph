@@ -68,10 +68,16 @@ fn joined(meta: &str, sources: &str) -> Result<String, Error> {
 /// The text is an object of JSON
 fn json_object(text: &str) -> bool {
     let mut json = Json {
-        bytes: text.trim().as_bytes(),
+        bytes: text.as_bytes(),
         at: 0,
     };
-    json.bytes.first() == Some(&b'{') && json.value(0) && json.at == json.bytes.len()
+    // Only the whitespace of JSON may go around it
+    json.space();
+    if json.bytes.get(json.at) != Some(&b'{') || !json.value(0) {
+        return false;
+    }
+    json.space();
+    json.at == json.bytes.len()
 }
 
 /// A reader of JSON that only checks it
@@ -364,6 +370,9 @@ mod tests {
             "{\"a\": \"\\x\"}",
             "{\"a\": \"\n\"}",
             "{\"a\": 1} {}",
+            "\x0c{}",
+            "{}\u{a0}",
+            "\u{feff}{}",
         ] {
             assert!(!json_object(text), "{text}");
         }

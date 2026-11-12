@@ -1475,12 +1475,12 @@ fn document_attribute<'py>(
     document: &Bound<'py, PyAny>,
     name: &Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    document.getattr(name).map_err(|err| match err.is_instance_of::<PyAttributeError>(document.py()) {
-        true => type_error(
+    document.getattr(name).map_err(|err| {
+        attribute_error(
+            err,
             "Expected an anyseg.Document or an object with column(), multiword_tokens and set_columns()",
             document,
-        ),
-        false => err,
+        )
     })
 }
 
@@ -1489,15 +1489,23 @@ fn token_attribute<'py>(
     object: &Bound<'py, PyAny>,
     name: &Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    object.getattr(name).map_err(
-        |err| match err.is_instance_of::<PyAttributeError>(object.py()) {
-            true => type_error(
-                &format!("A multiword token has text and words, and a word has index: no {name}"),
-                object,
-            ),
-            false => err,
-        },
-    )
+    object.getattr(name).map_err(|err| {
+        let message =
+            format!("A multiword token has text and words, and a word has index: no {name}");
+        attribute_error(err, &message, object)
+    })
+}
+
+/// A `TypeError` for an object without an attribute, caused by the `AttributeError`: a mistake
+/// inside a property of the object raises it too
+fn attribute_error(err: PyErr, message: &str, object: &Bound<'_, PyAny>) -> PyErr {
+    let py = object.py();
+    if !err.is_instance_of::<PyAttributeError>(py) {
+        return err;
+    }
+    let error = type_error(message, object);
+    error.set_cause(py, Some(err));
+    error
 }
 
 fn type_error(message: &str, value: &Bound<'_, PyAny>) -> PyErr {
