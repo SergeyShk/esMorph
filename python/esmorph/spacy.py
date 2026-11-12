@@ -124,7 +124,7 @@ class Component:
                 if not candidates:
                     # As a word without analyses in the command esmorph
                     token.pos_, token.lemma_ = "X", token.text.lower()
-                    token.set_morph(None)
+                    token.morph = MorphAnalysis(doc.vocab, "")
                     continue
                 best = candidates[0]
                 token.pos_ = best.pos
@@ -136,7 +136,7 @@ class Component:
             if space(token):
                 token.pos_ = "SPACE"
                 token.lemma_ = token.text
-                token.set_morph(None)
+                token.morph = MorphAnalysis(doc.vocab, "")
         if self.dictionary is not None:
             doc.user_data[SETTINGS] = self.dictionary
         else:
