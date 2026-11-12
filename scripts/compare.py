@@ -24,7 +24,7 @@ Description:
     compared on it. Inflection: whether esMorph, ablaut and verbecc give the gold form of a verb of
     AnCora, PUD and COSER for its gold lemma and features. Speed - tokens per second on AnCora test
     without loading (the best of two runs) and, for the chart, the whole time with import and
-    loading in a new process on texts of different size. Writes Markdown tables, results.json in
+    loading in a new process on texts of different size (the best of three processes). Writes Markdown tables, results.json in
     the data directory (a run of some systems updates only their results) and the chart in SVG.
     The versions of all packages are pinned in compare.py.lock; esMorph is the version from it or a
     wheel from `--with`
@@ -98,6 +98,8 @@ STANZA_MODELS = (
 )
 # Text sizes for the speed chart, tokens
 SIZES = (10, 100, 1_000, 10_000, 50_000)
+# New processes for every point of the chart
+CURVE_RUNS = 3
 # Persons in the order of the conjugation tables
 PERSONS = (
     ("1", "Sing"),
@@ -773,8 +775,9 @@ def evaluate(systems: list[str], data: Path) -> dict:
             # process
             curve = []
             for size in SIZES:
-                run = measure(name, data, size)
-                curve.append((size, run["load"] + run["first"]))
+                # The best of several processes: a single start of a few milliseconds varies by half
+                runs = [measure(name, data, size) for _ in range(CURVE_RUNS)]
+                curve.append((size, min(run["load"] + run["first"] for run in runs)))
             full = measure(name, data, 0)
             speed = full["tokens"] / full["best"]
             result |= {"quality": quality, "speed": speed, "curve": curve}

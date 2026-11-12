@@ -6,8 +6,8 @@ authors:
   - family-names: Shkarin
     given-names: Sergey
     email: kouki.sergey@gmail.com
-version: 0.1.0
-date-released: 2026-11-10
+version: 0.2.0
+date-released: 2026-11-12
 repository-code: "https://github.com/SergeyShk/esMorph"
 url: "https://sergeyshk.github.io/esMorph/"
 license: MIT

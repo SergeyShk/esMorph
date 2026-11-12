@@ -28,7 +28,7 @@
 
 **esMorph** es un analizador morfológico del español: un núcleo en Rust con API para Python. Para una forma de palabra busca los análisis en un diccionario creado a partir de [Wiktionary](https://en.wiktionary.org) - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) -, los ordena por probabilidad y construye las formas de la palabra: conjugación, género y número.
 
-Analiza 1.2 millones de tokens por segundo desde Python, 28 veces más rápido que spaCy, y lematiza tan rápido como simplemma, cuyos lemas aciertan menos en los conjuntos de prueba de UD de AnCora, PUD y COSER. Las categorías, los rasgos y los lemas siguen la guía de UD y las convenciones del treebank AnCora, así que los resultados se pueden comparar con spaCy, Stanza y otras herramientas de UD.
+Analiza 1.7 millones de tokens por segundo desde Python, 39 veces más rápido que spaCy, y lematiza casi tan rápido como simplemma, cuyos lemas aciertan menos en los conjuntos de prueba de UD de AnCora, PUD y COSER. Las categorías, los rasgos y los lemas siguen la guía de UD y las convenciones del treebank AnCora, así que los resultados se pueden comparar con spaCy, Stanza y otras herramientas de UD.
 
 * **[Analizador](https://sergeyshk.github.io/esMorph/es/analyzer/)** - los análisis de una forma de palabra por probabilidad, listas de palabras y lematización, documentos del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), comprobación de una forma de palabra en el diccionario
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/es/analysis/#ud)** - categorías, rasgos y lemas según la guía de UD y las convenciones de AnCora
@@ -178,12 +178,12 @@ El porcentaje de palabras cuyo primer análisis tiene el lema correcto, y la cat
 
 | Sistema | Lema, AnCora | Lema, PUD | Lema, COSER | Todo a la vez, PUD | Tokens por segundo |
 | :------ | :----------- | :-------- | :---------- | :----------------- | :----------------- |
-| esMorph | 97.80 | 97.74 | 94.49 | **87.90** | 1 228 661 |
-| simplemma | 96.94 | 96.96 | 93.50 | - | **2 507 937** |
-| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 83.59 | 44 100 |
-| Stanza | **99.16** | **97.80** | **94.98** | 86.34 | 2694 |
+| esMorph | 97.80 | 97.74 | 94.49 | **87.90** | 1 744 647 |
+| simplemma | 96.94 | 96.96 | 93.50 | - | **2 516 195** |
+| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 83.59 | 44 659 |
+| Stanza | **99.16** | **97.80** | **94.98** | 86.34 | 2649 |
 
-esMorph analiza una palabra sin contexto, mientras que spaCy y Stanza eligen el análisis por la oración y están entrenados en AnCora, así que allí van por delante; en PUD, nuevo para todos, el primer análisis de esMorph acierta más a menudo los rasgos y el lema a la vez. Un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 96-99 % de las palabras. Da la forma de referencia del 99.65, el 93.29 y el 95.55 % de los verbos de AnCora, PUD y COSER, frente al 98.87, el 92.71 y el 93.61 % de ablaut. Un texto corto junto con la carga tarda 3.5 ms frente a 0.35-2.3 s, y cada proceso más con el mismo diccionario añade 3.6 MB de memoria. Medido en un Apple M3 Pro con Python 3.11.
+esMorph analiza una palabra sin contexto, mientras que spaCy y Stanza eligen el análisis por la oración y están entrenados en AnCora, así que allí van por delante; en PUD, nuevo para todos, el primer análisis de esMorph acierta más a menudo los rasgos y el lema a la vez. Un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 96-99 % de las palabras. Da la forma de referencia del 99.65, el 93.29 y el 95.55 % de los verbos de AnCora, PUD y COSER, frente al 98.87, el 92.71 y el 93.61 % de ablaut. Un texto corto junto con la carga tarda 3.2 ms frente a 0.37-1.8 s, y cada proceso más con el mismo diccionario añade 3.5 MB de memoria. Medido en un Apple M3 Pro con Python 3.11.
 
 Más detalles en la [documentación](https://sergeyshk.github.io/esMorph/es/comparison/): todas las métricas, la flexión de los verbos, la gráfica de la velocidad según el tamaño del texto, la memoria y cómo se midió.
 

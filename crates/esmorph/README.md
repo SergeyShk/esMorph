@@ -17,7 +17,7 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 
 ```toml
 [dependencies]
-esmorph = "0.1"
+esmorph = "0.2"
 ```
 
 The dictionary is in the crate [`esmorph-dict-es`](https://crates.io/crates/esmorph-dict-es), used through the feature `bundled` (on by default). Without it the dictionary is read from a file:
