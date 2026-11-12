@@ -46,6 +46,8 @@ pub use builder::Builder;
 pub use dictionary::Fields;
 pub use dictionary::{Analysis, Dictionary, Entry, SENTENCE_CHUNK, Source, sentence_parts};
 pub use error::Error;
+#[doc(hidden)]
+pub use format::other_version;
 pub use ud::UdTag;
 
 /// Examples of the README of the crate are doc tests

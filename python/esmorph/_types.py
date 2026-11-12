@@ -9,6 +9,13 @@
 from typing import Required, TypedDict
 
 
+class ContextInfo(TypedDict, total=False):
+    """Data of the training of the context model of a dictionary"""
+
+    ud_release: str
+    treebanks: dict[str, str]
+
+
 class DictionaryInfo(TypedDict, total=False):
     """Description of a dictionary, as Analyzer.dictionary_info gives it"""
 
@@ -18,5 +25,6 @@ class DictionaryInfo(TypedDict, total=False):
     license: str
     ud_release: str
     treebanks: dict[str, str]
+    context: ContextInfo
     word_forms: Required[int]
     checksum: Required[int]

@@ -202,6 +202,13 @@ def test_document_sentences(morph):
             morph.annotate(SentencesDocument(forms, sentences=sentences))
     with pytest.raises(TypeError, match="sentence has words, and a word has index: no words"):
         morph.annotate(SentencesDocument(forms, sentences=[Word(0)]))
+    # Without context the sentences are not read
+    plain = Document(forms)
+    morph.annotate(plain, context=False)
+    for sentences in [None, 5, [Sentence([Word(1)]), Sentence([Word(0)])]]:
+        document = SentencesDocument(forms, sentences=sentences)  # type: ignore[arg-type]
+        morph.annotate(document, context=False)
+        assert document.columns == plain.columns
 
 
 def test_document_protocol(morph):

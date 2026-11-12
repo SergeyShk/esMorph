@@ -109,7 +109,7 @@ Los paquetes precompilados, la compilación desde el código fuente y el crate d
     *   **crates/esmorph-dict-es** - el crate con el diccionario para `esmorph` en crates.io
     *   **crates/esmorph-py** - el módulo de Python `esmorph._esmorph` sobre PyO3
     *   **python/esmorph** - el paquete de Python
-    *   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario, la comprobación del paquete instalado antes de publicar y la comparación con otras herramientas
-    *   **data** - las tablas de clases cerradas según UD Spanish AnCora y de los símbolos de unidades
+    *   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario, el entrenamiento del modelo de contexto, la comprobación del paquete instalado antes de publicar y la comparación con otras herramientas
+    *   **data** - las tablas de clases cerradas según UD Spanish AnCora y de los símbolos de unidades, los pesos del modelo de contexto
     *   **docs** - documentación de MkDocs en inglés y español
     *   **tests** - pruebas del paquete de Python

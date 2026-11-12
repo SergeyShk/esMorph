@@ -41,7 +41,7 @@ Options:
                              conllu - CoNLL-U: LEMMA, UPOS and FEATS are filled
   -d, --dictionary FILE    esMorph dictionary file (default: the dictionary of the package)
       --no-context         order the analyses of a word by the dictionary, not by the context
-                           model: faster
+                           model: faster; for a list of words that do not make a sentence
   -o, --output FILE        write the result to a file
   -h, --help               show this help and exit
   -V, --version            show the version and exit

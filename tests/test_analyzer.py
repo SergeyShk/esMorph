@@ -846,6 +846,7 @@ def test_dictionary_description(morph):
         "license",
         "ud_release",
         "treebanks",
+        "context",
         "word_forms",
         "checksum",
     }
@@ -855,6 +856,7 @@ def test_dictionary_description(morph):
         "UD_Spanish-AnCora": "CC BY 4.0",
         "UD_Spanish-GSD": "CC BY-SA 4.0",
     }
+    assert info["context"] == {"ud_release": "r2.18", "treebanks": info["treebanks"]}
     assert info["license"] == "CC BY-SA 4.0"
     assert info["snapshot"].endswith(".jsonl.xz") and len(info["sha256"]) == 64
     assert info["word_forms"] > 600_000 and 0 <= info["checksum"] < 2**32
@@ -875,9 +877,31 @@ def test_dictionary_description_of_another_builder(morph, tmp_path):
         path.write_bytes(data[:12] + zlib.crc32(body).to_bytes(4, "little") + body)
         return Analyzer(path)
 
-    meta = b'{"source": 1, "license": ["a"], "sha256": "x", "counts": {"release": 2, "treebanks": {"a": 1}}}'
-    assert set(described(meta).dictionary_info) == {"sha256", "word_forms", "checksum"}
-    assert set(described(b"not json").dictionary_info) == {"word_forms", "checksum"}
+    meta = b'{"source": 1, "license": ["a"], "sha256": "x", "counts": {"release": 2, "treebanks": {"a": 1}}, "context": []}'
+    info = described(meta).dictionary_info
+    assert set(info) == {"sha256", "context", "word_forms", "checksum"}
+    assert info["context"] == {}
+    assert set(described(b"not json").dictionary_info) == {"context", "word_forms", "checksum"}
+
+
+def without_model(data: bytes) -> bytes:
+    """A dictionary file with an empty last section, the context model"""
+    at = 16
+    for _ in range(13):
+        at += 8 + (int.from_bytes(data[at : at + 8], "little") + 7) // 8 * 8
+    body = data[16:at] + bytes(8)
+    return data[:12] + zlib.crc32(body).to_bytes(4, "little") + body
+
+
+def test_dictionary_without_model(morph, tmp_path):
+    path = tmp_path / "es.dict"
+    path.write_bytes(without_model(morph.path.read_bytes()))
+    plain = Analyzer(path, verify=True)
+    assert "context" not in plain.dictionary_info
+    assert plain.analyze("la") == morph.analyze("la")
+    for words in (["la", "casa"], []):
+        with pytest.raises(ValueError, match="no context model"):
+            plain.analyze_sentence(words)
 
 
 def test_dictionary_paths(morph, tmp_path, monkeypatch):
@@ -1219,6 +1243,21 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     gone_path.unlink()
     restored = pickle.loads(data)
     assert restored[0][0].inflect(Number="Sing") == "gato"
+    # And of a file of another version of the format, which no analyzer reads
+    older_path = tmp_path / "older.dict"
+    older_path.write_bytes(morph.path.read_bytes())
+    data = pickle.dumps(Analyzer(older_path).analyze_many(["gatos"]))
+    gc.collect()
+    replaced = tmp_path / "replaced.dict"
+    content = bytearray(morph.path.read_bytes())
+    content[8:12] = (4).to_bytes(4, "little")
+    replaced.write_bytes(content)
+    replaced.replace(older_path)
+    with pytest.raises(ValueError, match="format version 4"):
+        Analyzer(older_path)
+    restored = pickle.loads(data)[0][0]
+    assert restored.__reduce__()[1][7].__reduce__()[1] == (None, False)
+    assert restored.inflect(Number="Sing") == "gato"
 
 
 THREADS = """

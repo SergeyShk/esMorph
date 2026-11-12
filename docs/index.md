@@ -109,7 +109,7 @@ Prebuilt wheels, building from source and the Rust crate are described on the [I
     *   **crates/esmorph-dict-es** - the crate with the dictionary for `esmorph` on crates.io
     *   **crates/esmorph-py** - the Python module `esmorph._esmorph` on PyO3
     *   **python/esmorph** - the Python package
-    *   **scripts** - exporting Wiktionary and the counts of the treebanks, the conventions of the dictionary, checking the installed package before publishing and the comparison with other tools
-    *   **data** - the tables of closed classes after UD Spanish AnCora and of the symbols of units
+    *   **scripts** - exporting Wiktionary and the counts of the treebanks, the conventions of the dictionary, training the context model, checking the installed package before publishing and the comparison with other tools
+    *   **data** - the tables of closed classes after UD Spanish AnCora and of the symbols of units, the weights of the context model
     *   **docs** - MkDocs documentation in English and Spanish
     *   **tests** - tests of the Python package

@@ -214,6 +214,12 @@ pub(crate) fn write(sections: &Sections) -> Vec<u8> {
     out
 }
 
+/// Whether `data` starts as a dictionary of esMorph of another version of the format
+pub fn other_version(data: &[u8]) -> bool {
+    data.get(..MAGIC.len()) == Some(MAGIC.as_slice())
+        && (data.get(8..12)).is_some_and(|version| version != VERSION.to_le_bytes())
+}
+
 /// Checks the signature and the format version at the start of the file
 fn check_header(data: &[u8]) -> Result<(), Error> {
     if data.get(..MAGIC.len()) != Some(MAGIC.as_slice()) {

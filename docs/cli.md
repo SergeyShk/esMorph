@@ -21,7 +21,7 @@ decir yo el verdad de el caso .
 | `-f`, `--format` | `lemmas` | [Output format](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Input](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | the package dictionary | An esMorph dictionary file, checked whole as with [`verify=True`](analyzer.md#parameters) |
-| `--no-context` | | Order the analyses of a word as [`analyze`](analyzer.md#analyze) does, without the context model: faster; for a dictionary without a model |
+| `--no-context` | | Order the analyses of a word as [`analyze`](analyzer.md#analyze) does, without the context model: faster; for a list of words and a dictionary without a model |
 | `-o`, `--output` | the standard output | The result file; `-` is the standard output |
 | `-h`, `--help` | | Show the help |
 | `-V`, `--version` | | Show the version |
@@ -33,7 +33,7 @@ In Windows PowerShell 5.1 the `>` redirection and a pipeline (`Get-Content text.
 ## Input { #input }
 
 - `text` - text: a blank line ends a paragraph. Tokens, their words and sentences are found by the segmenter [anySeg](https://sergeyshk.github.io/anySeg/) following the conventions of Universal Dependencies: `del` and `al` are two words, and so are an infinitive or a gerund with clitics (`dárselo`) and frequent imperatives (`dime`). A token that the segmenter leaves as one word gets the analysis of the whole token: `devuélvenos` is the imperative of `devolver`. A paragraph longer than 256 KiB is analyzed in pieces that end at a sentence boundary, so memory does not grow with the length of the input; its sentences may then differ slightly from those of the whole text.
-- `tokens` - one token per line, a blank line separates sentences; separators around the token and everything after a tab are ignored, so a table with the token in the first column works too. A token is one word. A sentence without a blank line is closed after 8,192 tokens: for a list of words the `tsv` format gives a line per word.
+- `tokens` - one token per line, a blank line separates sentences; separators around the token and everything after a tab are ignored, so a table with the token in the first column works too. A token is one word. A sentence without a blank line is closed after 8,192 tokens. The words around a token change its analysis, so a list of words that do not make a sentence is analyzed with `--no-context` or with a blank line after every word; the `tsv` format gives a line per word.
 - `conllu` - [CoNLL-U](https://universaldependencies.org/format.html): the LEMMA, UPOS and FEATS columns are filled, while the other columns, comments, multiword tokens and empty nodes stay as they are. An invalid sentence is written as it is in the `conllu` format and left out of the others, its line goes to the error message, and the rest of the file is analyzed.
 
 ``` bash
@@ -79,7 +79,7 @@ echo "Dímelo del mar." | esmorph -f conllu
 
 ### tsv
 
-The word, lemma, part of speech, features and probability of the analysis separated by tabs, without a header; a blank line separates sentences. The probability of a word of a multiword token is its share among the analyses that fit the token: the verb `di` of `dime` among the analyses with these words, the clitic `la` of `verla` among those of a pronoun.
+The word, lemma, part of speech, features and probability of the analysis separated by tabs, without a header (the probability is the score of the context model in the sentence, as [`analyze_sentence`](analyzer.md#analyze_sentence) gives it, and with `--no-context` as `analyze` gives it); a blank line separates sentences. The probability of a word of a multiword token is its share among the analyses that fit the token: the verb `di` of `dime` among the analyses with these words, the clitic `la` of `verla` among those of a pronoun.
 
 ``` bash
 echo "Dime la verdad." | esmorph -f tsv
@@ -88,28 +88,36 @@ echo "Dime la verdad." | esmorph -f tsv
 ```
 Di	decir	VERB	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	1
 me	yo	PRON	Case=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs	0.45766
-la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.9774450451099099
-verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.999997
+la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.9989243733311355
+verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.999981820943117
 .	.	PUNCT	PunctType=Peri	1
 ```
 
 ### jsonl
 
-[JSON Lines](https://jsonlines.org/): a sentence per line - the text (except for the `tokens` input) and the tokens with all their analyses, as [`analyze`](analyzer.md#analyze) gives them: the word, lemma, part of speech, features, probability, the words of the token and the [source of the analysis](analysis.md). Below is the line of a sentence formatted for reading.
+[JSON Lines](https://jsonlines.org/): a sentence per line - the text (except for the `tokens` input) and the tokens with all their analyses, as [`analyze_sentence`](analyzer.md#analyze_sentence) orders them in the sentence, and with `--no-context` as [`analyze`](analyzer.md#analyze) gives them: the word, lemma, part of speech, features, probability, the words of the token and the [source of the analysis](analysis.md). Below is the line of a sentence formatted for reading.
 
 ``` bash
-echo "Dime." | esmorph -f jsonl
+echo "Vino ayer." | esmorph -f jsonl
 ```
 
 ``` json
 {
-  "text": "Dime.",
+  "text": "Vino ayer.",
   "tokens": [
-    {"word": "Dime", "analyses": [
-      {"word": "Dime", "lemma": "Dime", "pos": "PROPN", "feats": {},
-       "prob": 0.9375, "words": ["Dime"], "source": "rule"},
-      {"word": "dime", "lemma": "decir", "pos": "VERB", "feats": {"Mood": "Imp", "Number": "Sing", "Person": "2", "VerbForm": "Fin"},
-       "prob": 0.0625, "words": ["di", "me"], "source": "clitics"}
+    {"word": "Vino", "analyses": [
+      {"word": "vino", "lemma": "venir", "pos": "VERB", "feats": {"Mood": "Ind", "Number": "Sing", "Person": "3", "Tense": "Past", "VerbForm": "Fin"},
+       "prob": 0.8093463865008943, "words": ["vino"], "source": "dictionary"},
+      {"word": "vino", "lemma": "vino", "pos": "NOUN", "feats": {"Gender": "Masc", "Number": "Sing"},
+       "prob": 0.16867937111012504, "words": ["vino"], "source": "dictionary"},
+      {"word": "Vino", "lemma": "Vino", "pos": "PROPN", "feats": {},
+       "prob": 0.021974242388980627, "words": ["Vino"], "source": "rule"}
+    ]},
+    {"word": "ayer", "analyses": [
+      {"word": "ayer", "lemma": "ayer", "pos": "ADV", "feats": {},
+       "prob": 0.9995206355999463, "words": ["ayer"], "source": "dictionary"},
+      {"word": "ayer", "lemma": "ayer", "pos": "NOUN", "feats": {"Gender": "Masc", "Number": "Sing"},
+       "prob": 0.0004793644000537769, "words": ["ayer"], "source": "dictionary"}
     ]},
     {"word": ".", "analyses": [
       {"word": ".", "lemma": ".", "pos": "PUNCT", "feats": {"PunctType": "Peri"},
@@ -125,7 +133,7 @@ echo "Dime." | esmorph -f jsonl
 | :--- | :--- |
 | 0 | Success, including when the output is closed before the end (`esmorph text.txt \| head`) |
 | 1 | An input file is missing, cannot be read or is not in UTF-8, a line is not in UTF-8 (it is analyzed with U+FFFD), an invalid CoNLL-U sentence; the rest is still analyzed |
-| 1 | The dictionary cannot be read or is damaged, the output file cannot be created, the output file or the standard output is an input file or the dictionary; nothing is analyzed |
+| 1 | The dictionary cannot be read or is damaged, it has no context model and `--no-context` is not given, the output file cannot be created, the output file or the standard output is an input file or the dictionary; nothing is analyzed |
 | 1 | A write error, a closed standard output (the command installed with cargo writes it to /dev/null and ends with 0); the analysis stops |
 | 2 | Invalid options |
 
