@@ -1,6 +1,8 @@
 //! Spanish morphological analyzer: the analyses of a word form (lemma, part of speech and
 //! Universal Dependencies features) and the forms of its lexeme. Word forms are kept in a finite
-//! state automaton, and analyses and forms are restored through paradigms
+//! state automaton, and analyses and forms are restored through paradigms; a small context model
+//! of the dictionary orders the analyses of the tokens of a sentence
+//! (`Dictionary::analyze_sentence`)
 //!
 //! ```
 //! # #[cfg(feature = "bundled")] {
@@ -14,8 +16,9 @@
 //! ```
 //!
 //! Features: `bundled` (on by default) - the dictionary of esMorph from the crate
-//! `esmorph-dict-es`, `anyseg` - the analysis of a document of the anySeg segmenter
-//! (`Dictionary::annotate`, the crate is `esmorph::anyseg`), `cli` - the command `esmorph`
+//! `esmorph-dict-es`, `anyseg` - the analysis of a document of the anySeg segmenter in context
+//! (`Dictionary::annotate`, without it `Dictionary::annotate_without_context`; the crate is
+//! `esmorph::anyseg`), `cli` - the command `esmorph`
 //! (`cargo install esmorph --features cli`), `build` - building dictionaries (`Builder`)
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -41,7 +44,7 @@ pub use anyseg;
 pub use builder::Builder;
 #[doc(hidden)]
 pub use dictionary::Fields;
-pub use dictionary::{Analysis, Dictionary, Entry, SENTENCE_CHUNK, Source};
+pub use dictionary::{Analysis, Dictionary, Entry, SENTENCE_CHUNK, Source, sentence_parts};
 pub use error::Error;
 pub use ud::UdTag;
 

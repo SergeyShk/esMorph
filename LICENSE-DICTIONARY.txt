@@ -9,7 +9,9 @@ The dictionary of esMorph (es.dict) is built from:
   release 2.18, licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0);
 - the counts of parts of speech from the training part of UD Spanish GSD
   (https://github.com/UniversalDependencies/UD_Spanish-GSD), release 2.18, licensed under the Creative
-  Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0).
+  Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0);
+- the context model (data/es-context.bin), trained on the training parts of UD Spanish AnCora and
+  UD Spanish GSD, release 2.18, and chosen by their development parts.
 
 The esMorph dictionary is an adaptation of these data and is distributed under the Creative Commons
 Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0):

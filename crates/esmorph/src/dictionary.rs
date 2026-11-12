@@ -388,15 +388,15 @@ impl Dictionary {
         &self.meta
     }
 
-    /// Checks every node of the automata as a lookup reads it, for a dictionary of a source that is
-    /// not trusted: loading checks the checksum and the structure of the tables, while a crafted
-    /// automaton with a right checksum loads and makes the analysis panic. Takes tens of
-    /// milliseconds. A panic of the walk becomes an error, so it needs the default `panic = "unwind"`;
-    /// the panic hook may still print its message
+    /// Checks every node of the automata as a lookup reads it and reads the context model, for a
+    /// dictionary of a source that is not trusted: loading checks the checksum and the structure of
+    /// the tables, while a crafted automaton with a right checksum loads and makes the analysis
+    /// panic. Takes tens of milliseconds. A panic of the walk becomes an error, so it needs the
+    /// default `panic = "unwind"`; the panic hook may still print its message
     ///
     /// # Errors
     ///
-    /// [`Error::Format`] if an automaton is damaged
+    /// [`Error::Format`] if an automaton or the context model is damaged
     pub fn verify(&self) -> Result<(), Error> {
         for (name, map) in [("word forms", &self.words), ("endings", &self.guesses)] {
             let walked =
@@ -404,6 +404,9 @@ impl Dictionary {
             if !matches!(walked, Ok(true)) {
                 return Err(Error::Format(format!("the automaton of {name} is damaged")));
             }
+        }
+        if self.has_context() {
+            self.context()?;
         }
         Ok(())
     }
@@ -693,7 +696,7 @@ impl Dictionary {
     /// of `analyze` ordered by the context model of the dictionary, the probability is its score.
     /// The tokens are those of one sentence in order, as `analyze` takes them (`del`, `dámelo`);
     /// a sentence of one token is analyzed as `analyze`, one longer than `SENTENCE_CHUNK` tokens
-    /// by parts of `SENTENCE_CHUNK`. The model is read on the first call
+    /// by parts of about `SENTENCE_CHUNK` ([`sentence_parts`]). The model is read on the first call
     ///
     /// ```
     /// # #[cfg(feature = "bundled")] {
@@ -716,8 +719,9 @@ impl Dictionary {
         self.analyze_sentence_part(words, true)
     }
 
-    /// `analyze_sentence` of a part of a sentence, `start` - whether the part starts it: the parts
-    /// of a sentence of a multiple of `SENTENCE_CHUNK` tokens each get the analyses of the whole
+    /// `analyze_sentence` of a part of a sentence, `start` - whether the part starts it: the pieces
+    /// of a sentence by [`sentence_parts`] of a multiple of `SENTENCE_CHUNK` get the analyses of
+    /// the whole
     #[doc(hidden)]
     pub fn analyze_sentence_part<S: AsRef<str>>(
         &self,
@@ -726,7 +730,8 @@ impl Dictionary {
     ) -> Result<Vec<Vec<Analysis>>, Error> {
         let context = self.context()?;
         let mut sentence = Vec::with_capacity(words.len());
-        for (number, chunk) in words.chunks(SENTENCE_CHUNK).enumerate() {
+        for (number, range) in sentence_parts(words.len(), SENTENCE_CHUNK).enumerate() {
+            let chunk = &words[range];
             let analyses: Vec<Vec<Analysis>> = chunk
                 .iter()
                 .map(|word| self.analyze(word.as_ref()))
@@ -1701,6 +1706,19 @@ fn walk(fst: &fst::raw::Fst<Slice>) -> bool {
 /// sentence by parts, so its memory does not grow with the input
 pub const SENTENCE_CHUNK: usize = 256;
 
+/// Parts of a sentence of `len` tokens of `size` tokens each, except a tail of one token: without
+/// neighbors the model chooses worse, so the last two parts are of `size - 1` and 2 tokens. The
+/// parts of every piece by `sentence_parts` of a multiple of `SENTENCE_CHUNK` are those of the
+/// whole sentence
+#[doc(hidden)]
+pub fn sentence_parts(len: usize, size: usize) -> impl Iterator<Item = Range<usize>> {
+    debug_assert!(size > 2);
+    let count = len.div_ceil(size);
+    let last = (count.max(1) - 1) * size;
+    let bound = move |at: usize| at - usize::from(at == last && len > 1 && len % size == 1);
+    (0..count).map(move |part| bound(part * size)..bound(((part + 1) * size).min(len)))
+}
+
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
 /// joins its letter, and a hyphen of Unicode is the hyphen-minus. Tokens of a text keep them
 fn normalized(word: &str) -> Cow<'_, str> {
@@ -1851,6 +1869,27 @@ pub(crate) mod tests {
             .place("casa", "NOUN", "casas", plural, 1, Some(0.25))
             .unwrap();
         Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn parts_of_sentences() {
+        let parts = |len| sentence_parts(len, SENTENCE_CHUNK).collect::<Vec<_>>();
+        assert!(parts(0).is_empty());
+        assert_eq!(parts(1), vec![0..1]);
+        assert_eq!(parts(256), vec![0..256]);
+        assert_eq!(parts(257), [0..255, 255..257]);
+        assert_eq!(parts(258), [0..256, 256..258]);
+        assert_eq!(parts(513), [0..256, 256..511, 511..513]);
+        // Pieces of a multiple of the part by the same rule give the parts of the whole
+        for len in [257, 8191, 8193, 8449, 16385, 20000] {
+            let pieces: Vec<Range<usize>> = sentence_parts(len, 32 * SENTENCE_CHUNK)
+                .flat_map(|piece| {
+                    sentence_parts(piece.len(), SENTENCE_CHUNK)
+                        .map(move |part| piece.start + part.start..piece.start + part.end)
+                })
+                .collect();
+            assert_eq!(pieces, parts(len), "{len}");
+        }
     }
 
     #[test]

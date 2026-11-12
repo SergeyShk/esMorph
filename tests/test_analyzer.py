@@ -651,6 +651,35 @@ def test_analyze_sentence(morph):
     assert probabilities(long[:256]) != probabilities(long[4096:4352])
 
 
+def test_model_as_trained(morph):
+    # Sentences of AnCora dev with the order and the probabilities of the quantized model of the
+    # training: the analyzer computes the input of the model and its layers as the training does
+    sentences: dict[int, dict[int, tuple[str, list]]] = {}
+    for line in (ROOT / "data" / "es-context-check.tsv").read_text(encoding="utf-8").splitlines():
+        sentence, token, form, *fields = line.split("\t")
+        found = sentences.setdefault(int(sentence), {}).setdefault(int(token), (form, []))[1]
+        if fields:
+            pos, lemma, feats, words, source, prob = fields
+            found.append(((pos, lemma, feats, int(words), source), float(prob)))
+    assert len(sentences) >= 20
+    for tokens in sentences.values():
+        forms = [form for form, _ in tokens.values()]
+        analyses = morph.analyze_sentence(forms)
+        for (form, expected), found in zip(tokens.values(), analyses, strict=True):
+            probs = dict(expected)
+            tags = ["|".join(f"{k}={v}" for k, v in sorted(a.feats.items())) or "_" for a in found]
+            keys = [
+                (a.pos, a.lemma, tag, len(a.words), a.source)
+                for a, tag in zip(found, tags, strict=True)
+            ]
+            assert sorted(keys) == sorted(probs), form
+            for key, analysis in zip(keys, found, strict=True):
+                assert abs(analysis.prob - probs[key]) < 1e-4, (form, key)
+            # The order of the training, except for probabilities that are almost equal
+            ordered = [probs[key] for key in keys]
+            assert all(a >= b - 1e-4 for a, b in itertools.pairwise(ordered)), form
+
+
 def test_lemmatize(morph):
     assert morph.lemmatize(["CAMIONES", "Qzxw", "qzxw", "10.000"]) == [
         "camión",

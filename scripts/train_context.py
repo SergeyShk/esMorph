@@ -4,6 +4,15 @@
 #     "numpy==2.4.6",
 #     "torch==2.15.0",
 # ]
+#
+# # The model is trained on the CPU: on Linux torch without CUDA
+# [[tool.uv.index]]
+# name = "pytorch-cpu"
+# url = "https://download.pytorch.org/whl/cpu"
+# explicit = true
+#
+# [tool.uv.sources]
+# torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 # ///
 """
 Training of the context model: the choice of the analysis of a token by its sentence
@@ -22,9 +31,12 @@ Description:
     endings, tags of its analyses) that scores every analysis by a dot product with the vector of
     the token. The epoch is chosen by "all" on the development part of AnCora, scored by gold words
     as in compare.py. The weights are quantized to int8 by rows and written to `--output` (`write`
-    describes the format); the accuracy of the quantized model is printed. Test parts are not
-    read. On the CPU a seed gives the same file. The versions of the packages are pinned in
-    train_context.py.lock; esMorph is the build of the repository (`--with-editable .`)
+    describes the format); the accuracy of the quantized model is printed, and the analyses of
+    sentences of AnCora dev in the order of the quantized model with its probabilities are written
+    to `--check` for the tests of the analyzer. Test parts are not read. On the CPU a seed gives
+    the same file with the same number of threads (`--threads`), platform and build of torch. The
+    versions of the packages are pinned in train_context.py.lock; esMorph is the build of the
+    repository (`--with-editable .`)
 
     A dictionary with new parts of speech or features needs a new model: the dictionary to train
     with is built without the model (`esmorph-build` with three arguments), and then the
@@ -35,6 +47,7 @@ Example:
 """
 
 import argparse
+import hashlib
 import json
 import math
 import struct
@@ -42,7 +55,7 @@ import time
 import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from itertools import chain
+from itertools import chain, pairwise
 from pathlib import Path
 
 import numpy as np
@@ -96,6 +109,8 @@ METRICS = {
 INT8 = {"word", "suffix", "tag_in", "tag_out", "input.weight", "query.weight"}
 MAGIC = b"ESMCTX\0\0"
 FORMAT = 1
+# Sentences of AnCora dev in the file `--check`: the first ones and the first that start with a sign
+CHECK_SENTENCES, CHECK_SIGNED = 20, 5
 
 # Analysis for the model: part of speech, lemma, features, number of words, source
 Candidate = tuple[str, str, dict[str, str], int, str]
@@ -287,36 +302,68 @@ def suffixes(word: str) -> list[str]:
     return [f"{n}{marked[-n:]}" for n in range(1, SUFFIX_MAX + 1)]
 
 
-def shape(token: str, first: bool) -> int:
+def kind(token: str) -> int:
     """
-    Shape of a token: kind (no letters or digits, all ASCII digits, some digits, lower case, upper
-    case, a capital letter, mixed) x first in the sentence x hyphen x dot
+    Kind of the letters and digits of a token: no letters or digits, all ASCII digits, some
+    digits, lower case, upper case, a capital letter first, mixed
 
     Arguments:
         token (str): Token
-        first (bool): The token is the first in its sentence
 
     Returns:
-        int: Number of the shape, 0-63
+        int: Number of the kind, 0-6
     """
     digits = sum("0" <= ch <= "9" for ch in token)
     letters = [ch for ch in token if ch.isalpha()]
     if not digits and not letters:
-        kind = 0
-    elif digits == len(token):
-        kind = 1
-    elif digits:
-        kind = 2
-    elif not any(ch.isupper() for ch in letters):
-        kind = 3
-    elif not any(ch.islower() for ch in letters) and len(letters) > 1:
-        kind = 4
-    elif letters[0].isupper() and not any(ch.isupper() for ch in letters[1:]):
-        kind = 5
-    else:
-        kind = 6
+        return 0
+    if digits == len(token):
+        return 1
+    if digits:
+        return 2
+    if not any(ch.isupper() for ch in letters):
+        return 3
+    if not any(ch.islower() for ch in letters) and len(letters) > 1:
+        return 4
+    if letters[0].isupper() and not any(ch.isupper() for ch in letters[1:]):
+        return 5
+    return 6
+
+
+def shape(token: str, first: bool) -> int:
+    """
+    Shape of a token: kind (`kind`) x start of the sentence x hyphen x dot
+
+    Arguments:
+        token (str): Token
+        first (bool): The token starts its sentence (`starts`)
+
+    Returns:
+        int: Number of the shape, 0-63
+    """
     dot = "." in token and len(token) > 1
-    return kind * 8 + 4 * first + 2 * ("-" in token) + dot
+    return kind(token) * 8 + 4 * first + 2 * ("-" in token) + dot
+
+
+def starts(forms: list[str], sent_off: np.ndarray) -> np.ndarray:
+    """
+    Tokens that start their sentences: the first token of a sentence with a letter or a digit,
+    after a dash of a dialogue, a quote or a bracket; a sentence without letters and digits has
+    none
+
+    Arguments:
+        forms (list[str]): Tokens of the sentences
+        sent_off (np.ndarray): Offsets of the sentences in the tokens and their end
+
+    Returns:
+        np.ndarray: Whether a token starts its sentence
+    """
+    first = np.zeros(len(forms), dtype=bool)
+    for start, end in pairwise(sent_off):
+        lead = next((i for i in range(start, end) if kind(forms[i])), None)
+        if lead is not None:
+            first[lead] = True
+    return first
 
 
 def tag_names(pos: str, feats: dict[str, str], words: int) -> tuple[list[str], str]:
@@ -504,8 +551,7 @@ class Vocabulary:
 def featurize(part: Part, vocab: Vocabulary) -> dict[str, np.ndarray]:
     """Features of the tokens and analyses of a part: the analyses of token `i` are rows
     `off[i]:off[i + 1]`"""
-    first = np.zeros(len(part.forms), dtype=bool)
-    first[part.sent_off[:-1]] = True
+    first = starts(part.forms, part.sent_off)
     words = [normal(form) for form in part.forms]
     rows = [c for found in part.candidates for c in found]
     return {
@@ -870,6 +916,45 @@ def write(path: Path, vocab: Vocabulary, weights: dict, config: list[int], sourc
     path.write_bytes(MAGIC + struct.pack("<II", FORMAT, len(entries)) + b"".join(entries))
 
 
+def write_check(model: Model, part: Part, f: dict[str, np.ndarray], path: Path) -> None:
+    """
+    Analyses of sentences of a development part in the order of the model with its probabilities,
+    a line per analysis: the number of the sentence and of the token, the token, the part of
+    speech, the lemma, the features, the number of words, the source and the probability; a token
+    without analyses is a line of its first three fields. The sentences are of 2-255 tokens, which
+    the analyzer gives the model whole
+
+    Arguments:
+        model (Model): Model
+        part (Part): Development part
+        f (dict[str, np.ndarray]): Its features (`featurize`)
+        path (Path): File
+    """
+    lengths = np.diff(part.sent_off)
+    usable = [s for s, n in enumerate(lengths) if 2 <= n <= 255]
+    signed = [s for s in usable if not kind(part.forms[part.sent_off[s]])]
+    chosen = np.array(sorted({*usable[:CHECK_SENTENCES], *signed[:CHECK_SIGNED]}))
+    model.eval()
+    with torch.no_grad():
+        x, tok, _ = batch(f, chosen, torch.device("cpu"))
+        probs = torch.softmax(model.cpu()(x), -1).numpy()
+    lines = []
+    for b, n in enumerate(lengths[chosen]):
+        for i in range(n):
+            t = tok[b, i]
+            found = part.candidates[t]
+            if not found:
+                lines.append(f"{b}\t{i}\t{part.forms[t]}")
+            # Equal probabilities keep the order of the dictionary, as in the analyzer
+            for k in sorted(range(len(found)), key=lambda k: -probs[b, i, k]):
+                pos, lemma, feats, words, source = found[k]
+                tag = "|".join(f"{name}={value}" for name, value in sorted(feats.items())) or "_"
+                fields = (b, i, part.forms[t], pos, lemma, tag, words, source)
+                lines.append("\t".join(map(str, fields)) + f"\t{probs[b, i, k]:.6f}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def fetch(data: Path) -> dict[str, tuple[Path, str]]:
     """Training and development parts of the treebanks, downloaded into the data directory: file
     name - path and SHA-256"""
@@ -895,6 +980,12 @@ def main() -> None:
     parser.add_argument(
         "--output", type=Path, default=Path("data/es-context.bin"), help="weight file"
     )
+    parser.add_argument(
+        "--check",
+        type=Path,
+        default=Path("data/es-context-check.tsv"),
+        help="analyses of sentences of AnCora dev by the model, for the tests",
+    )
     parser.add_argument("--d", type=int, default=128, help="size of the token vector")
     parser.add_argument("--layers", type=int, default=1, help="BiLSTM layers")
     parser.add_argument("--dw", type=int, default=32, help="size of a word vector")
@@ -912,8 +1003,12 @@ def main() -> None:
     parser.add_argument(
         "--device", default="cpu", help="torch device; only the CPU gives the same file each run"
     )
+    parser.add_argument(
+        "--threads", type=int, default=4, help="threads of torch; others give another file"
+    )
     args = parser.parse_args()
     torch.manual_seed(args.seed)
+    torch.set_num_threads(args.threads)
     device = torch.device(args.device)
     # Gradients summed by index (index_put_) are in a fixed order only so: a seed gives one file
     if device.type == "cpu":
@@ -956,11 +1051,16 @@ def main() -> None:
     weights = quantize_model(model, tensors(model, args.layers))
     int8_scores = evaluate(model, dev, device)
     print("int8: " + report(int8_scores))
+    write_check(model, *dev["AnCora"], args.check)
+    # The analyses of the training tokens identify the dictionary of the training, unlike its file
+    candidates = hashlib.sha256()
+    for key in ("off", "set", "source"):
+        candidates.update(np.ascontiguousarray(f[key], dtype="<i8").tobytes())
     sources = {
         "release": RELEASE,
         "treebanks": LICENSES,
         "files": {name: digest for name, (_, digest) in files.items()},
-        "esmorph": esmorph.__version__,
+        "candidates": candidates.hexdigest(),
         "seed": args.seed,
         "epochs": args.epochs,
         "epoch": epoch,
