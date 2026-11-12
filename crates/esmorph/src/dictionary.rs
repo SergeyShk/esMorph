@@ -11,7 +11,7 @@ use crate::alphabet::{Alphabet, Key};
 use crate::clitics;
 use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
-    Storage, Strings, UD_BITS, VARIANT, WordValue,
+    Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS, WordValue, unpack_spelling,
 };
 use crate::rules::{
     self, CAPS_NAME, CLITICS_NAME, INITIAL_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule,
@@ -210,18 +210,43 @@ impl std::fmt::Debug for Dictionary {
 /// among the spellings
 enum Spellings<'a> {
     Single { marks: u64, records: u32 },
-    Many(&'a [[u32; 4]]),
+    Many(SpellingList<'a>),
+}
+
+/// Spellings of a key in the section `variants`: two numbers each or, if wide, four
+#[derive(Clone, Copy)]
+struct SpellingList<'a> {
+    numbers: &'a [u32],
+    wide: bool,
+}
+
+impl SpellingList<'_> {
+    fn len(&self) -> usize {
+        self.numbers.len() / if self.wide { 4 } else { 2 }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (u64, u32, u32)> {
+        let (narrow, wide) = if self.wide {
+            (&[][..], self.numbers.as_chunks::<4>().0)
+        } else {
+            (self.numbers.as_chunks::<2>().0, &[][..])
+        };
+        narrow
+            .iter()
+            .map(|&spelling| unpack_spelling(spelling))
+            .chain(wide.iter().map(|&[low, high, offset, weight]| {
+                (u64::from(low) | u64::from(high) << 32, offset, weight)
+            }))
+    }
 }
 
 impl Spellings<'_> {
     fn iter(&self) -> impl Iterator<Item = (u64, u32, u32)> {
         let (single, many) = match self {
-            Spellings::Single { marks, records } => (Some((*marks, *records, 1)), &[][..]),
-            Spellings::Many(variants) => (None, *variants),
+            Spellings::Single { marks, records } => (Some((*marks, *records, 1)), None),
+            Spellings::Many(list) => (None, Some(list.iter())),
         };
-        single
-            .into_iter()
-            .chain(many.iter().map(|&spelling| unpack(spelling)))
+        single.into_iter().chain(many.into_iter().flatten())
     }
 
     /// The spelling of a query: the exact one and, if there is none, all spellings of the key.
@@ -231,10 +256,6 @@ impl Spellings<'_> {
         let exact = self.iter().any(|(own, ..)| own == marks);
         self.iter().filter(move |&(own, ..)| !exact || own == marks)
     }
-}
-
-fn unpack([low, high, offset, weight]: [u32; 4]) -> (u64, u32, u32) {
-    (u64::from(low) | u64::from(high) << 32, offset, weight)
 }
 
 impl Dictionary {
@@ -1279,11 +1300,11 @@ impl Dictionary {
             let Some((variants, after)) = spelling_list(rest) else {
                 return invalid("a list of spellings is truncated");
             };
-            if variants.is_empty()
+            if variants.len() == 0
                 || variants.len() > MAX_SPELLINGS
                 || variants
                     .iter()
-                    .any(|&[_, _, offset, weight]| offset as usize >= records || weight == 0)
+                    .any(|(_, offset, weight)| offset as usize >= records || weight == 0)
             {
                 return invalid("a wrong list of spellings");
             }
@@ -1459,13 +1480,14 @@ fn analyses_at(lists: &[u32], offset: u32) -> Option<(&[u32], &[u32])> {
 }
 
 /// List of spellings "length, four numbers of each" at the start of `lists` and the rest after it
-fn spelling_list(lists: &[u32]) -> Option<(&[[u32; 4]], &[u32])> {
+fn spelling_list(lists: &[u32]) -> Option<(SpellingList<'_>, &[u32])> {
     let (&count, rest) = lists.split_first()?;
-    let count = usize::try_from(count)
+    let wide = count & WIDE_SPELLINGS != 0;
+    let count = usize::try_from(count & !WIDE_SPELLINGS)
         .ok()
         .filter(|&count| count <= MAX_LIST)?;
-    let (list, rest) = rest.split_at_checked(4 * count)?;
-    Some((list.as_chunks::<4>().0, rest))
+    let (numbers, rest) = rest.split_at_checked(if wide { 4 } else { 2 } * count)?;
+    Some((SpellingList { numbers, wide }, rest))
 }
 
 /// Automaton of a section of a dictionary. A damaged automaton loads without errors but panics when

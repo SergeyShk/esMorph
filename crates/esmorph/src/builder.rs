@@ -7,7 +7,7 @@ use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE,
-    Sections, VARIANT, WordValue,
+    Sections, VARIANT, WIDE_SPELLINGS, WordValue, pack_spelling,
 };
 
 /// Parts of speech whose forms guess unknown words: the closed classes are in the dictionary
@@ -432,9 +432,18 @@ impl Builder {
                 None => {
                     let offset = u32::try_from(variants.len())
                         .map_err(|_| Error::Build("too many spellings".into()))?;
-                    variants.push(spellings.len() as u32);
-                    for &(marks, records, weight) in &spellings {
-                        variants.extend([marks as u32, (marks >> 32) as u32, records, weight]);
+                    let narrow: Option<Vec<[u32; 2]>> = spellings
+                        .iter()
+                        .map(|&(marks, records, weight)| pack_spelling(marks, records, weight))
+                        .collect();
+                    if let Some(narrow) = narrow {
+                        variants.push(spellings.len() as u32);
+                        variants.extend(narrow.into_iter().flatten());
+                    } else {
+                        variants.push(spellings.len() as u32 | WIDE_SPELLINGS);
+                        for &(marks, records, weight) in &spellings {
+                            variants.extend([marks as u32, (marks >> 32) as u32, records, weight]);
+                        }
                     }
                     WordValue::Many(offset).pack().unwrap_or_default()
                 }
