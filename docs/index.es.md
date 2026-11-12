@@ -15,7 +15,7 @@
 
     ---
 
-    Lema, categoría y rasgos de UD, probabilidad del análisis; listas de palabras, lematización y documentos del segmentador anySeg sin el GIL
+    Lema, categoría y rasgos de UD, probabilidad del análisis; el análisis de una oración en contexto, listas de palabras, lematización y documentos del segmentador anySeg sin el GIL
 
     [:octicons-arrow-right-24: Analizador](analyzer.md)
 
@@ -42,6 +42,14 @@
     El comando `esmorph`: lemas, CoNLL-U, TSV o JSON Lines de archivos de texto, tokens o CoNLL-U
 
     [:octicons-arrow-right-24: El comando esmorph](cli.md)
+
+-   :material-puzzle-outline:{ .lg .middle } __spaCy__
+
+    ---
+
+    El componente `esmorph`: el análisis en contexto en lugar del etiquetador, el morfologizador y el lematizador de una cadena
+
+    [:octicons-arrow-right-24: spaCy](spacy.md)
 
 -   :material-speedometer:{ .lg .middle } __Comparación__
 

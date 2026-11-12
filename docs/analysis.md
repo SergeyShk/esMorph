@@ -31,7 +31,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 | `lemma` | `str` | The lemma |
 | `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
 | `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
-| `prob` | `float` | Share of the analysis among the analyses of the word; it sums to 1 over all of them |
+| `prob` | `float` | Share of the analysis among the analyses of the word; it sums to 1 over all of them. From [`analyze_sentence`](analyzer.md#analyze_sentence) - the score of the context model in the sentence |
 | `words` | `tuple[str, ...]` | Words of the token: a verb and its clitics, the words of a contraction (`del`, `al`, the older `desta`), or the word itself; the analysis describes the first of them |
 | `source` | `str` | Where the analysis comes from: `"dictionary"` - the word form is in the dictionary, `"clitics"` - a verb of the dictionary with [clitics](#clitics), `"rule"` - an [analysis by rule](#rules), `"guess"` - a [guessed analysis](#guess) of an unknown word |
 
@@ -50,7 +50,7 @@ If the part of speech of a word depends on context, the word has both analyses: 
 
 ## Order of analyses { #order }
 
-Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features, and a word goes before its older spelling with other accents: `á` is first of all `a`, `tambien` is `también`.
+Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features, and a word goes before its older spelling with other accents: `á` is first of all `a`, `tambien` is `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) orders the same analyses by the sentence.
 
 === "Code"
 

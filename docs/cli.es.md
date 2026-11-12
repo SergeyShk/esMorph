@@ -4,7 +4,7 @@
 esmorph [opciones] [archivo ...]
 ```
 
-El comando analiza texto de archivos o de la entrada estándar y escribe los lemas, las categorías y los rasgos de [Universal Dependencies](https://universaldependencies.org/) en uno de cuatro formatos. Se instala con el paquete (`pip install esmorph`) y también se ejecuta como `python -m esmorph`; sin Python, lo instala `cargo install esmorph --features cli`. Cada palabra recibe su análisis más probable, como lo da [`annotate`](analyzer.md#annotate): las palabras de un token multipalabra se analizan por el token. El núcleo en Rust analiza y escribe en un solo hilo, cerca de un millón de tokens por segundo.
+El comando analiza texto de archivos o de la entrada estándar y escribe los lemas, las categorías y los rasgos de [Universal Dependencies](https://universaldependencies.org/) en uno de cuatro formatos. Se instala con el paquete (`pip install esmorph`) y también se ejecuta como `python -m esmorph`; sin Python, lo instala `cargo install esmorph --features cli`. Cada palabra recibe su análisis más probable en el contexto de su oración, como lo da [`annotate`](analyzer.md#annotate): las palabras de un token multipalabra se analizan por el token. El núcleo en Rust analiza y escribe en un solo hilo, unos 100 mil tokens por segundo, y más de un millón con `--no-context`.
 
 ``` bash
 echo "Dime la verdad del caso." | esmorph
@@ -21,6 +21,7 @@ decir yo el verdad de el caso .
 | `-f`, `--format` | `lemmas` | [Formato de salida](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Entrada](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | el diccionario del paquete | Un archivo de diccionario de esMorph, comprobado entero como con [`verify=True`](analyzer.md#parameters) |
+| `--no-context` | | Ordenar los análisis de una palabra como [`analyze`](analyzer.md#analyze), sin el modelo de contexto: más rápido; para un diccionario sin modelo |
 | `-o`, `--output` | la salida estándar | El archivo del resultado; `-` es la salida estándar |
 | `-h`, `--help` | | Mostrar la ayuda |
 | `-V`, `--version` | | Mostrar la versión |

@@ -1,6 +1,6 @@
 # spaCy
 
-El componente `esmorph` incorpora esMorph a una cadena de [spaCy](https://spacy.io/): anota los tokens de un documento con la categoría gramatical (`pos_`), los rasgos de [Universal Dependencies](https://universaldependencies.org/) (`morph`) y el lema (`lemma_`) del [análisis en contexto](analyzer.md). En la cadena sustituye al etiquetador, al morfologizador y al lematizador.
+El componente `esmorph` incorpora esMorph a una cadena de [spaCy](https://spacy.io/): anota los tokens de un documento con la categoría gramatical (`pos_`), los rasgos de [Universal Dependencies](https://universaldependencies.org/) (`morph`) y el lema (`lemma_`) del [análisis en contexto](analyzer.md#analyze_sentence). En la cadena sustituye al etiquetador, al morfologizador y al lematizador.
 
 ``` bash
 pip install "esmorph[spacy]"
@@ -26,6 +26,17 @@ El componente se registra en spaCy al instalar el paquete y se añade por su nom
     [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
     'Case=Acc|Gender=Fem|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs'
     ```
+
+Con las palabras de referencia de las partes de prueba de los treebanks ([Comparación](comparison.md)), la categoría, los rasgos y el lema del componente aciertan a la vez para el 95.62, el 87.50 y el 89.50 % de las palabras de AnCora, PUD y COSER, frente al 95.92, el 83.59 y el 85.79 % de `es_core_news_sm`, y una cadena con solo el componente analiza 90 mil tokens por segundo frente a 45 mil.
+
+## Modelos es_core_news { #models }
+
+En una cadena de los modelos `es_core_news_*` el componente sustituye al morfologizador y al lematizador, y se quedan el analizador sintáctico y el reconocimiento de entidades; el componente toma las oraciones que marca el analizador sintáctico.
+
+``` python
+nlp = spacy.load("es_core_news_sm", exclude=["morphologizer", "lemmatizer"])
+nlp.add_pipe("esmorph")
+```
 
 ## Tokens de varias palabras { #multiword }
 

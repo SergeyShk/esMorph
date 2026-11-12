@@ -4,7 +4,7 @@
 esmorph [options] [file ...]
 ```
 
-The command analyzes text from files or the standard input and writes lemmas, parts of speech and [Universal Dependencies](https://universaldependencies.org/) features in one of four formats. It is installed with the package (`pip install esmorph`) and also runs as `python -m esmorph`; without Python, `cargo install esmorph --features cli` installs it. Every word gets its most probable analysis, as [`annotate`](analyzer.md#annotate) gives it: the words of a multiword token are analyzed by the token. The Rust core analyzes and writes in one thread, about a million tokens per second.
+The command analyzes text from files or the standard input and writes lemmas, parts of speech and [Universal Dependencies](https://universaldependencies.org/) features in one of four formats. It is installed with the package (`pip install esmorph`) and also runs as `python -m esmorph`; without Python, `cargo install esmorph --features cli` installs it. Every word gets its most probable analysis in the context of its sentence, as [`annotate`](analyzer.md#annotate) gives it: the words of a multiword token are analyzed by the token. The Rust core analyzes and writes in one thread, about 100 thousand tokens per second, and over a million with `--no-context`.
 
 ``` bash
 echo "Dime la verdad del caso." | esmorph
@@ -21,6 +21,7 @@ decir yo el verdad de el caso .
 | `-f`, `--format` | `lemmas` | [Output format](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Input](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | the package dictionary | An esMorph dictionary file, checked whole as with [`verify=True`](analyzer.md#parameters) |
+| `--no-context` | | Order the analyses of a word as [`analyze`](analyzer.md#analyze) does, without the context model: faster; for a dictionary without a model |
 | `-o`, `--output` | the standard output | The result file; `-` is the standard output |
 | `-h`, `--help` | | Show the help |
 | `-V`, `--version` | | Show the version |
