@@ -1,6 +1,6 @@
 # spaCy
 
-The `esmorph` component plugs esMorph into a [spaCy](https://spacy.io/) pipeline: it annotates the tokens of a document with the part of speech (`pos_`), the [Universal Dependencies](https://universaldependencies.org/) features (`morph`) and the lemma (`lemma_`) of the [analysis in context](analyzer.md). In a pipeline it replaces the tagger, the morphologizer and the lemmatizer.
+The `esmorph` component plugs esMorph into a [spaCy](https://spacy.io/) pipeline: it annotates the tokens of a document with the part of speech (`pos_`), the [Universal Dependencies](https://universaldependencies.org/) features (`morph`) and the lemma (`lemma_`) of the [analysis in context](analyzer.md#analyze_sentence). In a pipeline it replaces the tagger, the morphologizer and the lemmatizer.
 
 ``` bash
 pip install "esmorph[spacy]"
@@ -26,6 +26,17 @@ The component registers with spaCy when the package is installed and is added by
     [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
     'Case=Acc|Gender=Fem|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs'
     ```
+
+On the gold words of the test parts of the treebanks ([Comparison](comparison.md)) the part of speech, features and lemma of the component are right together for 95.62, 87.50 and 89.50 % of the words of AnCora, PUD and COSER, against 95.92, 83.59 and 85.79 % of `es_core_news_sm`, and a pipeline of the component alone analyzes 90 thousand tokens per second against 45 thousand.
+
+## es_core_news models { #models }
+
+In a pipeline of the `es_core_news_*` models the component replaces the morphologizer and the lemmatizer, while the parser and named entity recognition stay; the component takes the sentences the parser marks.
+
+``` python
+nlp = spacy.load("es_core_news_sm", exclude=["morphologizer", "lemmatizer"])
+nlp.add_pipe("esmorph")
+```
 
 ## Tokens of several words { #multiword }
 

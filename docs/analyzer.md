@@ -113,6 +113,45 @@ Exceptions:
 
 <div class="metric-card" markdown>
 
+### Analyses of a sentence in context { #analyze_sentence }
+
+`analyze_sentence` · `list[list[Analysis]]`
+{ .metric-meta }
+
+``` {.python .signature}
+analyze_sentence(words)
+```
+
+The analyses of the tokens of a sentence, as [`analyze`](#analyze) gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and `prob` is its score in this sentence. The tokens are those of one sentence in order, as `analyze` takes them: a contraction (`del`) or a verb with clitics (`dámelo`) is one token. A sentence of one token is analyzed as `analyze`, and one longer than 256 tokens by parts of 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.
+
+| Parameter | Type | Default | Description |
+| :-------- | :--- | :------ | :---------- |
+| `words` | `Iterable[str]` | - | Tokens of the sentence: a list, a tuple, a generator |
+
+Exceptions:
+
+- `TypeError` - a string or bytes instead of a collection of tokens, a token that is not a string;
+- `ValueError` - the dictionary has no context model.
+
+=== "Code"
+
+    ``` python
+    sentence = morph.analyze_sentence(["Ella", "la", "vio"])
+    [(analyses[0].lemma, analyses[0].pos) for analyses in sentence]
+    [analysis.pos for analysis in morph.analyze("la")]
+    ```
+
+=== "Result"
+
+    ```
+    [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
+    ['DET', 'PRON', 'DET', 'NOUN']
+    ```
+
+</div>
+
+<div class="metric-card" markdown>
+
 ### Lemmatization { #lemmatize }
 
 `lemmatize` · `list[str]`
@@ -154,18 +193,19 @@ Exceptions:
 { .metric-meta }
 
 ``` {.python .signature}
-annotate(document)
+annotate(document, *, context=True)
 ```
 
-Fills the columns `lemma`, `upos` and `feats` of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter with the most probable analysis of every word, as `analyze` orders them; the earlier values of these columns are replaced. The words of a multiword token are analyzed by the token: `dime` split into `di` + `me` is the imperative of `decir` with the pronoun `me`, and clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the analysis of the whole token: `devuélvenos` is the imperative of `devolver`. A word without analyses gets its lower case as the lemma and the part of speech `X`. The method releases the GIL. esMorph does not depend on anySeg: the document is an `anyseg.Document` or an object with the same `column("form")`, `multiword_tokens` (a token has `text` and `words`, a word has `index`) and `set_columns`.
+Fills the columns `lemma`, `upos` and `feats` of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter with the most probable analysis of every word in the context of its sentence, as [`analyze_sentence`](#analyze_sentence) orders the analyses of its tokens; with `context=False`, as `analyze` orders them, more than ten times faster. The earlier values of these columns are replaced. The words of a multiword token are analyzed by the token: `dime` split into `di` + `me` is the imperative of `decir` with the pronoun `me`, and clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the analysis of the whole token: `devuélvenos` is the imperative of `devolver`. A word without analyses gets its lower case as the lemma and the part of speech `X`. The method releases the GIL. esMorph does not depend on anySeg: the document is an `anyseg.Document` or an object with the same `column("form")`, `multiword_tokens` (a token has `text` and `words`, a word has `index`), `sentences` (a sentence has `words`) and `set_columns`; an object without `sentences` is one sentence.
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |
 | `document` | `anyseg.Document` | - | Document of the segmenter (`pip install anyseg`) |
+| `context` | `bool` | `True` | Order the analyses by the context model |
 
 Exceptions:
 
-- `ValueError` - the words of the multiword tokens are not consecutive words of the document in order;
+- `ValueError` - the words of the multiword tokens are not consecutive words of the document in order, the first words of the sentences are not words of the document in order, the analysis is in context and the dictionary has no context model;
 - `TypeError` - an object that is not a document, a form or the text of a token that is not a string, a token without `text` or `words`, a word without `index` or with an index that is not an integer.
 
 === "Code"
@@ -176,12 +216,19 @@ Exceptions:
     document = Segmenter("es").segment("Dime la verdad.")
     morph.annotate(document)
     [(word.form, word.lemma, word.upos) for word in document.words]
+    document = Segmenter("es").segment("Ella la vio.")
+    morph.annotate(document, context=False)
+    document.words[1].upos
+    morph.annotate(document)
+    document.words[1].upos
     ```
 
 === "Result"
 
     ```
     [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    'DET'
+    'PRON'
     ```
 
 </div>
@@ -242,7 +289,7 @@ The property `dictionary_info` describes the dictionary of the analyzer: the sou
 
 ## Threads and processes { #parallel }
 
-One analyzer can be used from several threads. `lemmatize` and `annotate` release the GIL, so threads speed them up. `analyze_many` creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, `lemmatize` or processes are faster. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises `ValueError`. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
+One analyzer can be used from several threads. `lemmatize`, `analyze_sentence` and `annotate` release the GIL, so threads speed them up. `analyze_many` creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, `lemmatize` or processes are faster. The analyzer and analyses are pickled, so they work with `multiprocessing` and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises `ValueError`. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but `forms()` gives an empty list and `inflect` raises `FormNotFoundError`.
 
 === "Code"
 

@@ -19,14 +19,16 @@ Description:
     UD_Spanish-COSER of a pinned UD release with their checksums checked and the Stanza model of
     pinned commits into the data directory, and analyzes the gold words with every system. esMorph
     analyzes a word without context and is scored by its first analysis and by the best of its
-    analyses (oracle); simplemma gives only a lemma; spaCy and Stanza tag a sentence and give one
-    analysis per word. The lemmas and features of GSD are automatic, so only the part of speech is
-    compared on it. Inflection: whether esMorph, ablaut and verbecc give the gold form of a verb of
-    AnCora, PUD and COSER for its gold lemma and features. Speed - tokens per second on AnCora test
-    without loading (the best of two runs) and, for the chart, the whole time with import and
-    loading in a new process on texts of different size (the best of three processes). Writes
-    Markdown tables, results.json in the data directory (a run of some systems updates only their
-    results) and the chart in SVG.
+    analyses (oracle); esMorph in context annotates the gold tokens of a sentence (a multiword
+    token with its gold words) with its context model; simplemma gives only a lemma; spaCy and
+    Stanza tag a sentence and give one analysis per word, and spaCy with esmorph is a pipeline of
+    the component esmorph alone. The lemmas and features of GSD are automatic, so only the part of
+    speech is compared on it. Inflection: whether esMorph, ablaut and verbecc give the gold form of
+    a verb of AnCora, PUD and COSER for its gold lemma and features. Speed - tokens per second on
+    AnCora test without loading (the best of two runs) and, for the chart, the whole time with
+    import and loading in a new process on texts of different size (the best of three processes).
+    Writes Markdown tables, results.json in the data directory (a run of some systems updates only
+    their results) and the chart in SVG.
     The versions of all packages are pinned in compare.py.lock; esMorph is the version from it or a
     wheel from `--with`
 
@@ -48,6 +50,7 @@ import unicodedata
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cached_property
 from importlib import metadata
 from pathlib import Path
 from typing import NamedTuple
@@ -118,6 +121,8 @@ class Token:
     lemma: str
     pos: str
     feats: dict[str, str]
+    # The text of the multiword token of the first of its words; the other words have ""
+    surface: str | None = None
 
 
 # Analysis of a word: lemma, UD part of speech and UD features (simplemma gives only the lemma)
@@ -152,7 +157,8 @@ def download(url: str, path: Path, digest: str) -> Path:
 
 def sentences(path: Path) -> list[list[Token]]:
     """
-    Sentences of a CoNLL-U file: syntactic words without multiword tokens and empty nodes
+    Sentences of a CoNLL-U file: syntactic words without empty nodes; the words of a multiword
+    token keep its text
 
     Arguments:
         path (Path): File in CoNLL-U
@@ -161,16 +167,24 @@ def sentences(path: Path) -> list[list[Token]]:
         list[list[Token]]: Sentences
     """
     result: list[list[Token]] = [[]]
+    # The text of the multiword token for its next word, "" after the first one
+    surface: str | None = None
+    end = 0
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line:
             if result[-1]:
                 result.append([])
             continue
         cols = line.split("\t")
-        if line.startswith("#") or "-" in cols[0] or "." in cols[0]:
+        if line.startswith("#") or "." in cols[0]:
+            continue
+        if "-" in cols[0]:
+            surface, end = cols[1], int(cols[0].split("-")[1])
             continue
         feats = dict(f.split("=", 1) for f in cols[5].split("|")) if cols[5] != "_" else {}
-        result[-1].append(Token(cols[1], cols[2], cols[3], feats))
+        result[-1].append(Token(cols[1], cols[2], cols[3], feats, surface))
+        if surface is not None:
+            surface = "" if int(cols[0]) < end else None
     return [sentence for sentence in result if sentence]
 
 
@@ -213,8 +227,68 @@ def prepare(name: str, data: Path) -> None:
         )
 
 
-Analyze = Callable[[list[list[str]]], object]
-Convert = Callable[[list[list[str]], object], list[list[list[Candidate]]]]
+class Text:
+    """Gold sentences and what the systems take of them, made once: the time of a system does not
+    include them from its second analysis on"""
+
+    def __init__(self, sentences: list[list[Token]]) -> None:
+        self.sentences = sentences
+
+    @cached_property
+    def words(self) -> list[list[str]]:
+        """The words of every sentence"""
+        return [[token.word for token in sentence] for sentence in self.sentences]
+
+    @cached_property
+    def flat(self) -> list[str]:
+        """All words in a row"""
+        return [word for sentence in self.words for word in sentence]
+
+    @cached_property
+    def document(self) -> "Document":
+        """The sentences as a document of anySeg"""
+        return Document(self.sentences)
+
+
+Analyze = Callable[[Text], object]
+Convert = Callable[[Text, object], list[list[list[Candidate]]]]
+
+
+@dataclass
+class Word:
+    index: int
+
+
+@dataclass
+class Span:
+    text: str
+    words: list[Word]
+
+
+class Document:
+    """The gold tokens of sentences as a document of anySeg for `Analyzer.annotate`: the words, the
+    multiword tokens with their words and the first word of every sentence"""
+
+    def __init__(self, text: list[list[Token]]) -> None:
+        self.forms = [token.word for sentence in text for token in sentence]
+        self.multiword_tokens: list[Span] = []
+        self.sentences: list[Span] = []
+        self.columns: dict[str, list] = {}
+        index = 0
+        for sentence in text:
+            self.sentences.append(Span("", [Word(index)]))
+            for token in sentence:
+                if token.surface:
+                    self.multiword_tokens.append(Span(token.surface, [Word(index)]))
+                elif token.surface == "" and self.multiword_tokens:
+                    self.multiword_tokens[-1].words.append(Word(index))
+                index += 1
+
+    def column(self, name: str, /) -> list[str]:
+        return self.forms
+
+    def set_columns(self, **columns: list) -> None:
+        self.columns = columns
 
 
 class System(NamedTuple):
@@ -231,7 +305,7 @@ def esmorph_system(data: Path) -> System:
 
     morph = Analyzer()
 
-    def convert(text: list[list[str]], found: object) -> list[list[list[Candidate]]]:
+    def convert(text: Text, found: object) -> list[list[list[Candidate]]]:
         analyses = iter(found)
         # A word without analyses keeps its lowercase form as the lemma, as `lemmatize` gives it
         return [
@@ -239,10 +313,37 @@ def esmorph_system(data: Path) -> System:
                 [(a.lemma, a.pos, dict(a.feats)) for a in next(analyses)] or [(w.lower(), "", {})]
                 for w in s
             ]
-            for s in text
+            for s in text.words
         ]
 
-    return System(lambda text: morph.analyze_many([w for s in text for w in s]), convert)
+    return System(lambda text: morph.analyze_many(text.flat), convert)
+
+
+def esmorph_context_system(data: Path) -> System:
+    """esMorph in context: `annotate` of the gold tokens of the sentences, a multiword token with
+    its words"""
+    from esmorph import Analyzer
+
+    morph = Analyzer()
+
+    def analyze(text: Text) -> object:
+        morph.annotate(text.document, context=True)
+        return text.document.columns
+
+    def convert(text: Text, columns: object) -> list[list[list[Candidate]]]:
+        assert isinstance(columns, dict)
+        fields = iter(zip(columns["lemma"], columns["upos"], columns["feats"], strict=True))
+        result = []
+        for sentence in text.sentences:
+            analyses = []
+            for _ in sentence:
+                lemma, pos, feats = next(fields)
+                parts = (feats or "").split("|") if feats else []
+                analyses.append([(lemma, pos, dict(part.split("=", 1) for part in parts))])
+            result.append(analyses)
+        return result
+
+    return System(analyze, convert)
 
 
 def simplemma_system(data: Path) -> System:
@@ -251,11 +352,11 @@ def simplemma_system(data: Path) -> System:
 
     simplemma.lemmatize("casa", lang="es")
 
-    def analyze(text: list[list[str]]) -> object:
+    def analyze(text: Text) -> object:
         lemmatize = simplemma.Lemmatizer().lemmatize
-        return [[lemmatize(word, "es") for word in sentence] for sentence in text]
+        return [[lemmatize(word, "es") for word in sentence] for sentence in text.words]
 
-    def convert(text: list[list[str]], found: object) -> list[list[list[Candidate]]]:
+    def convert(text: Text, found: object) -> list[list[list[Candidate]]]:
         return [[[(lemma, None, None)] for lemma in s] for s in found]
 
     return System(analyze, convert)
@@ -268,13 +369,38 @@ def spacy_system(data: Path) -> System:
 
     nlp = spacy.load("es_core_news_sm", exclude=["parser", "ner"])
 
-    def analyze(text: list[list[str]]) -> object:
-        return list(nlp.pipe(Doc(nlp.vocab, words=sentence) for sentence in text))
+    def analyze(text: Text) -> object:
+        return list(nlp.pipe(Doc(nlp.vocab, words=sentence) for sentence in text.words))
 
-    def convert(text: list[list[str]], docs: object) -> list[list[list[Candidate]]]:
-        return [[[(t.lemma_, t.pos_, t.morph.to_dict())] for t in doc] for doc in docs]
+    return System(analyze, spacy_convert)
 
-    return System(analyze, convert)
+
+def spacy_esmorph_system(data: Path) -> System:
+    """spaCy with the component esmorph on the gold words: the pipeline of the component alone,
+    without the models of es_core_news_sm"""
+    import spacy
+    from spacy.tokens import Doc
+
+    nlp = spacy.blank("es")
+    nlp.add_pipe("esmorph")
+
+    def analyze(text: Text) -> object:
+        # A gold sentence is one sentence for the component
+        docs = []
+        for sentence in text.words:
+            doc = Doc(
+                nlp.vocab, words=sentence, sent_starts=[True] + [False] * (len(sentence) - 1)
+            )
+            docs.append(doc)
+        return list(nlp.pipe(docs))
+
+    return System(analyze, spacy_convert)
+
+
+def spacy_convert(text: Text, docs: object) -> list[list[list[Candidate]]]:
+    """The analyses of the words of spaCy documents"""
+    assert isinstance(docs, list)
+    return [[[(t.lemma_, t.pos_, t.morph.to_dict())] for t in doc] for doc in docs]
 
 
 def stanza_system(data: Path) -> System:
@@ -294,23 +420,27 @@ def stanza_system(data: Path) -> System:
     def feats(word) -> dict[str, str]:
         return dict(f.split("=", 1) for f in (word.feats or "").split("|") if f)
 
-    def convert(text: list[list[str]], doc: object) -> list[list[list[Candidate]]]:
+    def convert(text: Text, doc: object) -> list[list[list[Candidate]]]:
         return [[[(w.lemma or "", w.upos, feats(w))] for w in s.words] for s in doc.sentences]
 
-    return System(nlp, convert)
+    return System(lambda text: nlp(text.words), convert)
 
 
 SYSTEMS = {
     "esmorph": esmorph_system,
+    "esmorph-context": esmorph_context_system,
     "simplemma": simplemma_system,
     "spacy": spacy_system,
+    "spacy-esmorph": spacy_esmorph_system,
     "stanza": stanza_system,
 }
 CONJUGATORS = ("esmorph", "ablaut", "verbecc")
 TITLES = {
     "esmorph": "esMorph",
+    "esmorph-context": "esMorph in context",
     "simplemma": "simplemma",
     "spacy": "spaCy es_core_news_sm",
+    "spacy-esmorph": "spaCy with esmorph",
     "stanza": "Stanza",
     "ablaut": "ablaut",
     "verbecc": "verbecc",
@@ -595,14 +725,17 @@ def speed_run(name: str, data: Path, size: int) -> None:
         data (Path): Data directory
         size (int): Number of tokens
     """
-    text: list[list[str]] = []
+    chosen: list[list[Token]] = []
     count = 0
     for sentence in sentences(data / DATASETS["AnCora"][1]):
-        words = [token.word for token in sentence][: size - count if size else None]
-        text.append(words)
-        count += len(words)
+        tokens = sentence[: size - count if size else None]
+        chosen.append(tokens)
+        count += len(tokens)
         if size and count >= size:
             break
+    text = Text(chosen)
+    # The input of every system is made before the clock starts
+    _ = text.words, text.flat, text.document
     start = time.perf_counter()
     analyze = SYSTEMS[name](data).analyze
     loaded = time.perf_counter()
@@ -685,12 +818,15 @@ def chart(curves: dict[str, list[tuple[int, float]]], path: Path, spanish: bool 
             return f'<polygon points="{points}" fill="{color}"/>'
         return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="{color}"/>'
 
+    # Color, marker and dashes of a line: esMorph in context is the dashed line of esMorph
     styles = {
-        "esmorph": ("#e53935", "circle"),
-        "simplemma": ("#2a78d6", "square"),
-        "spacy": ("#199e70", "triangle"),
-        "stanza": ("#c98500", "diamond"),
+        "esmorph": ("#e53935", "circle", ""),
+        "esmorph-context": ("#e53935", "circle", ' stroke-dasharray="6 4"'),
+        "simplemma": ("#2a78d6", "square", ""),
+        "spacy": ("#199e70", "triangle", ""),
+        "stanza": ("#c98500", "diamond", ""),
     }
+    titles = TITLES | ({"esmorph-context": "esMorph en contexto"} if spanish else {})
     style = 'font-family="sans-serif" font-size="13" fill="#888"'
     grid = 'stroke="#888" stroke-opacity="0.3"'
     parts = [
@@ -721,17 +857,20 @@ def chart(curves: dict[str, list[tuple[int, float]]], path: Path, spanish: bool 
         f'text-anchor="middle" {style}>{seconds}</text>'
     )
     for index, (name, points) in enumerate(curves.items()):
-        color, shape = styles[name]
+        color, shape, dashes = styles[name]
         line = " ".join(f"{to_x(x):.1f},{to_y(y):.1f}" for x, y in points)
-        parts.append(f'<polyline points="{line}" fill="none" stroke="{color}" stroke-width="2"/>')
+        parts.append(
+            f'<polyline points="{line}" fill="none" stroke="{color}" stroke-width="2"{dashes}/>'
+        )
         parts.extend(marker(shape, to_x(x), to_y(y), color) for x, y in points)
         y = top + 14 + index * 22
         x = width - right + 16
         parts.append(
-            f'<line x1="{x}" y1="{y - 4}" x2="{x + 24}" y2="{y - 4}" stroke="{color}" stroke-width="2"/>'
+            f'<line x1="{x}" y1="{y - 4}" x2="{x + 24}" y2="{y - 4}" stroke="{color}" '
+            f'stroke-width="2"{dashes}/>'
         )
         parts.append(marker(shape, x + 12, y - 4, color))
-        parts.append(f'<text x="{x + 32}" y="{y}" {style}>{TITLES[name]}</text>')
+        parts.append(f'<text x="{x + 32}" y="{y}" {style}>{titles[name]}</text>')
     parts.append("</svg>")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(parts) + "\n", encoding="utf-8")
@@ -768,10 +907,10 @@ def evaluate(systems: list[str], data: Path) -> dict:
             prepare(name, data)
             analyze, convert = SYSTEMS[name](data)
             quality = {}
-            for dataset, text in texts.items():
-                words = [[token.word for token in sentence] for sentence in text]
-                found = convert(words, analyze(words))
-                quality[dataset] = scores(text, found, dataset in AUTOMATIC)
+            for dataset, sentences_of in texts.items():
+                text = Text(sentences_of)
+                found = convert(text, analyze(text))
+                quality[dataset] = scores(sentences_of, found, dataset in AUTOMATIC)
             # Time with loading on texts of different size and speed without loading - in a new
             # process
             curve = []
@@ -872,7 +1011,12 @@ def main() -> None:
         saved.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     report(results)
     if args.chart:
-        curves = {name: result["curve"] for name, result in results.items() if "curve" in result}
+        # The component in spaCy is the speed of esMorph in context with spaCy around it
+        curves = {
+            name: results[name]["curve"]
+            for name in SYSTEMS
+            if "curve" in results.get(name, {}) and name != "spacy-esmorph"
+        }
         chart(curves, args.chart)
         chart(curves, args.chart.with_suffix(".es.svg"), spanish=True)
 

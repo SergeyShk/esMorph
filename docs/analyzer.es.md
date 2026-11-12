@@ -113,6 +113,45 @@ Excepciones:
 
 <div class="metric-card" markdown>
 
+### Análisis de una oración en contexto { #analyze_sentence }
+
+`analyze_sentence` · `list[list[Analysis]]`
+{ .metric-meta }
+
+``` {.python .signature}
+analyze_sentence(words)
+```
+
+Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyze), ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y `prob` es su puntuación en esta oración. Los tokens son los de una oración en orden, tal como los toma `analyze`: una contracción (`del`) o un verbo con clíticos (`dámelo`) es un solo token. Una oración de un token se analiza como con `analyze`, y una de más de 256 tokens, por partes de 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.
+
+| Parámetro | Tipo | Por defecto | Descripción |
+| :-------- | :--- | :---------- | :---------- |
+| `words` | `Iterable[str]` | - | Tokens de la oración: una lista, una tupla, un generador |
+
+Excepciones:
+
+- `TypeError` - una cadena o bytes en lugar de una colección de tokens, un token que no es una cadena;
+- `ValueError` - el diccionario no tiene modelo de contexto.
+
+=== "Código"
+
+    ``` python
+    sentence = morph.analyze_sentence(["Ella", "la", "vio"])
+    [(analyses[0].lemma, analyses[0].pos) for analyses in sentence]
+    [analysis.pos for analysis in morph.analyze("la")]
+    ```
+
+=== "Resultado"
+
+    ```
+    [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
+    ['DET', 'PRON', 'DET', 'NOUN']
+    ```
+
+</div>
+
+<div class="metric-card" markdown>
+
 ### Lematización { #lemmatize }
 
 `lemmatize` · `list[str]`
@@ -154,18 +193,19 @@ Excepciones:
 { .metric-meta }
 
 ``` {.python .signature}
-annotate(document)
+annotate(document, *, context=True)
 ```
 
-Rellena las columnas `lemma`, `upos` y `feats` de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/) con el análisis más probable de cada palabra, en el orden de `analyze`; los valores anteriores de estas columnas se sustituyen. Las palabras de un token multipalabra se analizan por el token: `dime` dividido en `di` + `me` es el imperativo de `decir` con el pronombre `me`, y los clíticos tras un verbo son pronombres. Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: `devuélvenos` es el imperativo de `devolver`. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría `X`. El método libera el GIL. esMorph no depende de anySeg: el documento es un `anyseg.Document` o un objeto con los mismos `column("form")`, `multiword_tokens` (un token tiene `text` y `words`, una palabra tiene `index`) y `set_columns`.
+Rellena las columnas `lemma`, `upos` y `feats` de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/) con el análisis más probable de cada palabra en el contexto de su oración, en el orden en que [`analyze_sentence`](#analyze_sentence) ordena los análisis de sus tokens; con `context=False`, en el orden de `analyze`, más de diez veces más rápido. Los valores anteriores de estas columnas se sustituyen. Las palabras de un token multipalabra se analizan por el token: `dime` dividido en `di` + `me` es el imperativo de `decir` con el pronombre `me`, y los clíticos tras un verbo son pronombres. Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: `devuélvenos` es el imperativo de `devolver`. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría `X`. El método libera el GIL. esMorph no depende de anySeg: el documento es un `anyseg.Document` o un objeto con los mismos `column("form")`, `multiword_tokens` (un token tiene `text` y `words`, una palabra tiene `index`), `sentences` (una oración tiene `words`) y `set_columns`; un objeto sin `sentences` es una sola oración.
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |
 | `document` | `anyseg.Document` | - | Documento del segmentador (`pip install anyseg`) |
+| `context` | `bool` | `True` | Ordenar los análisis con el modelo de contexto |
 
 Excepciones:
 
-- `ValueError` - las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden;
+- `ValueError` - las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden, las primeras palabras de las oraciones no son palabras del documento en orden, el análisis es en contexto y el diccionario no tiene modelo de contexto;
 - `TypeError` - un objeto que no es un documento, una forma o el texto de un token que no es una cadena, un token sin `text` o `words`, una palabra sin `index` o con un índice que no es un entero.
 
 === "Código"
@@ -176,12 +216,19 @@ Excepciones:
     document = Segmenter("es").segment("Dime la verdad.")
     morph.annotate(document)
     [(word.form, word.lemma, word.upos) for word in document.words]
+    document = Segmenter("es").segment("Ella la vio.")
+    morph.annotate(document, context=False)
+    document.words[1].upos
+    morph.annotate(document)
+    document.words[1].upos
     ```
 
 === "Resultado"
 
     ```
     [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    'DET'
+    'PRON'
     ```
 
 </div>
@@ -242,7 +289,7 @@ La propiedad `dictionary_info` describe el diccionario del analizador: la fuente
 
 ## Hilos y procesos { #parallel }
 
-Un mismo analizador se puede usar desde varios hilos. `lemmatize` y `annotate` liberan el GIL, así que los hilos los aceleran. `analyze_many` crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, `lemmatize` o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza `ValueError`. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
+Un mismo analizador se puede usar desde varios hilos. `lemmatize`, `analyze_sentence` y `annotate` liberan el GIL, así que los hilos los aceleran. `analyze_many` crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, `lemmatize` o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza `ValueError`. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero `forms()` da una lista vacía e `inflect` lanza `FormNotFoundError`.
 
 === "Código"
 

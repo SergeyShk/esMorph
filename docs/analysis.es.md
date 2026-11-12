@@ -31,7 +31,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 | `lemma` | `str` | El lema |
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
-| `prob` | `float` | Parte del análisis entre los análisis de la palabra; la suma de todos es 1 |
+| `prob` | `float` | Parte del análisis entre los análisis de la palabra; la suma de todos es 1. En [`analyze_sentence`](analyzer.md#analyze_sentence) - la puntuación del modelo de contexto en la oración |
 | `words` | `tuple[str, ...]` | Palabras del token: un verbo y sus clíticos, las palabras de una contracción (`del`, `al`, la antigua `desta`) o la propia palabra; el análisis describe la primera |
 | `source` | `str` | De dónde viene el análisis: `"dictionary"` - la forma está en el diccionario, `"clitics"` - un verbo del diccionario con [clíticos](#clitics), `"rule"` - un [análisis por regla](#rules), `"guess"` - un [análisis estimado](#guess) de una palabra desconocida |
 
@@ -50,7 +50,7 @@ Si la categoría de una palabra depende del contexto, la palabra tiene ambos an�
 
 ## Orden de los análisis { #order }
 
-Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: `á` es ante todo `a`, `tambien` es `también`.
+Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: `á` es ante todo `a`, `tambien` es `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) ordena los mismos análisis por la oración.
 
 === "Código"
 

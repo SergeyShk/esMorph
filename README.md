@@ -29,15 +29,16 @@
 
 **esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it finds the analyses in a dictionary built from [Wiktionary](https://en.wiktionary.org) - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - orders them by probability and builds the forms of the word: conjugation, gender and number.
 
-It analyzes 1.7 million tokens per second from Python, 39 times faster than spaCy, and lemmatizes almost as fast as simplemma, whose lemmas are right less often on the UD test sets of AnCora, PUD and COSER. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
+It chooses the analysis of a word by its sentence with a small context model, almost as accurately as spaCy on AnCora and more accurately than spaCy and Stanza on PUD and COSER, and analyzes 124 thousand tokens per second in context and 1.6 million without, 2.8 and 35 times faster than spaCy; it lemmatizes almost as fast as simplemma, whose lemmas are right less often on the UD test sets of AnCora, PUD and COSER. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
 
-* **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, lists of words and lemmatization, documents of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, checking a word form against the dictionary
+* **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, the analyses of a sentence in context, lists of words and lemmatization, documents of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, checking a word form against the dictionary
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/analysis/#ud)** - parts of speech, features and lemmas by the UD guidelines and the AnCora conventions
 * **[Verbs with clitics](https://sergeyshk.github.io/esMorph/analysis/#clitics)** - a verb with enclitic pronouns and its words: `dámelo` is `da` + `me` + `lo`
 * **[Tokens out of the dictionary](https://sergeyshk.github.io/esMorph/analysis/#rules)** - punctuation, numbers, ordinals, Roman numerals, names, addresses and abbreviations by rules
 * **[Unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess)** - analyses by the ending, a hyphen or a prefix, and the forms of guessed words
 * **[Inflection](https://sergeyshk.github.io/esMorph/inflection/)** - the forms of a lexeme and the form with given UD features
 * **[The esmorph command](https://sergeyshk.github.io/esMorph/cli/)** - lemmas, CoNLL-U, TSV or JSON Lines of text, tokens or CoNLL-U from files and the standard input
+* **[spaCy](https://sergeyshk.github.io/esMorph/spacy/)** - the component `esmorph` with the analysis in context in place of the tagger, the morphologizer and the lemmatizer
 * **[Comparison](https://sergeyshk.github.io/esMorph/comparison/)** - accuracy, inflection and speed compared with simplemma, spaCy, Stanza, ablaut and verbecc
 
 > [!NOTE]
@@ -110,6 +111,25 @@ decir yo el verdad de el caso .
 
 See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/), [word analysis](https://sergeyshk.github.io/esMorph/analysis/), [the esmorph command](https://sergeyshk.github.io/esMorph/cli/).
 
+### Analysis in context
+
+`analyze_sentence` orders the analyses of the tokens of a sentence with a small neural network trained on the treebanks UD Spanish AnCora and GSD: the first is the analysis the context chooses, and its probability is the score of the model. `annotate` and the command analyze in context by default; `context=False` and `--no-context` order the analyses as `analyze` does, more than ten times faster. The `esmorph` component puts the analysis in context into a [spaCy](https://spacy.io/) pipeline (`pip install "esmorph[spacy]"`).
+
+```python
+>>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])
+>>> [(analyses[0].lemma, analyses[0].pos) for analyses in sentence]
+[('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
+>>> morph.analyze("la")[0].pos
+'DET'
+>>> import spacy
+>>> nlp = spacy.blank("es")
+>>> _ = nlp.add_pipe("esmorph")
+>>> [(token.lemma_, token.pos_) for token in nlp("Ella la vio del balcón.")]
+[('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
+```
+
+See the documentation: [analysis in context](https://sergeyshk.github.io/esMorph/analyzer/#analyze_sentence), [spaCy](https://sergeyshk.github.io/esMorph/spacy/).
+
 <details>
 <summary><b>Parts of speech and features of Universal Dependencies</b></summary>
 
@@ -177,14 +197,15 @@ See the [documentation](https://sergeyshk.github.io/esMorph/inflection/).
 
 The share of words whose first analysis has the right lemma, and the right part of speech, features and lemma all together, % (test parts of the UD 2.18 treebanks), and the speed of text analysis:
 
-| System | Lemma, AnCora | Lemma, PUD | Lemma, COSER | All together, PUD | Tokens per second |
-| :----- | :------------ | :--------- | :----------- | :---------------- | :---------------- |
-| esMorph | 97.80 | 97.74 | 94.49 | **87.90** | 1,744,647 |
-| simplemma | 96.94 | 96.96 | 93.50 | - | **2,516,195** |
-| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 83.59 | 44,659 |
-| Stanza | **99.16** | **97.80** | **94.98** | 86.34 | 2,649 |
+| System | Lemma, AnCora | Lemma, PUD | Lemma, COSER | All together, AnCora | All together, PUD | All together, COSER | Tokens per second |
+| :----- | :------------ | :--------- | :----------- | :------------------- | :---------------- | :------------------ | :---------------- |
+| esMorph | 97.80 | 97.74 | 94.49 | 90.05 | **87.90** | 86.87 | 1,584,054 |
+| esMorph in context | **99.29** | 97.69 | **95.65** | 95.67 | 87.50 | **89.70** | 124,229 |
+| simplemma | 96.94 | 96.96 | 93.50 | - | - | - | **2,165,149** |
+| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 95.92 | 83.59 | 85.79 | 45,108 |
+| Stanza | 99.16 | **97.80** | 94.98 | **97.50** | 86.34 | 89.16 | 2,481 |
 
-esMorph analyzes a word without context, while spaCy and Stanza choose the analysis by the sentence and are trained on AnCora, so they lead on it; on PUD, new to all of them, the first analysis of esMorph has the right features and lemma together more often. An analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It gives the gold form of 99.65, 93.29 and 95.55 % of the verbs of AnCora, PUD and COSER, against 98.87, 92.71 and 93.61 % of ablaut. A short text together with loading takes 3.2 ms against 0.37-1.8 s, and every further process with the same dictionary adds 3.5 MB of memory. Measured on Apple M3 Pro, Python 3.11.
+In context esMorph chooses the analysis by the sentence, as spaCy and Stanza do; they are trained on AnCora and lead on it in features and all together, while on PUD and COSER, new to all of them, the part of speech, features and lemma of esMorph are right together more often. An analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It gives the gold form of 99.65, 93.29 and 95.55 % of the verbs of AnCora, PUD and COSER, against 98.87, 92.71 and 93.61 % of ablaut. A short text together with loading takes 3.5 ms against 0.38-1.9 s, and every further process with the same dictionary adds 3.5 MB of memory. Measured on Apple M3 Pro, Python 3.11.
 
 See the [documentation](https://sergeyshk.github.io/esMorph/comparison/): all the scores, verb inflection, the chart of speed by the size of the text, memory and how it was measured.
 
@@ -199,7 +220,7 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps        # create the environment, install the dependencies and build the Rust module
-make dictionary  # build the dictionary from the snapshot of Wiktionary and the counts of treebanks
+make dictionary  # build the dictionary from the snapshot of Wiktionary, the counts of treebanks and the context model
 make test        # run the Python tests, the docstring examples (doctest) and the Rust tests
 make lint        # ruff, mypy, rustfmt and clippy
 ```
@@ -226,8 +247,8 @@ Bug reports, ideas and pull requests are welcome, in English or Spanish - the [i
 *   **crates/esmorph-dict-es** - the dictionary as a crate
 *   **crates/esmorph-py** - the Python module `esmorph._esmorph` built with PyO3
 *   **python/esmorph** - the Python package
-*   **scripts** - exporting Wiktionary and the counts of the treebanks, the conventions of the dictionary, checking the installed package before publishing and the comparison with other tools
-*   **data** - the tables of closed classes after UD Spanish AnCora and of the symbols of units
+*   **scripts** - exporting Wiktionary and the counts of the treebanks, the conventions of the dictionary, training the context model, checking the installed package before publishing and the comparison with other tools
+*   **data** - the tables of closed classes after UD Spanish AnCora and of the symbols of units, the weights of the context model
 *   **docs** - MkDocs documentation in English and Spanish
 *   **tests** - tests of the Python package
 
