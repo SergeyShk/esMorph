@@ -11,7 +11,7 @@ Excepciones:
 - `FileNotFoundError` - el archivo del diccionario no existe;
 - `OSError` - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio, una tubería o un dispositivo;
 - `ValueError` - el archivo no es un diccionario de esMorph o está dañado (con `verify=True`, también un archivo creado a propósito), la ruta tiene un carácter NUL;
-- `TypeError` - una ruta que no es una cadena ni `PathLike`.
+- `TypeError` - una ruta que no es una cadena ni `PathLike`, `verify` que no es `bool`.
 
 === "Código"
 
@@ -166,7 +166,7 @@ Rellena las columnas `lemma`, `upos` y `feats` de las palabras de un documento d
 Excepciones:
 
 - `ValueError` - las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden;
-- `TypeError` - una forma o el texto de un token que no es una cadena, el índice de una palabra que no es un entero.
+- `TypeError` - un objeto que no es un documento, una forma o el texto de un token que no es una cadena, un token sin `text` o `words`, una palabra sin `index` o con un índice que no es un entero.
 
 === "Código"
 
@@ -225,7 +225,7 @@ Excepciones:
 
 El diccionario del paquete se crea a partir del [Wiktionary](https://en.wiktionary.org) en inglés de octubre de 2026: 676 mil formas de palabra de 117 mil lexemas. Los símbolos de unidades (`km`, `kg`) vienen de una tabla propia, y los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras, de una tabla según el treebank [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), cuyas convenciones siguen los lemas y los rasgos ([Análisis de palabras](analysis.md#ud)). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD); las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
-La propiedad `dictionary_info` describe el diccionario del analizador: la fuente y su instantánea con su SHA-256, la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo.
+La propiedad `dictionary_info` describe el diccionario del analizador: la fuente y su instantánea con su SHA-256, la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es `esmorph.DictionaryInfo`.
 
 === "Código"
 

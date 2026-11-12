@@ -320,7 +320,10 @@ impl Dictionary {
         dictionary.check_records(&forms)?;
         dictionary.check_guesses(&forms)?;
         drop(forms);
-        dictionary.word_count = dictionary.words.len() + dictionary.check_variants()?;
+        // The number of keys is in the footer of the automaton, which `verify` checks
+        dictionary.word_count = (dictionary.words.len())
+            .checked_add(dictionary.check_variants()?)
+            .ok_or_else(|| Error::Format("wrong number of word forms".into()))?;
         dictionary.rule_tags = RuleTags::add(&mut dictionary.ud);
         dictionary.names = (dictionary.ud.iter())
             .map(|tag| tag.pos() == "PROPN")
@@ -1527,15 +1530,16 @@ fn walk(fst: &fst::raw::Fst<Slice>) -> bool {
             std::hint::black_box(node.find_input(absent));
         }
     }
-    // The largest output from every node to the end of a key, from the nodes written first
+    // The largest output from every node to the end of a key and the number of keys after it,
+    // from the nodes written first: the number of keys in the footer is not checked by fst
     nodes.sort_unstable();
     let mut largest = vec![0u64; nodes.len()];
+    let mut keys = vec![0u64; nodes.len()];
     for (index, &addr) in nodes.iter().enumerate() {
         let node = fst.node(addr);
-        let mut most = if node.is_final() {
-            node.final_output().value()
-        } else {
-            0
+        let (mut most, mut count) = match node.is_final() {
+            true => (node.final_output().value(), 1u64),
+            false => (0, 0),
         };
         for transition in node.transitions() {
             let Ok(next) = nodes.binary_search(&transition.addr) else {
@@ -1545,10 +1549,15 @@ fn walk(fst: &fst::raw::Fst<Slice>) -> bool {
                 Some(total) => most = most.max(total),
                 None => return false,
             }
+            match count.checked_add(keys[next]) {
+                Some(total) => count = total,
+                None => return false,
+            }
         }
         largest[index] = most;
+        keys[index] = count;
     }
-    true
+    (nodes.binary_search(&fst.root().addr())).is_ok_and(|root| keys[root] == fst.len() as u64)
 }
 
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
@@ -2820,6 +2829,25 @@ pub(crate) mod tests {
         let dictionary = Dictionary::from_static(data).unwrap();
         assert_eq!(lemmas(&dictionary, "casas"), ["casa", "casar"]);
         assert!(Dictionary::from_static(&[]).is_err());
+    }
+
+    #[test]
+    fn number_of_keys_is_verified() {
+        // The footer of an automaton: the number of keys, the address of the root, a checksum
+        let clean = bytes();
+        let at = format::layout(&clean, true).unwrap().words.end - 20;
+        let keys = u64::from_le_bytes(clean[at..at + 8].try_into().unwrap());
+        let with_keys = |keys: u64| {
+            let mut data = clean.clone();
+            data[at..at + 8].copy_from_slice(&keys.to_le_bytes());
+            Dictionary::from_bytes(&with_checksum(data))
+        };
+        let dictionary = with_keys(keys).unwrap();
+        assert_eq!(dictionary.words.len() as u64, keys);
+        assert!(dictionary.verify().is_ok());
+        let fewer = with_keys(keys - 1).unwrap();
+        assert!(fewer.verify().is_err());
+        assert!(with_keys(u64::MAX).is_err());
     }
 
     #[test]

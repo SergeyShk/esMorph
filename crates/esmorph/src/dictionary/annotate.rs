@@ -178,17 +178,16 @@ pub(crate) fn set_fields(
 ) -> Result<(), crate::Error> {
     use anyseg::Column;
 
-    let lemmas: Vec<Option<&str>> = fields
-        .iter()
-        .map(|word| Some(word.lemma.as_str()))
-        .collect();
-    let parts: Vec<Option<&str>> = fields.iter().map(|word| Some(word.pos)).collect();
-    let feats: Vec<Option<&str>> = fields.iter().map(|word| word.feats).collect();
-    let columns = [
-        (Column::Lemma, lemmas),
-        (Column::Upos, parts),
-        (Column::Feats, feats),
-    ];
+    // The values go to the document as they are read: no column is copied first
+    let values = |column| {
+        fields.iter().map(move |word| match column {
+            Column::Lemma => Some(word.lemma.as_str()),
+            Column::Upos => Some(word.pos),
+            _ => word.feats,
+        })
+    };
+    let columns =
+        [Column::Lemma, Column::Upos, Column::Feats].map(|column| (column, values(column)));
     document
         .set_columns(columns, None)
         .map_err(|err| crate::Error::Document(err.to_string()))

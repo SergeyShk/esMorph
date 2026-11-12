@@ -25,6 +25,10 @@ def test_metadata():
     assert "morphological analyzer" in esmorph.__description__
     assert "__version__" in esmorph.__all__
     assert esmorph.__all__ == sorted(esmorph.__all__)
+    # The type of the description of a dictionary is imported on first use
+    assert esmorph.DictionaryInfo.__required_keys__ == {"word_forms", "checksum"}
+    with pytest.raises(AttributeError, match="has no attribute 'Analyse'"):
+        esmorph.Analyse  # noqa: B018
 
 
 def test_dictionary_licenses_match():

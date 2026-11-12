@@ -11,7 +11,7 @@ Exceptions:
 - `FileNotFoundError` - the dictionary file does not exist;
 - `OSError` - the dictionary file cannot be read: no access, the path points to a directory, a pipe or a device;
 - `ValueError` - the file is not an esMorph dictionary or is damaged (with `verify=True`, a deliberately crafted file too), the path has a NUL character;
-- `TypeError` - a path that is neither a string nor `PathLike`.
+- `TypeError` - a path that is neither a string nor `PathLike`, `verify` that is not `bool`.
 
 === "Code"
 
@@ -166,7 +166,7 @@ Fills the columns `lemma`, `upos` and `feats` of the words of a document of the 
 Exceptions:
 
 - `ValueError` - the words of the multiword tokens are not consecutive words of the document in order;
-- `TypeError` - a form or the text of a token that is not a string, the index of a word that is not an integer.
+- `TypeError` - an object that is not a document, a form or the text of a token that is not a string, a token without `text` or `words`, a word without `index` or with an index that is not an integer.
 
 === "Code"
 
@@ -225,7 +225,7 @@ Exceptions:
 
 The dictionary of the package is built from the English [Wiktionary](https://en.wiktionary.org) of October 2026: 676 thousand word forms of 117 thousand lexemes. Symbols of units (`km`, `kg`) come from a table of their own, and determiners, pronouns, prepositions, conjunctions and numerals in words from a table after the treebank [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora), whose conventions the lemmas and features follow ([Word analysis](analysis.md#ud)). The probabilities of analyses come from the training parts of UD Spanish AnCora and [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD); word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) license.
 
-The property `dictionary_info` describes the dictionary of the analyzer: the source and its snapshot with its SHA-256, the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, the number of word forms and the checksum of the file. Every access returns a new dict.
+The property `dictionary_info` describes the dictionary of the analyzer: the source and its snapshot with its SHA-256, the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is `esmorph.DictionaryInfo`.
 
 === "Code"
 

@@ -1,7 +1,9 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from os import PathLike
 from pathlib import Path
-from typing import Literal, Protocol, Required, TypedDict, final
+from typing import Literal, Protocol, final
+
+from ._types import DictionaryInfo
 
 __all__ = ["Analysis", "Analyzer", "FormNotFoundError", "__version__"]
 
@@ -59,13 +61,17 @@ def _analysis(
     prob: float,
     words: list[str],
     source: str,
-    path: str | PathLike[str] | None = None,
+    path: object = None,
     entry: int | None = None,
+    verify: bool = False,
 ) -> Analysis:
     """Restores an analysis from pickle"""
 
-def _analyzer(path: str | PathLike[str] | None = None) -> Analyzer:
+def _analyzer(path: str | PathLike[str] | None = None, verify: bool = False) -> Analyzer:
     """Restores an analyzer from pickle"""
+
+def _analyses_analyzer(path: str | PathLike[str] | None = None, verify: bool = False) -> Analyzer:
+    """Restores the analyzer of analyses from pickle"""
 
 def _main(args: list[str]) -> int:
     """The esmorph command with the arguments: its exit code"""
@@ -88,20 +94,10 @@ class _Document(Protocol):
     def set_columns(
         self,
         *,
-        lemma: Sequence[str | None],
-        upos: Sequence[str | None],
-        feats: Sequence[str | None],
+        lemma: list[str],
+        upos: list[str],
+        feats: list[str | None],
     ) -> object: ...
-
-class DictionaryInfo(TypedDict, total=False):
-    source: str
-    snapshot: str
-    sha256: str
-    license: str
-    ud_release: str
-    treebanks: dict[str, str]
-    word_forms: Required[int]
-    checksum: Required[int]
 
 @final
 class Analyzer:

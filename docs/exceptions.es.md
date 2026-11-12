@@ -5,8 +5,8 @@ La biblioteca lanza excepciones integradas de Python y una propia, `FormNotFound
 | Excepción | Clase integrada | Cuándo se lanza |
 | :-------- | :-------------- | :-------------- |
 | `FormNotFoundError` | `LookupError` | El lexema no tiene una forma con los rasgos pedidos, o el diccionario no tiene el lexema del análisis ([`inflect`](inflection.md#inflect)) |
-| `ValueError` | - | El rasgo o el valor no está en el diccionario (`inflect`); el archivo no es un diccionario de esMorph o está dañado, la ruta tiene un carácter NUL ([`Analyzer`](analyzer.md)) |
-| `TypeError` | - | Un argumento de tipo incorrecto: una palabra o un valor de rasgo que no es una cadena, una cadena o bytes en lugar de una colección de palabras ([`analyze_many`](analyzer.md#analyze_many), [`lemmatize`](analyzer.md#lemmatize)), una ruta del diccionario que no es una cadena ni `PathLike` (`Analyzer`) |
+| `ValueError` | - | El rasgo o el valor no está en el diccionario (`inflect`); el archivo no es un diccionario de esMorph o está dañado, con `verify=True` también un archivo creado a propósito, la ruta tiene un carácter NUL ([`Analyzer`](analyzer.md)); las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden ([`annotate`](analyzer.md#annotate)) |
+| `TypeError` | - | Un argumento de tipo incorrecto: una palabra o un valor de rasgo que no es una cadena, una cadena o bytes en lugar de una colección de palabras ([`analyze_many`](analyzer.md#analyze_many), [`lemmatize`](analyzer.md#lemmatize)), una ruta del diccionario que no es una cadena ni `PathLike`, `verify` que no es `bool` (`Analyzer`); un objeto que no es un documento, una forma o el texto de un token que no es una cadena, el índice de una palabra que no es un entero (`annotate`) |
 | `FileNotFoundError` | `OSError` | El archivo del diccionario no existe (`Analyzer`) |
 | `PermissionError`, `IsADirectoryError` y otras | `OSError` | El archivo del diccionario no se puede leer o no es un archivo (`Analyzer`) |
 

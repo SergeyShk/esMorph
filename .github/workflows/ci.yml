@@ -48,6 +48,8 @@ jobs:
           cargo clippy --workspace --all-targets --locked -- -D warnings
           # The workspace turns on the feature build: the module builds the core without it
           cargo clippy -p esmorph --no-default-features --locked -- -D warnings
+          # The module builds the command without the dictionary of the crate
+          cargo clippy -p esmorph --no-default-features --features cli --all-targets --locked -- -D warnings
           # No member of the workspace turns on the feature anyseg
           cargo clippy -p esmorph --all-features --all-targets --locked -- -D warnings
       - name: Rustdoc
@@ -122,6 +124,12 @@ jobs:
           [ "$size" -lt 10420224 ] || { echo "The compressed dictionary does not fit the crates.io limit of 10 MiB"; exit 1; }
       - name: Run tests
         run: uv run --no-sync pytest --cov esmorph
+      - name: Check the stubs
+        # The stubs against the module built for the tests; the dictionary is not a key of its build
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          uv sync --locked --no-default-groups --group test --group lint
+          uv run --no-sync python -m mypy.stubtest esmorph
       - name: Run Rust tests
         run: cargo test -p esmorph -p esmorph-dict-es -p esmorph-build --all-features --locked
 
