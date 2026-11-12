@@ -770,7 +770,8 @@ fn kind(token: &str) -> usize {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{Builder, Dictionary};
+    use crate::Dictionary;
+    use crate::builder::Builder;
 
     fn entry(out: &mut Vec<u8>, name: &str, kind: u8, body: &[u8]) {
         out.extend_from_slice(&(name.len() as u16).to_le_bytes());
@@ -936,8 +937,27 @@ pub(crate) mod tests {
             .collect();
         let (head, tail) = words.split_at(crate::SENTENCE_CHUNK);
         let mut chunks = dictionary.analyze_sentence(head).unwrap();
-        chunks.extend(dictionary.analyze_sentence(tail).unwrap());
+        chunks.extend(dictionary.analyze_sentence_part(tail, false).unwrap());
         assert_eq!(dictionary.analyze_sentence(&words).unwrap(), chunks);
+    }
+
+    #[cfg(feature = "bundled")]
+    #[test]
+    fn parts_of_a_long_sentence() {
+        // Only the first part starts the sentence: the tail as a sentence of its own differs
+        let dictionary = Dictionary::bundled().unwrap();
+        let words: Vec<&str> = ["la", "casa", "es", "grande"]
+            .into_iter()
+            .cycle()
+            .take(2 * crate::SENTENCE_CHUNK + 4)
+            .collect();
+        let whole = dictionary.analyze_sentence(&words).unwrap();
+        let (head, tail) = words.split_at(crate::SENTENCE_CHUNK);
+        let mut parts = dictionary.analyze_sentence_part(head, true).unwrap();
+        parts.extend(dictionary.analyze_sentence_part(tail, false).unwrap());
+        assert_eq!(parts, whole);
+        let alone = dictionary.analyze_sentence(tail).unwrap();
+        assert_ne!(alone[0][0].prob, whole[crate::SENTENCE_CHUNK][0].prob);
     }
 
     #[test]

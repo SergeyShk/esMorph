@@ -321,8 +321,9 @@ fn build(
         let gaps = esmorph::Dictionary::from_bytes(&bytes)?.context_gaps()?;
         if !gaps.is_empty() {
             return Err(Error::Build(format!(
-                "the context model was trained with a dictionary without the tags {}: train it \
-                 again (scripts/train_context.py)",
+                "the context model was trained with a dictionary without the tags {}: build the \
+                 dictionary without the model (three arguments), train the model with it \
+                 (scripts/train_context.py --dictionary) and build the dictionary again",
                 gaps.join(", ")
             )));
         }

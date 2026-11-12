@@ -1,7 +1,7 @@
 //! The fields of CoNLL-U of the words of a token and the analysis of a document of the anySeg
 //! segmenter
 
-use super::{Analysis, Dictionary, normalized};
+use super::{Analysis, Dictionary, SENTENCE_CHUNK, normalized};
 use crate::Error;
 use crate::alphabet;
 use crate::clitics;
@@ -37,7 +37,9 @@ impl Dictionary {
 
     /// The fields of CoNLL-U of the words of the tokens of a sentence, each token - its text and
     /// its words, as `token_fields` gives them. With `context` the analyses of the tokens are
-    /// ordered by the context model, without it as `analyze` orders them
+    /// ordered by the context model, without it as `analyze` orders them. `start` - whether the
+    /// tokens start the sentence: a sentence given by parts of a multiple of `SENTENCE_CHUNK`
+    /// tokens gets the fields of the whole; the analyses are kept by parts of `SENTENCE_CHUNK`
     ///
     /// # Errors
     ///
@@ -47,18 +49,21 @@ impl Dictionary {
         &'d self,
         tokens: &[(&str, &[S])],
         context: bool,
+        start: bool,
         fields: &mut Vec<Fields<'d>>,
     ) -> Result<(), Error> {
-        let texts: Vec<&str> = (tokens.iter())
-            .map(|(token, words)| token_text(token, words))
-            .collect();
-        let analyses = if context {
-            self.analyze_sentence(&texts)?
-        } else {
-            texts.iter().map(|text| self.analyze(text)).collect()
-        };
-        for ((token, words), analyses) in tokens.iter().zip(analyses) {
-            self.token_fields_with(token, words, analyses, fields);
+        for (number, part) in tokens.chunks(SENTENCE_CHUNK).enumerate() {
+            let texts: Vec<&str> = (part.iter())
+                .map(|(token, words)| token_text(token, words))
+                .collect();
+            let analyses = if context {
+                self.analyze_sentence_part(&texts, start && number == 0)?
+            } else {
+                texts.iter().map(|text| self.analyze(text)).collect()
+            };
+            for ((token, words), analyses) in part.iter().zip(analyses) {
+                self.token_fields_with(token, words, analyses, fields);
+            }
         }
         Ok(())
     }
@@ -194,7 +199,7 @@ impl Dictionary {
                 .zip(&words)
                 .map(|(token, words)| (spans[token].slice(document.text()), words.as_slice()))
                 .collect();
-            self.sentence_fields(&tokens, context, &mut fields)?;
+            self.sentence_fields(&tokens, context, true, &mut fields)?;
         }
         Ok(fields)
     }
@@ -466,7 +471,7 @@ mod tests {
                 .map(|(token, words)| (*token, words.as_slice()))
                 .collect();
             let mut fields = Vec::new();
-            (dictionary.sentence_fields(&tokens, context, &mut fields)).unwrap();
+            (dictionary.sentence_fields(&tokens, context, true, &mut fields)).unwrap();
             fields.into_iter().map(|word| word.pos).collect::<Vec<_>>()
         };
         assert_eq!(pos(&["Ella", "la", "vio"], true), ["PRON", "PRON", "VERB"]);

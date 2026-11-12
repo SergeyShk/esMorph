@@ -26,6 +26,10 @@ Description:
     read. On the CPU a seed gives the same file. The versions of the packages are pinned in
     train_context.py.lock; esMorph is the build of the repository (`--with-editable .`)
 
+    A dictionary with new parts of speech or features needs a new model: the dictionary to train
+    with is built without the model (`esmorph-build` with three arguments), and then the
+    dictionary is built with the new model
+
 Example:
     uv run --with-editable . scripts/train_context.py --data target/context --output data/es-context.bin
 """

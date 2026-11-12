@@ -162,6 +162,16 @@ class SentencesDocument(Document):
     sentences: list = field(default_factory=list)
 
 
+def test_long_sentence(morph):
+    # A sentence longer than a piece analyzed without the GIL: the pieces give the whole
+    forms = ["la", "casa", "es", "grande"] * 3000
+    document = Document(forms)
+    morph.annotate(document)
+    first = [analyses[0] for analyses in morph.analyze_sentence(forms)]
+    assert document.columns["upos"] == [analysis.pos for analysis in first]
+    assert document.columns["lemma"] == [analysis.lemma for analysis in first]
+
+
 def test_document_sentences(morph):
     forms = ["Ella", "la", "vio", "La", "casa"]
     document = SentencesDocument(

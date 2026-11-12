@@ -25,6 +25,8 @@ use pyo3::types::{
 /// How many words `analyze_many` and `lemmatize` read and analyze at a time without the GIL: the
 /// input is not copied whole, and Ctrl+C is checked between the chunks
 const CHUNK: usize = 8192;
+// A piece of CHUNK tokens of a sentence is a whole number of the parts the context model analyzes
+const _: () = assert!(CHUNK.is_multiple_of(esmorph::SENTENCE_CHUNK));
 /// `errno` of an invalid argument, the same on POSIX and in the C runtime of Windows
 const EINVAL: i32 = 22;
 
@@ -110,7 +112,8 @@ enum AnalysisTag {
 ///     pos (str): The part of speech of Universal Dependencies
 ///     feats (dict[str, str]): The Universal Dependencies features
 ///     prob (float): Share of the analysis among the analyses of the word, by the counts of
-///         treebanks; equal for a word they did not see
+///         treebanks; equal for a word they did not see; of analyze_sentence - the score of the
+///         context model in the sentence
 ///     words (tuple[str, ...]): Words of the token: a verb and its clitics, the words of a
 ///         contraction, or the word itself; the analysis describes the first of them
 ///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the
@@ -970,15 +973,25 @@ impl Analyzer {
             texts.append(&mut words.texts);
         }
         drop(words);
-        let sentence = py
-            .detach(|| this.dictionary.analyze_sentence(&texts))
-            .map_err(|err| PyValueError::new_err(err.to_string()))?;
         let result = PyList::empty(py);
-        for analyses in sentence {
-            let list = PyList::new(py, this.convert(py, &handle, analyses)?)?;
-            // SAFETY: as in analyze_many, a list of analyses refers to no tracked object
-            unsafe { pyo3::ffi::PyObject_GC_UnTrack(list.as_ptr().cast()) };
-            result.append(list)?;
+        // A sentence without tokens checks that the dictionary has a model too
+        if texts.is_empty() {
+            (this.dictionary.analyze_sentence::<&str>(&[]))
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        }
+        // Pieces of CHUNK tokens, a multiple of the parts the model analyzes: Ctrl+C is checked
+        // between them
+        for (number, piece) in texts.chunks(CHUNK).enumerate() {
+            let sentence = py
+                .detach(|| this.dictionary.analyze_sentence_part(piece, number == 0))
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
+            for analyses in sentence {
+                let list = PyList::new(py, this.convert(py, &handle, analyses)?)?;
+                // SAFETY: as in analyze_many, a list of analyses refers to no tracked object
+                unsafe { pyo3::ffi::PyObject_GC_UnTrack(list.as_ptr().cast()) };
+                result.append(list)?;
+            }
+            py.check_signals()?;
         }
         Ok(result)
     }
@@ -1072,24 +1085,33 @@ impl Analyzer {
         let mut lemma_strings: HashMap<String, Bound<'_, PyString>> = HashMap::new();
         let (lemmas, parts, feats) = (PyList::empty(py), PyList::empty(py), PyList::empty(py));
         let mut fields = Vec::with_capacity(CHUNK);
-        let mut sentence = 0;
-        while sentence + 1 < bounds.len() {
-            // Whole sentences of about CHUNK words: Ctrl+C is checked between them
-            let first = tokens[bounds[sentence]].1.start;
+        // Sentences by pieces of at most CHUNK tokens, a multiple of the parts the model analyzes,
+        // and whether a piece starts its sentence
+        let mut pieces: Vec<(Range<usize>, bool)> = Vec::new();
+        for sentence in bounds.windows(2) {
+            for start in (sentence[0]..sentence[1]).step_by(CHUNK) {
+                pieces.push((
+                    start..(start + CHUNK).min(sentence[1]),
+                    start == sentence[0],
+                ));
+            }
+        }
+        let mut piece = 0;
+        while piece < pieces.len() {
+            // Pieces of about CHUNK words: Ctrl+C is checked between them
+            let first = tokens[pieces[piece].0.start].1.start;
             py.detach(|| -> Result<(), esmorph::Error> {
-                while sentence + 1 < bounds.len()
-                    && tokens[bounds[sentence]].1.start - first < CHUNK
+                while piece < pieces.len() && tokens[pieces[piece].0.start].1.start - first < CHUNK
                 {
-                    let part = &tokens[bounds[sentence]..bounds[sentence + 1]];
-                    let part: Vec<(&str, &[String])> = (part.iter())
+                    let (range, start) = pieces[piece].clone();
+                    let part: Vec<(&str, &[String])> = (tokens[range].iter())
                         .map(|(text, range)| {
                             let words = &forms[range.clone()];
                             (text.unwrap_or(words[0].as_str()), words)
                         })
                         .collect();
-                    self.dictionary
-                        .sentence_fields(&part, context, &mut fields)?;
-                    sentence += 1;
+                    (self.dictionary).sentence_fields(&part, context, start, &mut fields)?;
+                    piece += 1;
                 }
                 Ok(())
             })
@@ -1504,8 +1526,6 @@ impl<'py> Words<'py> {
     }
 }
 
-/// The multiword tokens of a document: the text of every token and its words, consecutive words
-/// of the `count` words of the document in order
 /// The first words of the sentences of a document in order, from its `sentences`; without them
 /// the document is one sentence
 fn sentence_starts(document: &Bound<'_, PyAny>, count: usize) -> PyResult<Vec<usize>> {
@@ -1541,6 +1561,8 @@ fn sentence_starts(document: &Bound<'_, PyAny>, count: usize) -> PyResult<Vec<us
     Ok(starts)
 }
 
+/// The multiword tokens of a document: the text of every token and its words, consecutive words
+/// of the `count` words of the document in order
 fn multiword_tokens(
     document: &Bound<'_, PyAny>,
     count: usize,

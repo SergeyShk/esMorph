@@ -94,7 +94,8 @@ pub struct Analysis {
     /// Number of the UD tag for `Dictionary::ud_tag`
     pub ud: u16,
     /// Share of the analysis among the analyses of the word: by the counts of treebanks, equal for
-    /// a word they did not see
+    /// a word they did not see; of `Dictionary::analyze_sentence` - the score of the context model
+    /// in the sentence
     pub prob: f64,
     /// Where the analysis comes from
     pub source: Source,
@@ -712,6 +713,17 @@ impl Dictionary {
         &self,
         words: &[S],
     ) -> Result<Vec<Vec<Analysis>>, Error> {
+        self.analyze_sentence_part(words, true)
+    }
+
+    /// `analyze_sentence` of a part of a sentence, `start` - whether the part starts it: the parts
+    /// of a sentence of a multiple of `SENTENCE_CHUNK` tokens each get the analyses of the whole
+    #[doc(hidden)]
+    pub fn analyze_sentence_part<S: AsRef<str>>(
+        &self,
+        words: &[S],
+        start: bool,
+    ) -> Result<Vec<Vec<Analysis>>, Error> {
         let context = self.context()?;
         let mut sentence = Vec::with_capacity(words.len());
         for (number, chunk) in words.chunks(SENTENCE_CHUNK).enumerate() {
@@ -729,7 +741,7 @@ impl Dictionary {
             let normal: Vec<Cow<str>> =
                 chunk.iter().map(|word| normalized(word.as_ref())).collect();
             let normal: Vec<&str> = normal.iter().map(AsRef::as_ref).collect();
-            sentence.extend(context.rank(&normal, analyses, number == 0));
+            sentence.extend(context.rank(&normal, analyses, start && number == 0));
         }
         Ok(sentence)
     }
@@ -754,9 +766,13 @@ impl Dictionary {
                          context"
                         .into())
                     } else {
+                        // The message without the prefix of `Error::Format`, which wraps it below
                         context::Model::parse(bytes)
                             .map(|model| context::Context::new(model, &self.ud))
-                            .map_err(|err| err.to_string())
+                            .map_err(|err| match err {
+                                Error::Format(message) => message,
+                                err => err.to_string(),
+                            })
                     };
                 self.context.get_or_init(move || built)
             }

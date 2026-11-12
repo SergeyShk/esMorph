@@ -639,10 +639,16 @@ def test_analyze_sentence(morph):
     first = morph.analyze_sentence(["Dámelo", "ya"])[0][0]
     assert (first.pos, first.words) == ("VERB", ("da", "me", "lo"))
     assert morph.analyze_sentence(["qzxw", "casa"])[0] == []
-    # A long sentence goes by parts of 256 tokens
-    long = morph.analyze_sentence(["la", "casa"] * 300)
-    assert len(long) == 600
-    assert long[2] == long[4]
+    # A long sentence goes by parts of 256 tokens, and only its first part starts it: the part
+    # after a piece read without the GIL is analyzed as the same part inside the first piece
+    long = morph.analyze_sentence(["la", "casa", "es", "grande"] * 3000)
+    assert len(long) == 12_000
+
+    def probabilities(part):
+        return [[(analysis.pos, analysis.prob) for analysis in analyses] for analyses in part]
+
+    assert probabilities(long[8192:8448]) == probabilities(long[4096:4352])
+    assert probabilities(long[:256]) != probabilities(long[4096:4352])
 
 
 def test_lemmatize(morph):
