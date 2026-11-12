@@ -88,7 +88,8 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Install dependencies
-        run: uv sync --locked --no-default-groups --group test
+        # spaCy has no wheels for the free-threaded Python
+        run: uv sync --locked --no-default-groups --group test ${{ matrix.python-version != '3.14t' && '--group spacy' || '' }}
       - name: Cache Wiktionary
         # The snapshot of Wiktionary from Hugging Face is downloaded once per version of the script
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -128,7 +129,7 @@ jobs:
         # The stubs against the module built for the tests; the dictionary is not a key of its build
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: |
-          uv sync --locked --no-default-groups --group test --group lint
+          uv sync --locked --no-default-groups --group test --group spacy --group lint
           uv run --no-sync python -m mypy.stubtest esmorph
       - name: Run Rust tests
         run: cargo test -p esmorph -p esmorph-dict-es -p esmorph-build --all-features --locked
