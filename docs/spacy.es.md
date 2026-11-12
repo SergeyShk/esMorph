@@ -31,20 +31,20 @@ Con las palabras de referencia de las partes de prueba de los treebanks ([Compar
 
 ## Modelos es_core_news { #models }
 
-En una cadena de los modelos `es_core_news_*` el componente sustituye al morfologizador y al lematizador, y se quedan el analizador sintáctico y el reconocimiento de entidades; el componente toma las oraciones que marca el analizador sintáctico.
+En una cadena de los modelos `es_core_news_*` el componente sustituye al morfologizador y al lematizador, y se quedan el analizador sintáctico y el reconocimiento de entidades; el componente toma las oraciones que marca el analizador sintáctico y va antes de `attribute_ruler`, que rellena `tag_` según la categoría. El morfologizador es una capa pequeña sobre los vectores de `tok2vec`, que el analizador sintáctico necesita de todos modos, y el lematizador son reglas y tablas, así que el componente hace una cadena así alrededor de un 15 % más lenta.
 
 ``` python
 nlp = spacy.load("es_core_news_sm", exclude=["morphologizer", "lemmatizer"])
-nlp.add_pipe("esmorph")
+nlp.add_pipe("esmorph", before="attribute_ruler")
 ```
 
 ## Tokens de varias palabras { #multiword }
 
-Un token de spaCy es un token del texto: una contracción (`del`, `al`) o un verbo con clíticos (`dámelo`) es un solo token. Recibe el análisis de su primera palabra, tal como [`annotate`](analyzer.md#annotate) se lo da a la primera palabra: `del` es ADP `de`, `dámelo` es VERB `dar` en imperativo. Las palabras del token están en su [análisis de esMorph](#extension).
+Un token de spaCy es un token del texto: una contracción (`del`, `al`) o un verbo con clíticos (`dámelo`) es un solo token. Recibe el análisis de su primera palabra: `del` es ADP `de`, `dámelo` es VERB `dar` en imperativo. Con el tokenizador de anySeg, que da las palabras de un token, es el análisis más probable con esas palabras, tal como lo elige [`annotate`](analyzer.md#annotate), y con otro tokenizador, el análisis más probable del token en la oración. Las palabras del token están en su [análisis de esMorph](#extension).
 
 ## Oraciones { #sentences }
 
-El modelo de contexto analiza una oración entera. El componente toma las oraciones de la anotación del documento - el analizador sintáctico, `senter` o `sentencizer` - y, sin ella, divide el documento después de los tokens de signos de fin de oración («.», «!», «?», «…»). Los tokens de espacios y los que solo tienen separadores invisibles (BOM, U+200B, U+2060, el guion suave) reciben la categoría `SPACE`, como en los modelos de spaCy, y el propio token como lema: el modelo no los ve. Un token sin análisis de esMorph recibe `X` y el token en minúsculas como lema, como en el [comando esmorph](cli.md).
+El modelo de contexto analiza una oración entera. El componente toma las oraciones de la anotación del documento - el analizador sintáctico, `senter` o `sentencizer` - y, sin ella, divide el documento después de los tokens de signos de fin de oración («.», «!», «?», «…») con las comillas y los paréntesis de cierre que los siguen sin espacio, y en una línea en blanco. Los tokens de espacios y los que solo tienen separadores invisibles (BOM, U+200B, U+2060, el guion suave) reciben la categoría `SPACE`, como en los modelos de spaCy, y el propio token como lema: el modelo no los ve. Un token sin análisis de esMorph recibe `X` y el token en minúsculas como lema, como en el [comando esmorph](cli.md).
 
 Los tokens, sus palabras y los inicios de oración según las convenciones de Universal Dependencies, con las que se entrena el modelo de contexto, los da el segmentador [anySeg](https://sergeyshk.github.io/anySeg/) (`pip install "anyseg[spacy]"`): el tokenizador `anyseg.Tokenizer.v1` y el componente `anyseg_sentencizer` van antes de `esmorph`. Las palabras de un token de varias también están entonces en `token._.anyseg_words`.
 
@@ -70,6 +70,8 @@ Los tokens, sus palabras y los inicios de oración según las convenciones de Un
 | :-------- | :--- | :---------- | :---------- |
 | `dictionary` | `str` | `None` | Ruta al archivo del diccionario; por defecto, el diccionario del paquete |
 | `context` | `bool` | `True` | Elegir el análisis por los tokens de alrededor; `False` - el análisis más probable de la forma, como con [`analyze`](analyzer.md#analyze) |
+
+`nlp.evaluate` y `spacy evaluate` evalúan el componente como al morfologizador y al lematizador: `pos_acc`, `morph_acc`, `morph_per_feat` y `lemma_acc`. `spacy package` no encuentra esmorph entre los requisitos de una cadena: añada `"requirements": ["esmorph>=0.3,<0.4"]` a su `meta.json` antes de empaquetarla. El parámetro `dictionary` guarda una ruta, así que un diccionario propio debe estar en esa ruta donde se instale el paquete.
 
 === "Código"
 

@@ -66,6 +66,36 @@ def test_sentences_by_punctuation(nlp):
     )
 
 
+def test_sentences_by_blank_lines_and_closing_marks(nlp):
+    # A heading or a name in a play before a blank line ends a sentence; a closing quote or
+    # bracket after a sentence end mark stays in the sentence, and so do spaces
+    assert annotation(nlp("Capítulo 1\n\nEra una noche oscura")) == [
+        *expected(["Capítulo", "1"]),
+        ("\n\n", "SPACE", {}),
+        *expected(["Era", "una", "noche", "oscura"]),
+    ]
+    assert annotation(nlp("«Hola.» Dijo ella.")) == expected(
+        ["«", "Hola", ".", "»"], ["Dijo", "ella", "."]
+    )
+    # A quote after a space or a blank line opens the next sentence
+    assert annotation(nlp('Ella la vio. "Ven", dijo.')) == expected(
+        ["Ella", "la", "vio", "."], ['"', "Ven", '"', ",", "dijo", "."]
+    )
+    assert annotation(nlp("Era ella.\n\n» Y luego.")) == [
+        *expected(["Era", "ella", "."]),
+        ("\n\n", "SPACE", {}),
+        *expected(["»", "Y", "luego", "."]),
+    ]
+    assert annotation(nlp("Ella la vio.  La casa es grande.")) == [
+        *expected(["Ella", "la", "vio", "."]),
+        (" ", "SPACE", {}),
+        *expected(["La", "casa", "es", "grande", "."]),
+    ]
+    # A single line break goes on with the sentence, as in verse
+    words = expected(["Ella", "la", "vio", "ayer"])
+    assert annotation(nlp("Ella la vio\nayer")) == [*words[:3], ("\n", "SPACE", {}), words[3]]
+
+
 def test_marked_sentences():
     nlp = spacy.blank("es")
     nlp.add_pipe("sentencizer", config={"punct_chars": ["."]})
@@ -151,6 +181,30 @@ def test_without_context():
         (analyses[0].lemma, analyses[0].pos, analyses[0].feats)
         for analyses in esmorph.Analyzer().analyze_many(["Ella", "la", "vio"])
     ]
+
+
+def test_score():
+    # nlp.evaluate and spacy evaluate score the component as the morphologizer and the lemmatizer
+    nlp = spacy.blank("es")
+    nlp.add_pipe("esmorph")
+    gold = spacy.tokens.Doc(
+        nlp.vocab,
+        words=["Ella", "la", "vio"],
+        pos=["PRON", "PRON", "VERB"],
+        lemmas=["él", "él", "ver"],
+        morphs=["", "", "Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin"],
+    )
+    example = spacy.training.Example(nlp.make_doc("Ella la vio"), gold)
+    scores = nlp.evaluate([example])
+    assert (scores["pos_acc"], scores["lemma_acc"]) == (1.0, 1.0)
+    assert scores["morph_acc"] == 1 / 3
+    assert "Mood" in scores["morph_per_feat"]
+    assert dict(nlp.config["training"]["score_weights"]) == {
+        "pos_acc": 0.33,
+        "morph_acc": 0.33,
+        "morph_per_feat": None,
+        "lemma_acc": 0.34,
+    }
 
 
 def test_config(tmp_path):
@@ -250,10 +304,10 @@ def test_anyseg_tokenizer():
     nlp = spacy.blank("es", config={"nlp": {"tokenizer": tokenizer}})
     nlp.add_pipe("anyseg_sentencizer")
     nlp.add_pipe("esmorph")
-    doc = nlp("Dámelo ya.\nElla la vio del balcón.")
+    doc = nlp("Dámelo ya.\nElla la vio del balcón. Dímelo.")
     words = [(token.text, token.pos_, token.lemma_) for token in doc if not token.is_space]
     assert words[:2] == [("Dámelo", "VERB", "dar"), ("ya", "ADV", "ya")]
-    assert words[-5:-1] == [
+    assert words[4:8] == [
         ("la", "PRON", "él"),
         ("vio", "VERB", "ver"),
         ("del", "ADP", "de"),
@@ -261,4 +315,13 @@ def test_anyseg_tokenizer():
     ]
     assert [word["form"] for word in doc[0]._.anyseg_words] == ["Da", "me", "lo"]
     assert [token.pos_ for token in doc if token.is_space] == ["SPACE"]
-    assert [sentence.text for sentence in doc.sents][-1] == "Ella la vio del balcón."
+    assert [sentence.text for sentence in doc.sents][1] == "Ella la vio del balcón."
+    # The analysis with the words of the token, as the analysis of a document chooses it: in the
+    # sentence alone the token is rather a name
+    token = doc[-2]
+    assert (token.text, token.pos_, token.lemma_) == ("Dímelo", "VERB", "decir")
+    assert token._.esmorph.words == ("di", "me", "lo")
+    assert esmorph.Analyzer().analyze_sentence(["Dímelo", "."])[0][0].pos == "PROPN"
+    # A word of the dictionary that anySeg splits is a verb with clitics, as for annotate
+    dale = nlp("Dale la mano.")[0]
+    assert (dale.pos_, dale.lemma_, dale._.esmorph.words) == ("VERB", "dar", ("da", "le"))

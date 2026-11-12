@@ -69,6 +69,41 @@ impl Dictionary {
         Ok(())
     }
 
+    /// The analysis of the first word of a token with the words `words` from `analyses` of the
+    /// token in their order: of a token of one word the first, of a token of several the first
+    /// with these words, ignoring case and accents, else the first such analysis of the token as
+    /// a verb with clitics, its probability the share among them; without one the first analysis
+    /// of the first word
+    #[doc(hidden)]
+    pub fn host<S: AsRef<str>>(
+        &self,
+        token: &str,
+        words: &[S],
+        analyses: Vec<Analysis>,
+    ) -> Option<Analysis> {
+        let first = words.first()?.as_ref();
+        let host = if words.len() == 1 {
+            analyses.into_iter().next()
+        } else {
+            let fits = |analysis: &Analysis| {
+                analysis.words.len() == words.len()
+                    && (analysis.words.iter())
+                        .zip(words)
+                        .all(|(known, word)| same_word(known, word.as_ref()))
+            };
+            let mut fitting: Vec<Analysis> = analyses.into_iter().filter(fits).collect();
+            // A word of the dictionary that the segmenter splits is a verb with clitics too:
+            // `dale` is an interjection, `dinos` an adjective
+            if fitting.is_empty() {
+                fitting = (self.with_clitics(&normalized(token)).into_iter())
+                    .filter(fits)
+                    .collect();
+            }
+            most_probable(fitting)
+        };
+        host.or_else(|| self.analyze(first).into_iter().next())
+    }
+
     /// `token_fields` with the analyses of the token in their order: of its text for a token of
     /// several words, of its word for a token of one
     fn token_fields_with<'d, S: AsRef<str>>(
@@ -82,31 +117,7 @@ impl Dictionary {
             return;
         };
         let first = first.as_ref();
-        let mut analyses = Some(analyses);
-        let host = if rest.is_empty() {
-            analyses
-                .take()
-                .and_then(|analyses| analyses.into_iter().next())
-        } else {
-            let fits = |analysis: &Analysis| {
-                analysis.words.len() == words.len()
-                    && (analysis.words.iter())
-                        .zip(words)
-                        .all(|(known, word)| same_word(known, word.as_ref()))
-            };
-            let mut fitting: Vec<Analysis> = (analyses.take().into_iter().flatten())
-                .filter(fits)
-                .collect();
-            // A word of the dictionary that the segmenter splits is a verb with clitics too:
-            // `dale` is an interjection, `dinos` an adjective
-            if fitting.is_empty() {
-                fitting = (self.with_clitics(&normalized(token)).into_iter())
-                    .filter(fits)
-                    .collect();
-            }
-            most_probable(fitting)
-        };
-        let host = host.or_else(|| self.analyze(first).into_iter().next());
+        let host = self.host(token, words, analyses);
         let verb = host.as_ref().is_some_and(|analysis| {
             (self.ud_tag(analysis.ud)).is_some_and(|tag| matches!(tag.pos(), "VERB" | "AUX"))
         });
