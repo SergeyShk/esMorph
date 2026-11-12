@@ -6,6 +6,8 @@ Python 3.11 or newer is required.
 pip install esmorph
 ```
 
+The package also installs the [`esmorph` command](cli.md).
+
 ## Prebuilt wheels
 
 PyPI hosts wheels for Linux (x86_64 and aarch64, manylinux and musllinux), macOS (Intel and Apple Silicon) and Windows (x64 and arm64). One wheel serves every Python version starting with 3.11, and the free-threaded Python 3.14t has a wheel of its own; Rust is not needed to install them. The dictionary is part of the package and needs no separate installation. The free-threaded Python 3.13 is not supported: free-threaded builds start with 3.14.
@@ -39,4 +41,10 @@ The analyzer core is published on crates.io as the [`esmorph`](https://crates.io
 
 ``` bash
 cargo add esmorph
+```
+
+The feature `anyseg` adds `Dictionary::annotate` for documents of the segmenter [anySeg](https://sergeyshk.github.io/anySeg/), and the feature `cli` adds the [`esmorph` command](cli.md), which installs without Python:
+
+``` bash
+cargo install esmorph --features cli
 ```

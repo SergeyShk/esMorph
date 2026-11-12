@@ -59,6 +59,7 @@ pub fn run(args: Vec<OsString>, version: &str, dictionary: Option<&Path>) -> u8 
         dictionary,
         interactive,
         closed,
+        true,
         &mut io::stdin().lock(),
         &mut output,
         &mut io::stderr(),
@@ -215,6 +216,9 @@ fn execute(
     default: Option<&Path>,
     interactive: bool,
     closed: bool,
+    // `stdin` and `stdout` are the standard streams of the process: they are compared with the
+    // files
+    standard: bool,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
@@ -249,7 +253,8 @@ fn execute(
         }
     };
     let dictionary_path = dictionary.as_deref().or(default);
-    let dictionary = match load(dictionary_path) {
+    // A dictionary given by the user may come from anywhere: its automata are checked
+    let dictionary = match load(dictionary_path, dictionary.is_some()) {
         Ok(dictionary) => dictionary,
         Err(message) => {
             report(message);
@@ -265,33 +270,45 @@ fn execute(
         report("the standard output is closed".to_owned());
         return 1;
     }
+    // The output file is created anew and the standard output may be appended to: an input or the
+    // dictionary it would overwrite or grow is not read. A device (/dev/null, /dev/stdout in a
+    // terminal) is neither
+    let sources: Vec<Stream> = (files.iter())
+        .filter_map(|file| match file == "-" {
+            true => standard.then_some(Stream::Stdin),
+            false => Some(Stream::Path(Path::new(file))),
+        })
+        .chain(dictionary_path.map(Stream::Path))
+        .collect();
+    let target = match &output_path {
+        Some(path) => Some(Stream::Path(path)),
+        None => standard.then_some(Stream::Stdout),
+    };
+    if let Some(target) = target
+        && metadata(target).is_some_and(|metadata| metadata.is_file())
+        && sources.iter().any(|&source| same_file(target, source))
+    {
+        report(match &output_path {
+            Some(path) => format!(
+                "{}: the output file is an input file or the dictionary",
+                path.display()
+            ),
+            None => "the standard output is an input file or the dictionary".into(),
+        });
+        return 1;
+    }
     let mut file_output;
     let output: &mut dyn Write = match &output_path {
-        Some(path) => {
-            // The output file is created anew: an input or the dictionary it would overwrite is not
-            // read. A device (/dev/null, /dev/stdout in a terminal) is not overwritten by creating it
-            let mut sources = (files.iter())
-                .map(|file| (file != "-").then(|| Path::new(file)))
-                .chain(dictionary_path.map(Some));
-            let regular = std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file());
-            if regular && sources.any(|source| same_file(path, source)) {
-                report(format!(
-                    "{}: the output file is an input file or the dictionary",
-                    path.display()
-                ));
+        Some(path) => match File::create(path) {
+            Ok(file) => {
+                file_output = BufWriter::new(file);
+                &mut file_output
+            }
+            Err(err) => {
+                report(format!("{}: {}", path.display(), open_error(path, &err)));
                 return 1;
             }
-            match File::create(path) {
-                Ok(file) => {
-                    file_output = BufWriter::new(file);
-                    &mut file_output
-                }
-                Err(err) => {
-                    report(format!("{}: {}", path.display(), open_error(path, &err)));
-                    return 1;
-                }
-            }
-        }
+        },
         None => stdout,
     };
     let mut writer = Writer {
@@ -314,11 +331,15 @@ fn execute(
         first_line: 0,
         next_line: 0,
         out: String::new(),
+        report: &mut report,
+        name: String::new(),
+        wrong: false,
     };
     let mut code = 0;
     for file in files {
         let path = Path::new(&file);
         let name = path.display().to_string();
+        writer.name.clone_from(&name);
         let result = if file == "-" {
             writer.process(stdin)
         } else {
@@ -327,6 +348,10 @@ fn execute(
                 Err(err) => Err(Failure::Open(open_error(path, &err))),
             }
         };
+        if std::mem::take(&mut writer.wrong) {
+            code = 1;
+        }
+        let report = &mut writer.report;
         match result {
             Ok(None) => {}
             Ok(Some(line)) => {
@@ -347,16 +372,12 @@ fn execute(
                 report(format!("{name}: the file is not in UTF-8 (line {line})"));
                 code = 1;
             }
-            Err(Failure::Input(line, message)) => {
-                report(format!("{name}: line {line}: {message}"));
-                code = 1;
-            }
-            Err(Failure::Write(err)) => return write_error(&err, &mut report).max(code),
+            Err(Failure::Write(err)) => return write_error(&err, report).max(code),
         }
     }
     match writer.output.flush() {
         Ok(()) => code,
-        Err(err) => write_error(&err, &mut report).max(code),
+        Err(err) => write_error(&err, &mut writer.report).max(code),
     }
 }
 
@@ -369,13 +390,27 @@ fn write_error(err: &io::Error, report: &mut impl FnMut(String)) -> u8 {
     1
 }
 
-/// The dictionary of the file `path`; without a path, the dictionary of the crate `esmorph-dict-es`
-fn load(path: Option<&Path>) -> Result<Dictionary, String> {
+/// The dictionary of the file `path`, verified with `verify`; without a path, the dictionary of the
+/// crate `esmorph-dict-es`
+fn load(path: Option<&Path>, verify: bool) -> Result<Dictionary, String> {
     match path {
-        Some(path) => Dictionary::open(path).map_err(|err| match err {
-            crate::Error::Io(err) => format!("{}: {}", path.display(), open_error(path, &err)),
-            err => format!("{}: {err}", path.display()),
-        }),
+        Some(path) => Dictionary::open(path)
+            .and_then(|dictionary| {
+                if verify {
+                    // The panic of a damaged automaton is an error of the dictionary: its message
+                    // is not printed
+                    let hook = std::panic::take_hook();
+                    std::panic::set_hook(Box::new(|_| {}));
+                    let verified = dictionary.verify();
+                    std::panic::set_hook(hook);
+                    verified?;
+                }
+                Ok(dictionary)
+            })
+            .map_err(|err| match err {
+                crate::Error::Io(err) => format!("{}: {}", path.display(), open_error(path, &err)),
+                err => format!("{}: {err}", path.display()),
+            }),
         #[cfg(feature = "bundled")]
         None => Dictionary::bundled().map_err(|err| err.to_string()),
         #[cfg(not(feature = "bundled"))]
@@ -402,25 +437,40 @@ fn open_error(path: &Path, err: &io::Error) -> String {
     }
 }
 
-/// The output file is the input `source` (`None` - the standard input). On Unix the device and the
-/// number of the file decide, so that a hard link and a symbolic link are the same file
-#[cfg(unix)]
-fn same_file(output: &Path, source: Option<&Path>) -> bool {
-    use std::os::fd::AsFd;
-    use std::os::unix::fs::MetadataExt;
-    let id = |metadata: std::fs::Metadata| (metadata.dev(), metadata.ino());
-    let metadata = match source {
-        Some(path) => opened_metadata(path),
-        // By the descriptor: /dev/stdin on macOS is a file of devfs, not the redirected file
-        None => io::stdin()
-            .as_fd()
-            .try_clone_to_owned()
-            .and_then(|descriptor| File::from(descriptor).metadata()),
-    };
-    match (opened_metadata(output), metadata) {
-        (Ok(output), Ok(source)) => id(output) == id(source),
-        _ => false,
+/// A file that the command reads or writes
+#[derive(Clone, Copy)]
+enum Stream<'a> {
+    Path(&'a Path),
+    Stdin,
+    Stdout,
+}
+
+/// The metadata of the file of a stream, `None` if it cannot be read
+fn metadata(stream: Stream) -> Option<std::fs::Metadata> {
+    match stream {
+        Stream::Path(path) => opened_metadata(path).ok(),
+        Stream::Stdin => descriptor_metadata(&io::stdin()),
+        Stream::Stdout => descriptor_metadata(&io::stdout()),
     }
+}
+
+/// The metadata of the file that a standard stream refers to: by the descriptor, as /dev/stdin on
+/// macOS is a file of devfs, not the redirected file
+#[cfg(unix)]
+fn descriptor_metadata(stream: &impl std::os::fd::AsFd) -> Option<std::fs::Metadata> {
+    let descriptor = stream.as_fd().try_clone_to_owned().ok()?;
+    File::from(descriptor).metadata().ok()
+}
+
+#[cfg(windows)]
+fn descriptor_metadata(stream: &impl std::os::windows::io::AsHandle) -> Option<std::fs::Metadata> {
+    let handle = stream.as_handle().try_clone_to_owned().ok()?;
+    File::from(handle).metadata().ok()
+}
+
+#[cfg(not(any(unix, windows)))]
+fn descriptor_metadata<T>(_stream: &T) -> Option<std::fs::Metadata> {
+    None
 }
 
 /// The metadata of the file a path opens: on macOS /dev/stdin and /dev/fd/N are files of devfs with
@@ -434,50 +484,61 @@ fn opened_metadata(path: &Path) -> io::Result<std::fs::Metadata> {
     if kind.is_fifo() || kind.is_socket() {
         return Ok(metadata);
     }
+    // A standard stream open only for writing opens so too
     File::open(path)
+        .or_else(|_| File::options().append(true).open(path))
         .and_then(|file| file.metadata())
         .or(Ok(metadata))
 }
 
-/// The output file is the input `source` (`None` - the standard input). On Windows a file is its
-/// canonical path, and the standard input, which has none, is compared by its times and size: the
-/// index of a file needs an unstable API
+#[cfg(not(unix))]
+fn opened_metadata(path: &Path) -> io::Result<std::fs::Metadata> {
+    std::fs::metadata(path)
+}
+
+/// Two streams are one file. On Unix the device and the number of the file decide, so that a hard
+/// link and a symbolic link are the same file
+#[cfg(unix)]
+fn same_file(a: Stream, b: Stream) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let id = |stream| metadata(stream).map(|metadata| (metadata.dev(), metadata.ino()));
+    id(a).is_some_and(|a| Some(a) == id(b))
+}
+
+/// Two streams are one file. On Windows a file is its canonical path or, for a hard link and a
+/// standard stream, which have no other, its times and size: the index of a file needs an unstable
+/// API
 #[cfg(windows)]
-fn same_file(output: &Path, source: Option<&Path>) -> bool {
+fn same_file(a: Stream, b: Stream) -> bool {
     use std::os::windows::fs::MetadataExt;
-    use std::os::windows::io::AsHandle;
-    let Some(source) = source else {
-        let stamp = |metadata: std::fs::Metadata| {
+    if let (Stream::Path(a), Stream::Path(b)) = (a, b)
+        && let (Ok(a), Ok(b)) = (std::fs::canonicalize(a), std::fs::canonicalize(b))
+        && a == b
+    {
+        return true;
+    }
+    let stamp = |stream| {
+        metadata(stream).map(|metadata| {
             (
                 metadata.creation_time(),
                 metadata.last_write_time(),
                 metadata.file_size(),
             )
-        };
-        let stdin = io::stdin()
-            .as_handle()
-            .try_clone_to_owned()
-            .and_then(|handle| File::from(handle).metadata());
-        return match (std::fs::metadata(output), stdin) {
-            (Ok(output), Ok(stdin)) => stamp(output) == stamp(stdin),
-            _ => false,
-        };
+        })
     };
-    match (std::fs::canonicalize(output), std::fs::canonicalize(source)) {
-        (Ok(output), Ok(source)) => output == source,
-        _ => false,
-    }
+    stamp(a).is_some_and(|a| Some(a) == stamp(b))
 }
 
-/// The output file is the input `source` elsewhere: by the canonical path; the standard input is
-/// not known
+/// Two streams are one file elsewhere: by the canonical path; a standard stream is not known
 #[cfg(not(any(unix, windows)))]
-fn same_file(output: &Path, source: Option<&Path>) -> bool {
-    match (
-        std::fs::canonicalize(output),
-        source.map(std::fs::canonicalize),
-    ) {
-        (Ok(output), Some(Ok(source))) => output == source,
+fn same_file(a: Stream, b: Stream) -> bool {
+    match (a, b) {
+        (Stream::Path(a), Stream::Path(b)) => {
+            match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+                (Ok(a), Ok(b)) => a == b,
+                _ => false,
+            }
+        }
         _ => false,
     }
 }
@@ -489,8 +550,6 @@ enum Failure {
     /// The file is in another encoding: UTF-16, or wrong bytes before the first line of UTF-8; the
     /// line where it shows
     Encoding(usize),
-    /// A wrong line of the input: its number and what is wrong
-    Input(usize, String),
     Write(io::Error),
 }
 
@@ -534,6 +593,11 @@ struct Writer<'a> {
     /// The output of a sentence, kept between the pieces: a block of its own for each would not be
     /// given back
     out: String,
+    /// Messages of the errors and the name of the file read for them; a wrong sentence of CoNLL-U
+    /// was found in the file
+    report: &'a mut dyn FnMut(String),
+    name: String,
+    wrong: bool,
 }
 
 impl Writer<'_> {
@@ -587,12 +651,14 @@ impl Writer<'_> {
             let first = starts;
             starts = ended;
             number += usize::from(first);
-            if !utf8 && bytes.contains(&0) {
+            let decoded = String::from_utf8_lossy(&bytes);
+            // Another encoding shows after the first buffer: what is complete before it goes out,
+            // as some of it has
+            if !utf8 && (bytes.contains(&0) || matches!(decoded, Cow::Owned(_))) {
+                self.write_ready()?;
                 return Err(Failure::Encoding(number));
             }
-            let decoded = String::from_utf8_lossy(&bytes);
             match decoded {
-                Cow::Owned(_) if !utf8 => return Err(Failure::Encoding(number)),
                 Cow::Owned(_) => {
                     invalid.get_or_insert(number);
                 }
@@ -630,6 +696,13 @@ impl Writer<'_> {
                         self.sentence_starts.push(self.tokens.len());
                     }
                     self.tokens.push(token.to_owned());
+                    // A list of words without blank lines is not kept whole as one sentence
+                    let start = self.sentence_starts.last().copied().unwrap_or_default();
+                    if self.tokens.len() - start >= INPUT_BUFFER / 8 {
+                        sentence = false;
+                        self.ready = self.tokens.len();
+                        self.write_ready()?;
+                    }
                 }
                 Input::Conllu => {
                     if self.lines.is_empty() {
@@ -790,37 +863,60 @@ impl Writer<'_> {
                 let ready = std::mem::replace(&mut self.lines, rest);
                 let first = std::mem::replace(&mut self.first_line, self.next_line);
                 self.ready = 0;
-                let (documents, error) = match read_conllu(&ready) {
-                    Ok(documents) => (documents, None),
-                    Err(err) => {
-                        // The sentences before the wrong one are written, up to the blank line
-                        // before it
-                        let end = (ready.split_inclusive('\n'))
-                            .take(err.line.saturating_sub(1))
-                            .scan(0, |at, line| {
-                                *at += line.len();
-                                Some((*at, line))
-                            })
-                            .filter(|(_, line)| line.trim().is_empty())
-                            .last()
-                            .map_or(0, |(at, _)| at);
-                        let before = read_conllu(&ready[..end]).unwrap_or_default();
-                        (
-                            before,
-                            Some(Failure::Input(first + err.line - 1, err.message)),
-                        )
-                    }
-                };
-                for document in documents {
-                    let count = document.sentence_count();
-                    self.write_sentences(document, count)?;
-                }
-                if let Some(failure) = error {
-                    return Err(failure);
-                }
+                self.write_conllu(&ready, first)?;
             }
         }
         Ok(())
+    }
+
+    /// Complete sentences of CoNLL-U from the line `first` of the file: a wrong sentence is written
+    /// as it is, and the next ones go on
+    fn write_conllu(&mut self, mut lines: &str, mut first: usize) -> Result<(), Failure> {
+        while !lines.is_empty() {
+            let err = match read_conllu(lines) {
+                Ok(documents) => return self.write_documents(documents),
+                Err(err) => err,
+            };
+            // The wrong sentence is the lines between the blank ones around the wrong line
+            let line = err.line.max(1);
+            let (mut start, mut end) = (0, lines.len());
+            let mut at = 0;
+            for (number, text) in (1..).zip(lines.split_inclusive('\n')) {
+                at += text.len();
+                if text.trim().is_empty() {
+                    if number >= line {
+                        end = at;
+                        break;
+                    }
+                    start = at;
+                }
+            }
+            // A sentence before it may be wrong too: a text that does not match the words shows
+            // only after all the lines are read
+            self.write_conllu(&lines[..start], first)?;
+            if self.format == Format::Conllu {
+                self.output.write_all(&lines.as_bytes()[start..end])?;
+                self.end_piece()?;
+            }
+            self.report_wrong(first + line - 1, &err.message);
+            first += lines[..end].matches('\n').count();
+            lines = &lines[end..];
+        }
+        Ok(())
+    }
+
+    /// A wrong sentence of CoNLL-U, reported at once: the command may be kept open. It goes out as
+    /// it is, as it cannot be analyzed
+    fn report_wrong(&mut self, line: usize, message: &str) {
+        let kept = match self.format {
+            Format::Conllu => "written as it is",
+            _ => "skipped",
+        };
+        (self.report)(format!(
+            "{}: line {line}: {message}; the sentence is {kept}",
+            self.name
+        ));
+        self.wrong = true;
     }
 
     /// The document of the tokens of the complete sentences, taken from the writer: one paragraph,
@@ -853,32 +949,36 @@ impl Writer<'_> {
             .map_err(|err| Failure::Write(io::Error::other(err)))
     }
 
-    /// A text without a blank line that reached PARAGRAPH, without its last sentence, which the
-    /// next line may go on with: it stays at the start of the text, and the next piece continues
-    /// its paragraph. One sentence longer than PARAGRAPH is written whole, and the separators after
-    /// it stay: with the next line they may end the paragraph
+    /// A text without a blank line that reached PARAGRAPH, without its last two sentences, which
+    /// the next line may go on with: they stay at the start of the text, and the next piece
+    /// continues their paragraph. The segmenter decides the boundary before the last sentence by
+    /// the text after it, which the next line may change. One sentence longer than PARAGRAPH is
+    /// written whole, and the separators after it stay: with the next line they may end the
+    /// paragraph
     fn write_long(&mut self) -> Result<(), Failure> {
         let text = std::mem::take(&mut self.text);
         let document = self.segmenter.segment_string(text);
         let count = document.sentence_count();
-        let (written, keep) = match count {
-            0 => (0, document.text().len()),
-            1 => (1, document.sentence(0).span.end),
-            _ => (count - 1, document.sentence(count - 1).span.start),
+        let written = match count {
+            0 | 1 => count,
+            2 => 1,
+            _ => count - 2,
+        };
+        let keep = match count {
+            0 => document.text().len(),
+            1 => document.sentence(0).span.end,
+            _ => document.sentence(written).span.start,
         };
         let rest = document.text()[keep..].to_owned();
-        // The last sentence may itself start a paragraph (after U+2029), and the separators dropped
-        // may end one
+        // The sentences kept may themselves start a paragraph (after U+2029), and the separators
+        // dropped may end one
         let continued = match count {
             0 => self.continued && !closes_paragraph(document.text()),
             1 => true,
-            _ => {
-                document
-                    .paragraph(document.paragraph_count() - 1)
-                    .sentences
-                    .start
-                    < count - 1
-            }
+            _ => (0..document.paragraph_count())
+                .map(|paragraph| document.paragraph(paragraph).sentences)
+                .find(|sentences| sentences.contains(&written))
+                .is_some_and(|sentences| sentences.start < written),
         };
         self.write_sentences(document, written)?;
         self.continued = continued;
@@ -962,6 +1062,15 @@ impl Writer<'_> {
         Ok(self.end_piece()?)
     }
 
+    /// The documents of CoNLL-U read
+    fn write_documents(&mut self, documents: Vec<Document>) -> Result<(), Failure> {
+        for document in documents {
+            let count = document.sentence_count();
+            self.write_sentences(document, count)?;
+        }
+        Ok(())
+    }
+
     /// A sentence in JSON Lines: its text (not for tokens, which have none) and every token with
     /// all its analyses
     fn json_sentence(&mut self, document: &Document, sentence: usize) {
@@ -1028,14 +1137,7 @@ fn json_analysis(out: &mut String, dictionary: &Dictionary, analysis: &Analysis)
         out.push_str(": ");
         json_string(out, value);
     }
-    out.push_str("}, \"labels\": [");
-    for (number, label) in tag.into_iter().flat_map(|tag| tag.labels()).enumerate() {
-        if number > 0 {
-            out.push_str(", ");
-        }
-        json_string(out, label);
-    }
-    let _ = write!(out, "], \"prob\": {}, \"words\": [", analysis.prob);
+    let _ = write!(out, "}}, \"prob\": {}, \"words\": [", analysis.prob);
     // A token of one word has it as its only word
     let words: &[String] = match analysis.words.as_slice() {
         [] => std::slice::from_ref(&analysis.word),
@@ -1158,6 +1260,8 @@ fn json_string(out: &mut String, text: &str) {
 #[cfg(all(test, feature = "bundled"))]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     /// The exit code, the output and the messages of the command on an input
     fn command(args: &[&str], input: &[u8]) -> (u8, String, String) {
@@ -1166,6 +1270,7 @@ mod tests {
             args.iter().map(OsString::from).collect(),
             "1.2.3",
             None,
+            false,
             false,
             false,
             &mut &input[..],
@@ -1245,6 +1350,15 @@ mod tests {
             assert_eq!(conllu, whole(&text));
             assert_eq!(output(&[], &text), sentence.repeat(PARAGRAPH / 2));
         }
+        // A long line cut after the first word of a line: the segmenter ends a sentence before it,
+        // as nothing follows
+        let lines = "Muchos marineros solicitaban permiso para vivir en\x0bla ciudad, y el \
+                     vapor quedaba a la guarda del tío.\x0b";
+        let mut text = lines.repeat((PARAGRAPH - 100) / lines.len());
+        text.push_str("El pequeño Ferragut era el capitán del\x0bMare ");
+        text.push_str(&"o".repeat(INPUT_BUFFER + 100));
+        text.push_str(".\x0bFin.");
+        assert_eq!(output(&["-f", "conllu"], &text), whole(&text));
         // A line without spaces longer than PARAGRAPH is cut at a character
         let word = "ñ".repeat(PARAGRAPH);
         assert_eq!(output(&[], &word).replace(['\n', ' '], ""), word);
@@ -1277,10 +1391,10 @@ mod tests {
         assert!(
             lines[0].starts_with(
                 "{\"text\": \"Dime.\", \"tokens\": [{\"word\": \"Dime\", \"analyses\": [{\"word\": \"Dime\", \
-                 \"lemma\": \"Dime\", \"pos\": \"PROPN\", \"feats\": {}, \"labels\": [], \"prob\": 0.9375, \
+                 \"lemma\": \"Dime\", \"pos\": \"PROPN\", \"feats\": {}, \"prob\": 0.9375, \
                  \"words\": [\"Dime\"], \"source\": \"rule\"}, {\"word\": \"dime\", \"lemma\": \"decir\", \
                  \"pos\": \"VERB\", \"feats\": {\"Mood\": \"Imp\", \"Number\": \"Sing\", \"Person\": \"2\", \
-                 \"VerbForm\": \"Fin\"}, \"labels\": [], \"prob\": 0.0625, \"words\": [\"di\", \"me\"], \
+                 \"VerbForm\": \"Fin\"}, \"prob\": 0.0625, \"words\": [\"di\", \"me\"], \
                  \"source\": \"clitics\"}]}"
             ),
             "{jsonl}"
@@ -1342,6 +1456,11 @@ mod tests {
         );
         let lemmas = output(&["-i", "tokens"], &many);
         assert_eq!(lemmas.lines().count(), last);
+        // A list without blank lines is closed in sentences of a fixed number of tokens
+        let size = INPUT_BUFFER / 8;
+        let list = output(&["-i", "tokens"], &"mar\n".repeat(2 * size + 1));
+        let sentence = vec!["mar"; size].join(" ") + "\n";
+        assert_eq!(list, format!("{sentence}{sentence}mar\n"));
     }
 
     #[test]
@@ -1379,6 +1498,32 @@ mod tests {
         let (code, out, err) = command(&["-i", "conllu"], wrong_text.as_bytes());
         assert_eq!((code, out.as_str()), (1, "mar\n"));
         assert!(err.contains("-: line 3: "), "{err}");
+        // A wrong sentence is skipped, or written as it is in CoNLL-U, and the file goes on
+        let wrong = "# sent_id = 2\n1\tmar\n\n";
+        let input = format!("{sentence}{wrong}{sentence}{wrong}{sentence}");
+        let (code, out, err) = command(&["-i", "conllu"], input.as_bytes());
+        assert_eq!((code, out.as_str()), (1, "mar\nmar\nmar\n"));
+        assert_eq!(
+            err,
+            "esmorph: -: line 4: expected 10 tab-separated columns, got 2; the sentence is skipped\n\
+             esmorph: -: line 9: expected 10 tab-separated columns, got 2; the sentence is skipped\n"
+        );
+        // A sentence whose text does not match its words, before a wrong line: both are found
+        let mismatch = format!("{sentence}# text = mares\n{sentence}{wrong}{sentence}");
+        let (code, out, err) = command(&["-i", "conllu"], mismatch.as_bytes());
+        assert_eq!((code, out.as_str()), (1, "mar\nmar\n"));
+        let places: Vec<String> = (err.lines())
+            .map(|line| line.splitn(4, ": ").take(3).collect::<Vec<_>>().join(": "))
+            .collect();
+        assert_eq!(places, ["esmorph: -: line 3", "esmorph: -: line 7"]);
+        let analyzed = "1\tmar\tmar\tNOUN\t_\tGender=Masc|Number=Sing\t_\t_\t_\t_\n\n";
+        let (code, out, err) = command(&["-i", "conllu", "-f", "conllu"], input.as_bytes());
+        assert_eq!(code, 1);
+        assert_eq!(out, format!("{analyzed}{wrong}{analyzed}{wrong}{analyzed}"));
+        assert!(
+            err.contains("; the sentence is written as it is\n"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -1446,6 +1591,7 @@ mod tests {
             None,
             false,
             false,
+            false,
             &mut &b""[..],
             &mut stdout,
             &mut stderr,
@@ -1467,6 +1613,20 @@ mod tests {
         let (code, out, err) = command(&[], b"ok\ncaf\xe9\n");
         assert_eq!((code, out.as_str()), (1, ""));
         assert_eq!(err, "esmorph: -: the file is not in UTF-8 (line 2)\n");
+        // Another encoding after the first buffer: the paragraphs before it are written
+        let mut input = "Uno.\n\n".repeat(INPUT_BUFFER).into_bytes();
+        input.extend(b"caf\xe9\n");
+        let (code, out, err) = command(&[], &input);
+        assert_eq!(code, 1);
+        assert_eq!(
+            out,
+            "uno .\n".repeat(INPUT_BUFFER).replace(".\nuno", ".\n\nuno")
+        );
+        let line = 2 * INPUT_BUFFER + 1;
+        assert_eq!(
+            err,
+            format!("esmorph: -: the file is not in UTF-8 (line {line})\n")
+        );
         // A damaged line after UTF-8: its wrong bytes are U+FFFD
         let mut input = "Mamá.\n".as_bytes().to_vec();
         input.extend(b"a\xffb\n");
@@ -1494,6 +1654,28 @@ mod tests {
         let (code, _, err) = command(&["-d", broken.to_str().unwrap()], b"");
         assert_eq!(code, 1);
         assert!(err.contains("wrong dictionary format"), "{err}");
+        // A damaged automaton with a right checksum: the dictionary of the option is verified
+        let clean = esmorph_dict_es::DICTIONARY.to_vec();
+        let layout = crate::format::layout(&clean, true).unwrap();
+        let damaged = (layout.words.clone())
+            .map(|at| {
+                let mut damaged = clean.clone();
+                damaged[at] ^= 0xFF;
+                crate::format::tests::with_checksum(damaged)
+            })
+            .find(|damaged| {
+                Dictionary::from_bytes(damaged).is_ok_and(|dictionary| dictionary.verify().is_err())
+            })
+            .unwrap();
+        std::fs::write(&broken, damaged).unwrap();
+        let (code, _, err) = command(&["-d", broken.to_str().unwrap()], b"Dime");
+        assert_eq!(code, 1);
+        assert!(
+            err.ends_with(
+                "broken.dict: wrong dictionary format: the automaton of word forms is damaged\n"
+            ),
+            "{err}"
+        );
         let dictionary = temporary("es.dict");
         std::fs::write(&dictionary, esmorph_dict_es::DICTIONARY).unwrap();
         // The output file is created anew, but not over an input or the dictionary
@@ -1576,6 +1758,7 @@ mod tests {
             None,
             interactive,
             false,
+            false,
             input,
             output,
             &mut stderr,
@@ -1643,6 +1826,52 @@ mod tests {
     }
 
     #[test]
+    fn wrong_sentences_reported_at_once() {
+        // The command may be kept open on a stream: a wrong sentence is reported before the next read
+        struct Shared(Rc<RefCell<Vec<u8>>>);
+        impl Write for Shared {
+            fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+                self.0.borrow_mut().extend_from_slice(data);
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        struct Stream(Vec<&'static [u8]>, Rc<RefCell<Vec<u8>>>, bool);
+        impl Read for Stream {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if self.0.len() == 1 {
+                    self.2 = !self.1.borrow().is_empty();
+                }
+                let piece = self.0.pop().unwrap_or_default();
+                buffer[..piece.len()].copy_from_slice(piece);
+                Ok(piece.len())
+            }
+        }
+        let errors = Rc::new(RefCell::new(Vec::new()));
+        let mut stream = Stream(
+            vec![b"1\tmar\n\n", b"1\tmar\n\n"],
+            Rc::clone(&errors),
+            false,
+        );
+        let code = execute(
+            ["-i", "conllu"].map(OsString::from).to_vec(),
+            "",
+            None,
+            false,
+            false,
+            false,
+            &mut stream,
+            &mut Vec::new(),
+            &mut Shared(Rc::clone(&errors)),
+        );
+        assert_eq!(code, 1);
+        assert!(stream.2);
+        assert_eq!(String::from_utf8_lossy(&errors.borrow()).lines().count(), 2);
+    }
+
+    #[test]
     fn closed_outputs() {
         // A closed pipe is no error, a closed standard output is
         struct Closed;
@@ -1661,6 +1890,7 @@ mod tests {
             None,
             false,
             false,
+            false,
             &mut "Dime\n".repeat(100_000).as_bytes(),
             &mut Closed,
             &mut stderr,
@@ -1674,6 +1904,7 @@ mod tests {
                 None,
                 false,
                 true,
+                false,
                 &mut &b"Dime"[..],
                 &mut stdout,
                 &mut stderr,
