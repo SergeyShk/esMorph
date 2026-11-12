@@ -59,6 +59,7 @@ pub fn run(args: Vec<OsString>, version: &str, dictionary: Option<&Path>) -> u8 
         dictionary,
         interactive,
         closed,
+        true,
         &mut io::stdin().lock(),
         &mut output,
         &mut io::stderr(),
@@ -215,6 +216,9 @@ fn execute(
     default: Option<&Path>,
     interactive: bool,
     closed: bool,
+    // `stdin` and `stdout` are the standard streams of the process: they are compared with the
+    // files
+    standard: bool,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
@@ -270,17 +274,18 @@ fn execute(
     // dictionary it would overwrite or grow is not read. A device (/dev/null, /dev/stdout in a
     // terminal) is neither
     let sources: Vec<Stream> = (files.iter())
-        .map(|file| match file == "-" {
-            true => Stream::Stdin,
-            false => Stream::Path(Path::new(file)),
+        .filter_map(|file| match file == "-" {
+            true => standard.then_some(Stream::Stdin),
+            false => Some(Stream::Path(Path::new(file))),
         })
         .chain(dictionary_path.map(Stream::Path))
         .collect();
     let target = match &output_path {
-        Some(path) => Stream::Path(path),
-        None => Stream::Stdout,
+        Some(path) => Some(Stream::Path(path)),
+        None => standard.then_some(Stream::Stdout),
     };
-    if metadata(target).is_some_and(|metadata| metadata.is_file())
+    if let Some(target) = target
+        && metadata(target).is_some_and(|metadata| metadata.is_file())
         && sources.iter().any(|&source| same_file(target, source))
     {
         report(match &output_path {
@@ -1246,6 +1251,7 @@ mod tests {
             None,
             false,
             false,
+            false,
             &mut &input[..],
             &mut stdout,
             &mut stderr,
@@ -1556,6 +1562,7 @@ mod tests {
             None,
             false,
             false,
+            false,
             &mut &b""[..],
             &mut stdout,
             &mut stderr,
@@ -1708,6 +1715,7 @@ mod tests {
             None,
             interactive,
             false,
+            false,
             input,
             output,
             &mut stderr,
@@ -1793,6 +1801,7 @@ mod tests {
             None,
             false,
             false,
+            false,
             &mut "Dime\n".repeat(100_000).as_bytes(),
             &mut Closed,
             &mut stderr,
@@ -1806,6 +1815,7 @@ mod tests {
                 None,
                 false,
                 true,
+                false,
                 &mut &b"Dime"[..],
                 &mut stdout,
                 &mut stderr,

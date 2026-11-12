@@ -193,7 +193,9 @@ def test_output_file_and_encoding(tmp_path):
                 check=False,
             )
         assert result.returncode == 1
-        assert result.stderr == b"esmorph: the standard output is an input file or the dictionary\n"
+        assert (
+            result.stderr == b"esmorph: the standard output is an input file or the dictionary\n"
+        )
     assert path.read_text(encoding="utf-8") == TEXT
     assert dictionary.read_bytes() == Path(Analyzer().path).read_bytes()
     # A file in cp1252 with ASCII at the start (subtitles) is not analyzed, not even in part
