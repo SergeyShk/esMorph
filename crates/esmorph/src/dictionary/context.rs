@@ -27,6 +27,9 @@ const MAX_WORDS: usize = 4;
 /// Largest sizes from the file: a damaged file does not ask for gigabytes
 const MAX_DIM: usize = 4096;
 const MAX_ROWS: usize = 1 << 22;
+/// Largest weight: a trained model has weights below 10, and with larger ones the sums of a
+/// crafted file would overflow to infinity and give probabilities NaN
+const MAX_WEIGHT: f32 = 1e4;
 
 /// A matrix of f32 by rows
 #[derive(Debug)]
@@ -244,13 +247,9 @@ impl<'a> Reader<'a> {
     fn f32s(&mut self, count: usize) -> Result<Vec<f32>, Error> {
         let size = count.checked_mul(4).ok_or_else(|| invalid("size"))?;
         let bytes = self.take(size)?;
-        let values: Vec<f32> = (bytes.as_chunks::<4>().0.iter())
+        Ok((bytes.as_chunks::<4>().0.iter())
             .map(|&chunk| f32::from_le_bytes(chunk))
-            .collect();
-        if !values.iter().all(|value| value.is_finite()) {
-            return Err(invalid("a weight is not a finite number"));
-        }
-        Ok(values)
+            .collect())
     }
 
     fn value(&mut self) -> Result<Value<'a>, Error> {
@@ -281,6 +280,10 @@ impl<'a> Reader<'a> {
                         })
                         .collect()
                 };
+                // NaN fails the comparison too
+                if !data.iter().all(|weight| weight.abs() <= MAX_WEIGHT) {
+                    return Err(invalid("a weight is out of range"));
+                }
                 Ok(Value::Matrix(Matrix { rows, cols, data }))
             }
             3 => {
@@ -1007,14 +1010,34 @@ pub(crate) mod tests {
             damaged[at..at + with.len()].copy_from_slice(with);
             Dictionary::from_bytes(&crate::format::tests::with_checksum(damaged)).unwrap()
         };
-        let not_finite = damage(&1234.5f32.to_le_bytes(), &f32::NAN.to_le_bytes());
-        let err = not_finite.verify().unwrap_err();
-        assert!(err.to_string().contains("not a finite number"), "{err}");
-        let err = not_finite.analyze_sentence(&["la", "vio"]).unwrap_err();
-        assert!(matches!(err, Error::Format(_)), "{err}");
+        for weight in [f32::NAN, f32::INFINITY, 3e38] {
+            let wrong = damage(&1234.5f32.to_le_bytes(), &weight.to_le_bytes());
+            let err = wrong.verify().unwrap_err();
+            assert!(err.to_string().contains("out of range"), "{weight}: {err}");
+            let err = wrong.analyze_sentence(&["la", "vio"]).unwrap_err();
+            assert!(matches!(err, Error::Format(_)), "{err}");
+        }
         let unsigned = damage(MAGIC, b"X");
         let err = unsigned.verify().unwrap_err();
         assert!(err.to_string().contains("no signature"), "{err}");
+    }
+
+    #[test]
+    fn weights_out_of_range() {
+        // An int8 matrix: rows, columns, the scale of every row and its values
+        let int8 = |scale: f32| {
+            let mut data = vec![2];
+            data.extend(1u32.to_le_bytes());
+            data.extend(2u32.to_le_bytes());
+            data.extend(scale.to_le_bytes());
+            data.extend([100, 156]);
+            Reader { data: &data, at: 0 }.value().map(|_| ())
+        };
+        assert!(int8(0.04).is_ok());
+        for scale in [1e37, f32::NAN] {
+            let err = int8(scale).unwrap_err();
+            assert!(err.to_string().contains("out of range"), "{scale}: {err}");
+        }
     }
 
     #[cfg(feature = "bundled")]
