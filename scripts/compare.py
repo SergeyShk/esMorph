@@ -24,8 +24,9 @@ Description:
     compared on it. Inflection: whether esMorph, ablaut and verbecc give the gold form of a verb of
     AnCora, PUD and COSER for its gold lemma and features. Speed - tokens per second on AnCora test
     without loading (the best of two runs) and, for the chart, the whole time with import and
-    loading in a new process on texts of different size (the best of three processes). Writes Markdown tables, results.json in
-    the data directory (a run of some systems updates only their results) and the chart in SVG.
+    loading in a new process on texts of different size (the best of three processes). Writes
+    Markdown tables, results.json in the data directory (a run of some systems updates only their
+    results) and the chart in SVG.
     The versions of all packages are pinned in compare.py.lock; esMorph is the version from it or a
     wheel from `--with`
 

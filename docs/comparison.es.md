@@ -114,7 +114,7 @@ simplemma guarda sus respuestas en una caché: con la caché llena por una pasad
 | Aumento de la memoria del proceso | 10.7 MB | 131 MB | 304 MB | 578 MB |
 | Cada proceso más | 3.5 MB | 129 MB | 360 MB | 1.6 GB |
 
-El archivo del diccionario de esMorph se proyecta en memoria, así que los procesos de `multiprocessing` o joblib y los workers de un servidor web lo comparten: la mayor parte de los 10.6 MB del primer proceso es el diccionario, y cada proceso más añade solo sus propias tablas y análisis.
+El archivo del diccionario de esMorph se proyecta en memoria, así que los procesos de `multiprocessing` o joblib y los workers de un servidor web lo comparten: la mayor parte de los 10.7 MB del primer proceso es el diccionario, y cada proceso más añade solo sus propias tablas y análisis.
 
 ## Cómo se midió { #method }
 
