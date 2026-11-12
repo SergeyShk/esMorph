@@ -27,6 +27,7 @@ Example:
     [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
 """
 
+import os
 import threading
 import unicodedata
 from collections import OrderedDict
@@ -90,9 +91,10 @@ class Component:
     """
 
     def __init__(self, dictionary: str | None = None, context: bool = True) -> None:
-        self.dictionary = dictionary
+        # An absolute path: the analyzers are cached and documents keep it across directories
+        self.dictionary = None if dictionary is None else os.path.abspath(dictionary)
         self.context = context
-        self.analyzer = analyzer(dictionary)
+        self.analyzer = analyzer(self.dictionary)
         if context:
             # A dictionary without a context model fails here, not on the first document
             self.analyzer.analyze_sentence([])
@@ -122,6 +124,7 @@ class Component:
                 if not candidates:
                     # As a word without analyses in the command esmorph
                     token.pos_, token.lemma_ = "X", token.text.lower()
+                    token.set_morph(None)
                     continue
                 best = candidates[0]
                 token.pos_ = best.pos
@@ -133,6 +136,7 @@ class Component:
             if space(token):
                 token.pos_ = "SPACE"
                 token.lemma_ = token.text
+                token.set_morph(None)
         if self.dictionary is not None:
             doc.user_data[SETTINGS] = self.dictionary
         else:
@@ -209,7 +213,8 @@ if not Token.has_extension("esmorph"):
 
 def sentences(doc: Doc) -> Iterator[list[Token]]:
     """
-    The sentences of a document: marked or up to a sentence end mark
+    The sentences of a document: a marked sentence start begins one, and a token without the mark
+    begins one after a token of sentence end marks; a document marked whole gives `Doc.sents`
 
     Arguments:
         doc (Doc): The document
@@ -217,15 +222,13 @@ def sentences(doc: Doc) -> Iterator[list[Token]]:
     Returns:
         Iterator[list[Token]]: The tokens of the sentences
     """
-    if doc.has_annotation("SENT_START"):
-        for sentence in doc.sents:
-            yield list(sentence)
-        return
-    chunk = []
+    chunk: list[Token] = []
     for token in doc:
-        chunk.append(token)
-        if token.text and set(token.text) <= SENTENCE_END:
+        start = token.is_sent_start
+        end = chunk and chunk[-1].text and set(chunk[-1].text) <= SENTENCE_END
+        if chunk and (start or (start is None and end)):
             yield chunk
             chunk = []
+        chunk.append(token)
     if chunk:
         yield chunk

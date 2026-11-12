@@ -124,7 +124,8 @@ jobs:
           echo "es.dict compressed: $size bytes"
           [ "$size" -lt 10420224 ] || { echo "The compressed dictionary does not fit the crates.io limit of 10 MiB"; exit 1; }
       - name: Run tests
-        run: uv run --no-sync pytest --cov esmorph
+        # Without spaCy on 3.14t its component is not run
+        run: uv run --no-sync pytest --cov esmorph ${{ matrix.python-version == '3.14t' && '--cov-fail-under=0' || '' }}
       - name: Check the stubs
         # The stubs against the module built for the tests; the dictionary is not a key of its build
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'

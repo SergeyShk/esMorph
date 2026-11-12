@@ -76,6 +76,24 @@ def test_marked_sentences():
     )
 
 
+def test_partly_marked_sentences(nlp):
+    # Doc.from_docs marks only the start of every document: the others are split by punctuation
+    blank = spacy.blank("es")
+    merged = spacy.tokens.Doc.from_docs(
+        [blank("Ella la vio. La casa es grande."), blank("Anoche llovió.")]
+    )
+    assert annotation(nlp(merged)) == expected(
+        ["Ella", "la", "vio", "."], ["La", "casa", "es", "grande", "."], ["Anoche", "llovió", "."]
+    )
+    # A token marked as no start is not split after a sentence end mark
+    doc = blank("Ella la vio. La casa es grande.")
+    for token in doc:
+        token.is_sent_start = token.i == 0
+    assert annotation(nlp(doc)) == expected(
+        ["Ella", "la", "vio", ".", "La", "casa", "es", "grande", "."]
+    )
+
+
 def test_long_sentences(nlp):
     # A sentence of more than 256 tokens goes to the analyzer whole: it analyzes it by parts
     words = ["Ella", "la", "vio"] * 100
@@ -98,6 +116,30 @@ def test_spaces_and_invisible_tokens(nlp):
     # A separator inside a token is dropped, as analyze drops it
     joined = nlp("Ella\u200bvio")
     assert [(token.pos_, token.lemma_) for token in joined] == [("PROPN", "Ellavio")]
+
+
+def test_tokens_without_analyses_and_spaces_lose_features(nlp):
+    doc = spacy.blank("es")("qzxw  casa")
+    for token in doc:
+        token.set_morph("Gender=Fem")
+    nlp(doc)
+    assert [(token.pos_, str(token.morph)) for token in doc] == [
+        ("X", ""),
+        ("SPACE", ""),
+        ("NOUN", "Gender=Fem|Number=Sing"),
+    ]
+
+
+def test_relative_dictionary_path(tmp_path, monkeypatch):
+    (tmp_path / "es.dict").symlink_to(dictionary_path())
+    monkeypatch.chdir(tmp_path)
+    nlp = spacy.blank("es")
+    nlp.add_pipe("esmorph", config={"dictionary": "es.dict"})
+    doc = nlp("Ella la vio")
+    assert doc.user_data["esmorph"] == str(tmp_path / "es.dict")
+    monkeypatch.chdir(tmp_path.parent)
+    assert doc[1]._.esmorph.pos == "PRON"
+    assert pickle.loads(pickle.dumps(nlp))("Ella")[0].pos_ == "PRON"
 
 
 def test_without_context():
@@ -133,6 +175,8 @@ def test_extension(nlp):
 
 
 def test_analyzer_cache_is_bounded(tmp_path):
+    import esmorph.spacy
+
     docs = []
     for number in range(esmorph.spacy.CACHE_SIZE + 3):
         link = tmp_path / f"es{number}.dict"
@@ -163,11 +207,15 @@ def test_pickle_in_new_process():
         "import pickle, sys; doc = pickle.load(sys.stdin.buffer)('Ella la vio'); "
         "print(doc[1].pos_, doc[1]._.esmorph.lemma)"
     )
+    # UTF-8 in the child as in the parent: a Windows console writes another code page
     result = subprocess.run(
-        [sys.executable, "-c", code], input=pickle.dumps(nlp), capture_output=True, check=False
+        [sys.executable, "-X", "utf8", "-c", code],
+        input=pickle.dumps(nlp),
+        capture_output=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr.decode(errors="replace")
-    assert result.stdout.decode().split() == ["PRON", "él"]
+    assert result.stdout.decode("utf-8").split() == ["PRON", "él"]
 
 
 def test_foreign_extension_kept():
