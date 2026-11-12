@@ -1,8 +1,9 @@
 //! Builder of the dictionary of esMorph: `esmorph-build <export directory> <counts directory>
-//! <dictionary file>`. The export is `lexemes.tsv` (lemma, part of speech, form, features, `variant`
-//! or `_`, the place in the table of the source or `_`) and `meta.json`, written by
-//! `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and `sources.json`,
-//! written by `scripts/export_ud.py`
+//! <dictionary file> [<context model>]`. The export is `lexemes.tsv` (lemma, part of speech, form,
+//! features, `variant` or `_`, the place in the table of the source or `_`) and `meta.json`,
+//! written by `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and
+//! `sources.json`, written by `scripts/export_ud.py`; the context model is the file of weights of
+//! `scripts/train_context.py`
 
 mod frequencies;
 
@@ -201,12 +202,35 @@ impl Json<'_> {
     }
 }
 
-fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
+fn build(
+    export: &Path,
+    counts: &Path,
+    output: &Path,
+    context: Option<&Path>,
+) -> Result<usize, Error> {
     let mut builder = Builder::new();
-    builder.meta(joined(
+    let mut meta = joined(
         &read(&export.join("meta.json"))?,
         &read(&counts.join("sources.json"))?,
-    )?);
+    )?;
+    if let Some(context) = context {
+        let weights = fs::read(context)
+            .map_err(|err| Error::Build(format!("{}: {err}", context.display())))?;
+        let sources = Builder::context_sources(&weights).map_err(|err| within(context, err))?;
+        if !json_object(&sources) {
+            return Err(within(
+                context,
+                Error::Build("the sources of the model are not an object of JSON".into()),
+            ));
+        }
+        // The description ends with the object of the counts that `joined` closed
+        meta.truncate(meta.len() - 1);
+        meta.push_str(&format!(", \"context\": {sources}}}"));
+        builder
+            .context(weights)
+            .map_err(|err| within(context, err))?;
+    }
+    builder.meta(meta);
     let lexemes = export.join("lexemes.tsv");
     let table = read(&lexemes)?;
     let mut forms: BTreeMap<&str, Vec<Row>> = BTreeMap::new();
@@ -293,6 +317,17 @@ fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
         }
     }
     let bytes = builder.build()?;
+    if context.is_some() {
+        let gaps = esmorph::Dictionary::from_bytes(&bytes)?.context_gaps()?;
+        if !gaps.is_empty() {
+            return Err(Error::Build(format!(
+                "the context model was trained with a dictionary without the tags {}: build the \
+                 dictionary without the model (three arguments), train the model with it \
+                 (scripts/train_context.py --dictionary) and build the dictionary again",
+                gaps.join(", ")
+            )));
+        }
+    }
     let failed = |err: std::io::Error| Error::Build(format!("{}: {err}", output.display()));
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(failed)?;
@@ -314,11 +349,23 @@ fn plain(feats: &str) -> &str {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let [export, counts, output] = args.as_slice() else {
-        eprintln!("usage: esmorph-build <export directory> <counts directory> <dictionary file>");
-        return ExitCode::FAILURE;
+    let (export, counts, output, context) = match args.as_slice() {
+        [export, counts, output] => (export, counts, output, None),
+        [export, counts, output, context] => (export, counts, output, Some(Path::new(context))),
+        _ => {
+            eprintln!(
+                "usage: esmorph-build <export directory> <counts directory> <dictionary file> \
+                 [<context model>]"
+            );
+            return ExitCode::FAILURE;
+        }
     };
-    match build(Path::new(export), Path::new(counts), Path::new(output)) {
+    match build(
+        Path::new(export),
+        Path::new(counts),
+        Path::new(output),
+        context,
+    ) {
         Ok(size) => {
             println!("{output}: {size} bytes");
             ExitCode::SUCCESS
@@ -394,7 +441,9 @@ mod tests {
         let output = dir.join("es.dict");
         let error = |lexemes: &str, output: &Path| {
             fs::write(export.join("lexemes.tsv"), lexemes).unwrap();
-            build(&export, &counts, output).unwrap_err().to_string()
+            build(&export, &counts, output, None)
+                .unwrap_err()
+                .to_string()
         };
         let line = "casa\tNOUN\tcasa\t_\t_\t_\n";
         let message = error(&format!("{line}Casa\tNOUN\tCasa\t_\t_\t_\n"), &output);
@@ -412,12 +461,14 @@ mod tests {
             ("a\tNOUN\ta\tGender\t1\n", "analyses.tsv: wrong UD features"),
         ] {
             fs::write(counts.join("analyses.tsv"), analyses).unwrap();
-            let message = build(&export, &counts, &output).unwrap_err().to_string();
+            let message = build(&export, &counts, &output, None)
+                .unwrap_err()
+                .to_string();
             assert!(message.contains(wanted), "{message}");
             assert_eq!(message.matches("build error").count(), 1, "{message}");
         }
         fs::write(counts.join("analyses.tsv"), "").unwrap();
-        assert!(build(&export, &counts, &output).is_ok());
+        assert!(build(&export, &counts, &output, None).is_ok());
         fs::remove_dir_all(&dir).unwrap();
     }
 

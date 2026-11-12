@@ -28,10 +28,10 @@ pub(crate) const UD_BITS: u32 = 0xFFFF;
 pub(crate) const MAX_ENDING: usize = 5;
 /// Largest dictionary file: offsets into records and variants are of 32 bits
 pub(crate) const MAX_FILE: u64 = 1 << 31;
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
-const SECTIONS: usize = 13;
+const SECTIONS: usize = 14;
 
 /// Contents of a dictionary for writing into a file
 #[cfg(any(test, feature = "build"))]
@@ -60,8 +60,9 @@ pub(crate) struct Sections {
     /// the list has them, `(table << 16) | form` of every analysis, then their probabilities
     pub records: Vec<u32>,
     /// Spellings of keys that do not fit the value of the automaton: the number of spellings, then
-    /// the accent places (two numbers), the start of the list of analyses and the weight among the
-    /// spellings, for a query that lost its accents, of each
+    /// each spelling - the accent places, the start of the list of analyses and the weight among
+    /// the spellings for a query that lost its accents - in two numbers (`pack_spelling`) or, with
+    /// `WIDE_SPELLINGS` in the number, in four: the accent places (two), the start and the weight
     pub variants: Vec<u32>,
     /// Automaton "ending of a word form - start of its list in `guess_records`" for guessing
     /// unknown words
@@ -69,6 +70,8 @@ pub(crate) struct Sections {
     /// Lists of the forms of tables for an ending: the length, then `(table << 16) | form` and the
     /// number of word forms of the dictionary with the ending of each
     pub guess_records: Vec<u32>,
+    /// Weights of the context model (`scripts/train_context.py`); empty without a model
+    pub context: Vec<u8>,
 }
 
 /// Value of a key in the automaton of word forms
@@ -78,6 +81,42 @@ pub(crate) enum WordValue {
     Single { marks: u64, records: u32 },
     /// The spellings are in the section `variants` from this place
     Many(u32),
+}
+
+/// The bit of the number of spellings of a key in `variants`: each spelling takes four numbers
+pub(crate) const WIDE_SPELLINGS: u32 = 1 << 31;
+/// A spelling of `variants` fits two numbers if its list of analyses starts below 2²², its weight
+/// is below 2¹⁸ and its accents stand among the first 24 letters
+const SPELLING_RECORDS_BITS: u32 = 22;
+const SPELLING_WEIGHT_BITS: u32 = 18;
+#[cfg(any(test, feature = "build"))]
+const SPELLING_MARKS_BITS: u32 = 24;
+
+/// Two numbers of a spelling of `variants`; `None` if it does not fit them
+#[cfg(any(test, feature = "build"))]
+pub(crate) fn pack_spelling(marks: u64, records: u32, weight: u32) -> Option<[u32; 2]> {
+    let fits = |value: u64, bits: u32| value >> bits == 0;
+    (fits(u64::from(records), SPELLING_RECORDS_BITS)
+        && fits(u64::from(weight), SPELLING_WEIGHT_BITS)
+        && fits(marks, SPELLING_MARKS_BITS))
+    .then(|| {
+        let value = u64::from(records)
+            | u64::from(weight) << SPELLING_RECORDS_BITS
+            | marks << (SPELLING_RECORDS_BITS + SPELLING_WEIGHT_BITS);
+        [value as u32, (value >> 32) as u32]
+    })
+}
+
+/// Accent places, the start of the list of analyses and the weight of a spelling of `variants` in
+/// two numbers
+pub(crate) fn unpack_spelling([low, high]: [u32; 2]) -> (u64, u32, u32) {
+    let value = u64::from(low) | u64::from(high) << 32;
+    let mask = |bits: u32| (1u64 << bits) - 1;
+    (
+        value >> (SPELLING_RECORDS_BITS + SPELLING_WEIGHT_BITS),
+        (value & mask(SPELLING_RECORDS_BITS)) as u32,
+        (value >> SPELLING_RECORDS_BITS & mask(SPELLING_WEIGHT_BITS)) as u32,
+    )
 }
 
 /// One spelling fits the value if the list of analyses starts below 2²⁴ and the accents stand
@@ -127,6 +166,7 @@ pub(crate) struct Layout {
     pub variants: Range<usize>,
     pub guesses: Range<usize>,
     pub guess_records: Range<usize>,
+    pub context: Range<usize>,
     /// CRC32 of the file after its header
     pub checksum: u32,
 }
@@ -168,6 +208,7 @@ pub(crate) fn write(sections: &Sections) -> Vec<u8> {
     section(&u32_bytes(&sections.variants));
     section(&sections.guesses);
     section(&u32_bytes(&sections.guess_records));
+    section(&sections.context);
     let checksum = crc32fast::hash(&out[HEADER..]);
     out[12..HEADER].copy_from_slice(&checksum.to_le_bytes());
     out
@@ -186,7 +227,8 @@ fn check_header(data: &[u8]) -> Result<(), Error> {
     let version = u32::from_le_bytes([header[8], header[9], header[10], header[11]]);
     if version != VERSION {
         return Err(Error::Format(format!(
-            "format version {version}, supported {VERSION}"
+            "format version {version}, supported {VERSION}: build the dictionary again with this \
+             version of esMorph"
         )));
     }
     Ok(())
@@ -234,6 +276,7 @@ pub(crate) fn layout(data: &[u8], checked: bool) -> Result<Layout, Error> {
         variants: section(4)?,
         guesses: section(1)?,
         guess_records: section(4)?,
+        context: section(1)?,
         checksum: 0,
     };
     if at != data.len() {
@@ -618,13 +661,13 @@ pub(crate) mod tests {
             assert!(layout(broken, true).is_err());
         }
         let mut other = data.clone();
-        other[8] = 9;
+        other[8] = 4;
         assert!(
             layout(&other, true)
                 .err()
                 .unwrap()
                 .to_string()
-                .contains("version")
+                .contains("format version 4, supported 5: build the dictionary again")
         );
         let mut foreign = data.clone();
         foreign[0] = b'X';
@@ -659,6 +702,22 @@ pub(crate) mod tests {
         header.extend_from_slice(&(1u64 << 40).to_le_bytes());
         let endless = header.as_slice().chain(std::io::repeat(0));
         assert!(matches!(read(endless), Err(Error::Format(text)) if text.contains("larger")));
+    }
+
+    #[test]
+    fn spellings_of_two_numbers() {
+        for (marks, records, weight) in [
+            (0, 0, 1),
+            (0b101, 170_210, 62_358),
+            ((1 << 24) - 1, (1 << 22) - 1, (1 << 18) - 1),
+        ] {
+            let packed = pack_spelling(marks, records, weight).unwrap();
+            assert_eq!(unpack_spelling(packed), (marks, records, weight));
+        }
+        // Accents beyond the 24th letter, a far list or a large weight take four numbers
+        assert_eq!(pack_spelling(1 << 24, 0, 1), None);
+        assert_eq!(pack_spelling(0, 1 << 22, 1), None);
+        assert_eq!(pack_spelling(0, 0, 1 << 18), None);
     }
 
     #[test]

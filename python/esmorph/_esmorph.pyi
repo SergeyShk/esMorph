@@ -123,8 +123,13 @@ class Analyzer:
     def lemmatize(self, words: Iterable[str]) -> list[str]:
         """Lemmas of a list of word forms"""
 
-    def annotate(self, document: _Document) -> None:
+    def analyze_sentence(self, words: Iterable[str]) -> list[list[Analysis]]:
+        """Analyses of the tokens of a sentence in context"""
+
+    def annotate(self, document: _Document, *, context: bool = True) -> None:
         """Analysis of a document of the anySeg segmenter"""
 
     def is_known(self, word: str) -> bool:
         """Whether the dictionary has the word form"""
+
+    def _ud_tags(self) -> list[tuple[str, list[tuple[str, str]]]]: ...

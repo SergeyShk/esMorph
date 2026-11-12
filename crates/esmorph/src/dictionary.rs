@@ -11,7 +11,7 @@ use crate::alphabet::{Alphabet, Key};
 use crate::clitics;
 use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
-    Storage, Strings, UD_BITS, VARIANT, WordValue,
+    Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS, WordValue, unpack_spelling,
 };
 use crate::rules::{
     self, CAPS_NAME, CLITICS_NAME, INITIAL_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule,
@@ -20,7 +20,13 @@ use crate::rules::{
 use crate::ud::{UdTag, UdTags};
 
 mod annotate;
+mod context;
 mod guess;
+
+#[cfg(any(test, feature = "build"))]
+pub(crate) use context::Model;
+#[cfg(any(test, feature = "build"))]
+pub(crate) use context::sources as context_sources;
 
 #[doc(hidden)]
 pub use annotate::Fields;
@@ -88,7 +94,8 @@ pub struct Analysis {
     /// Number of the UD tag for `Dictionary::ud_tag`
     pub ud: u16,
     /// Share of the analysis among the analyses of the word: by the counts of treebanks, equal for
-    /// a word they did not see
+    /// a word they did not see; of `Dictionary::analyze_sentence` - the score of the context model
+    /// in the sentence
     pub prob: f64,
     /// Where the analysis comes from
     pub source: Source,
@@ -167,6 +174,8 @@ pub struct Dictionary {
     rule_tags: Option<RuleTags>,
     /// Made on the first annotation and shared by the copies
     feats: Arc<OnceLock<TagFeats>>,
+    /// The context model, read on the first analysis of a sentence and shared by the copies
+    context: Arc<OnceLock<Result<context::Context, String>>>,
 }
 
 /// The features of every UD tag in CoNLL-U, `None` without them
@@ -210,18 +219,43 @@ impl std::fmt::Debug for Dictionary {
 /// among the spellings
 enum Spellings<'a> {
     Single { marks: u64, records: u32 },
-    Many(&'a [[u32; 4]]),
+    Many(SpellingList<'a>),
+}
+
+/// Spellings of a key in the section `variants`: two numbers each or, if wide, four
+#[derive(Clone, Copy)]
+struct SpellingList<'a> {
+    numbers: &'a [u32],
+    wide: bool,
+}
+
+impl SpellingList<'_> {
+    fn len(&self) -> usize {
+        self.numbers.len() / if self.wide { 4 } else { 2 }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (u64, u32, u32)> {
+        let (narrow, wide) = if self.wide {
+            (&[][..], self.numbers.as_chunks::<4>().0)
+        } else {
+            (self.numbers.as_chunks::<2>().0, &[][..])
+        };
+        narrow
+            .iter()
+            .map(|&spelling| unpack_spelling(spelling))
+            .chain(wide.iter().map(|&[low, high, offset, weight]| {
+                (u64::from(low) | u64::from(high) << 32, offset, weight)
+            }))
+    }
 }
 
 impl Spellings<'_> {
     fn iter(&self) -> impl Iterator<Item = (u64, u32, u32)> {
         let (single, many) = match self {
-            Spellings::Single { marks, records } => (Some((*marks, *records, 1)), &[][..]),
-            Spellings::Many(variants) => (None, *variants),
+            Spellings::Single { marks, records } => (Some((*marks, *records, 1)), None),
+            Spellings::Many(list) => (None, Some(list.iter())),
         };
-        single
-            .into_iter()
-            .chain(many.iter().map(|&spelling| unpack(spelling)))
+        single.into_iter().chain(many.into_iter().flatten())
     }
 
     /// The spelling of a query: the exact one and, if there is none, all spellings of the key.
@@ -231,10 +265,6 @@ impl Spellings<'_> {
         let exact = self.iter().any(|(own, ..)| own == marks);
         self.iter().filter(move |&(own, ..)| !exact || own == marks)
     }
-}
-
-fn unpack([low, high, offset, weight]: [u32; 4]) -> (u64, u32, u32) {
-    (u64::from(low) | u64::from(high) << 32, offset, weight)
 }
 
 impl Dictionary {
@@ -311,6 +341,7 @@ impl Dictionary {
             gender_number: [None; 2],
             rule_tags: None,
             feats: Arc::default(),
+            context: Arc::default(),
             layout,
             storage: Arc::clone(&storage),
         };
@@ -656,6 +687,111 @@ impl Dictionary {
                 },
             );
         }
+    }
+
+    /// Analyses of the tokens of a sentence, the most probable in the context first: the analyses
+    /// of `analyze` ordered by the context model of the dictionary, the probability is its score.
+    /// The tokens are those of one sentence in order, as `analyze` takes them (`del`, `dámelo`);
+    /// a sentence of one token is analyzed as `analyze`, one longer than `SENTENCE_CHUNK` tokens
+    /// by parts of `SENTENCE_CHUNK`. The model is read on the first call
+    ///
+    /// ```
+    /// # #[cfg(feature = "bundled")] {
+    /// let dictionary = esmorph::Dictionary::bundled()?;
+    /// let sentence = dictionary.analyze_sentence(&["Ella", "la", "vio"])?;
+    /// let pos = |analysis: &esmorph::Analysis| dictionary.ud_tag(analysis.ud).unwrap().pos();
+    /// assert_eq!(pos(&sentence[1][0]), "PRON");
+    /// # }
+    /// # Ok::<(), esmorph::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Context`] if the dictionary has no context model, [`Error::Format`] if its model
+    /// is damaged
+    pub fn analyze_sentence<S: AsRef<str>>(
+        &self,
+        words: &[S],
+    ) -> Result<Vec<Vec<Analysis>>, Error> {
+        self.analyze_sentence_part(words, true)
+    }
+
+    /// `analyze_sentence` of a part of a sentence, `start` - whether the part starts it: the parts
+    /// of a sentence of a multiple of `SENTENCE_CHUNK` tokens each get the analyses of the whole
+    #[doc(hidden)]
+    pub fn analyze_sentence_part<S: AsRef<str>>(
+        &self,
+        words: &[S],
+        start: bool,
+    ) -> Result<Vec<Vec<Analysis>>, Error> {
+        let context = self.context()?;
+        let mut sentence = Vec::with_capacity(words.len());
+        for (number, chunk) in words.chunks(SENTENCE_CHUNK).enumerate() {
+            let analyses: Vec<Vec<Analysis>> = chunk
+                .iter()
+                .map(|word| self.analyze(word.as_ref()))
+                .collect();
+            // Without neighbors the model chooses worse than the counts of the dictionary
+            if chunk.len() < 2 {
+                sentence.extend(analyses);
+                continue;
+            }
+            // The model sees a token as `analyze` reads it: without invisible characters and with
+            // combined accents
+            let normal: Vec<Cow<str>> =
+                chunk.iter().map(|word| normalized(word.as_ref())).collect();
+            let normal: Vec<&str> = normal.iter().map(AsRef::as_ref).collect();
+            sentence.extend(context.rank(&normal, analyses, start && number == 0));
+        }
+        Ok(sentence)
+    }
+
+    /// Whether the dictionary has a context model for `analyze_sentence`
+    pub fn has_context(&self) -> bool {
+        !self.layout.context.is_empty()
+    }
+
+    /// The context model of the dictionary: read once for the dictionary and its copies
+    fn context(&self) -> Result<&context::Context, Error> {
+        // The model is built outside the cell: a fork from another thread while the cell is busy
+        // would leave the child waiting for it forever. Two threads may build it at once, one goes
+        // to the cell
+        let context = match self.context.get() {
+            Some(context) => context,
+            None => {
+                let bytes = &self.storage.bytes()[self.layout.context.clone()];
+                let built =
+                    if bytes.is_empty() {
+                        Err("the dictionary has no context model: a sentence cannot be analyzed in \
+                         context"
+                        .into())
+                    } else {
+                        // The message without the prefix of `Error::Format`, which wraps it below
+                        context::Model::parse(bytes)
+                            .map(|model| context::Context::new(model, &self.ud))
+                            .map_err(|err| match err {
+                                Error::Format(message) => message,
+                                err => err.to_string(),
+                            })
+                    };
+                self.context.get_or_init(move || built)
+            }
+        };
+        context.as_ref().map_err(|message| {
+            if self.has_context() {
+                Error::Format(message.clone())
+            } else {
+                Error::Context(message.clone())
+            }
+        })
+    }
+
+    /// Tags of the parts of speech and features of the dictionary that the dictionary of the
+    /// training of its context model had not: with them the model must be trained again
+    #[cfg(feature = "build")]
+    #[doc(hidden)]
+    pub fn context_gaps(&self) -> Result<Vec<String>, Error> {
+        Ok(self.context()?.gaps(&self.ud))
     }
 
     /// Whether the dictionary has the word form, as written or as a verb of the dictionary with
@@ -1279,11 +1415,11 @@ impl Dictionary {
             let Some((variants, after)) = spelling_list(rest) else {
                 return invalid("a list of spellings is truncated");
             };
-            if variants.is_empty()
+            if variants.len() == 0
                 || variants.len() > MAX_SPELLINGS
                 || variants
                     .iter()
-                    .any(|&[_, _, offset, weight]| offset as usize >= records || weight == 0)
+                    .any(|(_, offset, weight)| offset as usize >= records || weight == 0)
             {
                 return invalid("a wrong list of spellings");
             }
@@ -1459,13 +1595,14 @@ fn analyses_at(lists: &[u32], offset: u32) -> Option<(&[u32], &[u32])> {
 }
 
 /// List of spellings "length, four numbers of each" at the start of `lists` and the rest after it
-fn spelling_list(lists: &[u32]) -> Option<(&[[u32; 4]], &[u32])> {
+fn spelling_list(lists: &[u32]) -> Option<(SpellingList<'_>, &[u32])> {
     let (&count, rest) = lists.split_first()?;
-    let count = usize::try_from(count)
+    let wide = count & WIDE_SPELLINGS != 0;
+    let count = usize::try_from(count & !WIDE_SPELLINGS)
         .ok()
         .filter(|&count| count <= MAX_LIST)?;
-    let (list, rest) = rest.split_at_checked(4 * count)?;
-    Some((list.as_chunks::<4>().0, rest))
+    let (numbers, rest) = rest.split_at_checked(if wide { 4 } else { 2 } * count)?;
+    Some((SpellingList { numbers, wide }, rest))
 }
 
 /// Automaton of a section of a dictionary. A damaged automaton loads without errors but panics when
@@ -1559,6 +1696,10 @@ fn walk(fst: &fst::raw::Fst<Slice>) -> bool {
     }
     (nodes.binary_search(&fst.root().addr())).is_ok_and(|root| keys[root] == fst.len() as u64)
 }
+
+/// Length of a part of a sentence in `Dictionary::analyze_sentence`: the model analyzes a long
+/// sentence by parts, so its memory does not grow with the input
+pub const SENTENCE_CHUNK: usize = 256;
 
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
 /// joins its letter, and a hyphen of Unicode is the hyphen-minus. Tokens of a text keep them

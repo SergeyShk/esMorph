@@ -10,6 +10,8 @@ repos:
         exclude: ^mkdocs\.yml$
       - id: check-toml
       - id: check-added-large-files
+        # The weights of the context model are built into the dictionary from git
+        exclude: ^data/es-context\.bin$
       - id: check-merge-conflict
 
   - repo: https://github.com/astral-sh/uv-pre-commit

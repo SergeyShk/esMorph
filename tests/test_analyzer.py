@@ -616,6 +616,41 @@ def test_analyze_many(morph):
     assert len(morph.analyze_many(["hablo"] * 20_000)) == 20_000
 
 
+def test_analyze_sentence(morph):
+    sentence = morph.analyze_sentence(["Ella", "la", "vio", "ayer", "."])
+    assert len(sentence) == 5
+    # The same analyses as analyze, in the order of the model, with its probabilities
+    for word, analyses in zip(["Ella", "la", "vio", "ayer", "."], sentence, strict=True):
+        assert {(a.lemma, a.pos, tuple(a.feats.items())) for a in analyses} == {
+            (a.lemma, a.pos, tuple(a.feats.items())) for a in morph.analyze(word)
+        }
+        assert abs(sum(analysis.prob for analysis in analyses) - 1) < 1e-6
+        assert [analysis.prob for analysis in analyses] == sorted(
+            (analysis.prob for analysis in analyses), reverse=True
+        )
+    # The article and the pronoun by the context
+    assert sentence[1][0].pos == "PRON"
+    assert morph.analyze_sentence(["la", "casa"])[0][0].pos == "DET"
+    # Without neighbors a token is analyzed as analyze; a sentence of none is empty
+    assert morph.analyze_sentence(["la"]) == [morph.analyze("la")]
+    assert morph.analyze_sentence([]) == []
+    assert morph.analyze_sentence(iter(["la", "casa"])) == morph.analyze_sentence(["la", "casa"])
+    # Multiword tokens are analyzed by the token, a token without analyses has none
+    first = morph.analyze_sentence(["Dámelo", "ya"])[0][0]
+    assert (first.pos, first.words) == ("VERB", ("da", "me", "lo"))
+    assert morph.analyze_sentence(["qzxw", "casa"])[0] == []
+    # A long sentence goes by parts of 256 tokens, and only its first part starts it: the part
+    # after a piece read without the GIL is analyzed as the same part inside the first piece
+    long = morph.analyze_sentence(["la", "casa", "es", "grande"] * 3000)
+    assert len(long) == 12_000
+
+    def probabilities(part):
+        return [[(analysis.pos, analysis.prob) for analysis in analyses] for analyses in part]
+
+    assert probabilities(long[8192:8448]) == probabilities(long[4096:4352])
+    assert probabilities(long[:256]) != probabilities(long[4096:4352])
+
+
 def test_lemmatize(morph):
     assert morph.lemmatize(["CAMIONES", "Qzxw", "qzxw", "10.000"]) == [
         "camión",
@@ -632,13 +667,13 @@ def test_lemmatize(morph):
 
 
 @pytest.mark.parametrize("words", ["casa", b"casa", bytearray(b"casa"), 7, None])
-@pytest.mark.parametrize("method", ["analyze_many", "lemmatize"])
+@pytest.mark.parametrize("method", ["analyze_many", "lemmatize", "analyze_sentence"])
 def test_collections_of_words(morph, method, words):
     with pytest.raises(TypeError, match="collection of words"):
         getattr(morph, method)(words)
 
 
-@pytest.mark.parametrize("method", ["analyze_many", "lemmatize"])
+@pytest.mark.parametrize("method", ["analyze_many", "lemmatize", "analyze_sentence"])
 def test_words_must_be_strings(morph, method):
     with pytest.raises(TypeError, match="item 1 is int"):
         getattr(morph, method)(["casa", 7])
@@ -652,7 +687,7 @@ def test_words_must_be_strings(morph, method):
         getattr(morph, method)(words())
 
 
-@pytest.mark.parametrize("method", ["analyze_many", "lemmatize"])
+@pytest.mark.parametrize("method", ["analyze_many", "lemmatize", "analyze_sentence"])
 def test_an_ended_input_is_not_asked_again(morph, method):
     class Words:
         calls = 0

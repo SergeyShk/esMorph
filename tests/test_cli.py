@@ -43,13 +43,20 @@ def test_formats(tmp_path):
     sentence = json.loads(run("-f", "jsonl", str(path)).stdout)
     assert sentence["text"] == TEXT.strip()
     analyses = sentence["tokens"][0]["analyses"]
+    # The context model puts the verb first; the dictionary orders by the counts of treebanks
+    assert [(analysis["lemma"], analysis["pos"]) for analysis in analyses] == [
+        ("decir", "VERB"),
+        ("Dime", "PROPN"),
+    ]
+    assert analyses[0]["words"] == ["di", "me"]
+    assert analyses[0]["feats"]["Mood"] == "Imp"
+    assert analyses[0]["source"] == "clitics" and 0.5 < analyses[0]["prob"] <= 1
+    sentence = json.loads(run("-f", "jsonl", "--no-context", str(path)).stdout)
+    analyses = sentence["tokens"][0]["analyses"]
     assert [(analysis["lemma"], analysis["pos"]) for analysis in analyses] == [
         ("Dime", "PROPN"),
         ("decir", "VERB"),
     ]
-    assert analyses[1]["words"] == ["di", "me"]
-    assert analyses[1]["feats"]["Mood"] == "Imp"
-    assert analyses[1]["source"] == "clitics" and 0 < analyses[1]["prob"] <= 1
 
 
 def test_tokens_and_conllu_input():
