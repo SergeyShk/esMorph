@@ -27,11 +27,11 @@ Example:
     [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
 """
 
-import os
 import threading
 import unicodedata
 from collections import OrderedDict
 from collections.abc import Iterator
+from pathlib import Path
 
 from spacy.language import Language
 from spacy.tokens import Doc, MorphAnalysis, Token
@@ -92,7 +92,7 @@ class Component:
 
     def __init__(self, dictionary: str | None = None, context: bool = True) -> None:
         # An absolute path: the analyzers are cached and documents keep it across directories
-        self.dictionary = None if dictionary is None else os.path.abspath(dictionary)
+        self.dictionary = None if dictionary is None else str(Path(dictionary).absolute())
         self.context = context
         self.analyzer = analyzer(self.dictionary)
         if context:
