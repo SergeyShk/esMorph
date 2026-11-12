@@ -40,8 +40,16 @@ fn file_name(path: &Path) -> String {
         .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
 }
 
-/// Description of the dictionary: the description of its export with the sources of the counts
+/// Description of the dictionary: the description of its export with the sources of the counts,
+/// both objects of JSON
 fn joined(meta: &str, sources: &str) -> Result<String, Error> {
+    for (name, text) in [("the export", meta), ("the counts", sources)] {
+        if !json_object(text) {
+            return Err(Error::Build(format!(
+                "the description of {name} is not an object of JSON: {text:?}"
+            )));
+        }
+    }
     let fields = meta
         .trim_end()
         .strip_suffix('}')
@@ -55,6 +63,142 @@ fn joined(meta: &str, sources: &str) -> Result<String, Error> {
         "{fields}{separator}\"counts\": {}}}",
         sources.trim_end()
     ))
+}
+
+/// The text is an object of JSON
+fn json_object(text: &str) -> bool {
+    let mut json = Json {
+        bytes: text.as_bytes(),
+        at: 0,
+    };
+    // Only the whitespace of JSON may go around it
+    json.space();
+    if json.bytes.get(json.at) != Some(&b'{') || !json.value(0) {
+        return false;
+    }
+    json.space();
+    json.at == json.bytes.len()
+}
+
+/// A reader of JSON that only checks it
+struct Json<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+impl Json<'_> {
+    fn space(&mut self) {
+        while matches!(self.bytes.get(self.at), Some(b' ' | b'\t' | b'\n' | b'\r')) {
+            self.at += 1;
+        }
+    }
+
+    fn take(&mut self, byte: u8) -> bool {
+        self.space();
+        let found = self.bytes.get(self.at) == Some(&byte);
+        self.at += usize::from(found);
+        found
+    }
+
+    fn value(&mut self, depth: usize) -> bool {
+        self.space();
+        match self.bytes.get(self.at) {
+            _ if depth > 64 => false,
+            Some(b'{') => self.items(b'}', |json| {
+                json.space();
+                json.string() && json.take(b':') && json.value(depth + 1)
+            }),
+            Some(b'[') => self.items(b']', |json| json.value(depth + 1)),
+            Some(b'"') => self.string(),
+            Some(b't') => self.word(b"true"),
+            Some(b'f') => self.word(b"false"),
+            Some(b'n') => self.word(b"null"),
+            Some(_) => self.number(),
+            None => false,
+        }
+    }
+
+    /// The items of an object or an array after its opening bracket
+    fn items(&mut self, close: u8, mut item: impl FnMut(&mut Self) -> bool) -> bool {
+        self.at += 1;
+        if self.take(close) {
+            return true;
+        }
+        loop {
+            if !item(self) {
+                return false;
+            }
+            if self.take(close) {
+                return true;
+            }
+            if !self.take(b',') {
+                return false;
+            }
+        }
+    }
+
+    fn string(&mut self) -> bool {
+        if self.bytes.get(self.at) != Some(&b'"') {
+            return false;
+        }
+        self.at += 1;
+        while let Some(&byte) = self.bytes.get(self.at) {
+            self.at += 1;
+            match byte {
+                b'"' => return true,
+                b'\\' => match self.bytes.get(self.at) {
+                    Some(b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't') => self.at += 1,
+                    Some(b'u') => match self.bytes.get(self.at + 1..self.at + 5) {
+                        Some(hex) if hex.iter().all(u8::is_ascii_hexdigit) => self.at += 5,
+                        _ => return false,
+                    },
+                    _ => return false,
+                },
+                0..=0x1F => return false,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    fn word(&mut self, word: &[u8]) -> bool {
+        let found = self.bytes[self.at..].starts_with(word);
+        self.at += if found { word.len() } else { 0 };
+        found
+    }
+
+    /// `-? (0 | [1-9][0-9]*) (. [0-9]+)? ([eE] [+-]? [0-9]+)?`
+    fn number(&mut self) -> bool {
+        let start = self.at;
+        let digits = |json: &mut Self| {
+            let from = json.at;
+            while json.bytes.get(json.at).is_some_and(u8::is_ascii_digit) {
+                json.at += 1;
+            }
+            json.at > from
+        };
+        self.take(b'-');
+        let first = self.at;
+        if !digits(self) || (self.bytes[first] == b'0' && self.at - first > 1) {
+            return false;
+        }
+        if self.bytes.get(self.at) == Some(&b'.') {
+            self.at += 1;
+            if !digits(self) {
+                return false;
+            }
+        }
+        if matches!(self.bytes.get(self.at), Some(b'e' | b'E')) {
+            self.at += 1;
+            if matches!(self.bytes.get(self.at), Some(b'+' | b'-')) {
+                self.at += 1;
+            }
+            if !digits(self) {
+                return false;
+            }
+        }
+        self.at > start
+    }
 }
 
 fn build(export: &Path, counts: &Path, output: &Path) -> Result<usize, Error> {
@@ -198,6 +342,42 @@ mod tests {
         );
         assert_eq!(joined("{}", "{}").unwrap(), "{\"counts\": {}}");
         assert!(joined("no", "{}").is_err());
+        assert!(joined("this is not json}", "{}").is_err());
+        assert!(joined("{}", "[]").is_err());
+    }
+
+    #[test]
+    fn descriptions_are_objects_of_json() {
+        for text in [
+            "{}",
+            " {\"a\": [1, -2.5e+3, 0, true, false, null, {\"b\": \"\\u00e9\\n\"}]}\n",
+        ] {
+            assert!(json_object(text), "{text}");
+        }
+        for text in [
+            "",
+            "[]",
+            "\"a\"",
+            "{",
+            "{}}",
+            "{\"a\"}",
+            "{\"a\": 01}",
+            "{\"a\": 1.}",
+            "{\"a\": .5}",
+            "{\"a\": tru}",
+            "{\"a\": [1,]}",
+            "{a: 1}",
+            "{\"a\": \"\\x\"}",
+            "{\"a\": \"\n\"}",
+            "{\"a\": 1} {}",
+            "\x0c{}",
+            "{}\u{a0}",
+            "\u{feff}{}",
+        ] {
+            assert!(!json_object(text), "{text}");
+        }
+        let deep = "[".repeat(100) + &"]".repeat(100);
+        assert!(!json_object(&format!("{{\"a\": {deep}}}")));
     }
 
     #[test]

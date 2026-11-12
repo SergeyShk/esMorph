@@ -689,6 +689,9 @@ def test_analyses_are_not_tracked_by_the_garbage_collector(morph):
         pickle.loads(pickle.dumps(morph.analyze("casa")[0])),
     ]
     assert not any(gc.is_tracked(analysis) for analysis in analyses)
+    # Nor are the lists of analyze_many, which hold only analyses
+    result = morph.analyze_many(["gatos", "qzxw"])
+    assert gc.is_tracked(result) and not any(gc.is_tracked(analyses) for analyses in result)
 
 
 @pytest.mark.parametrize("word", [7, None, b"casa", ["casa"]])
@@ -796,6 +799,23 @@ def test_dictionary_description(morph):
     assert morph.dictionary_info["source"] == "Wiktionary"
 
 
+def test_dictionary_description_of_another_builder(morph, tmp_path):
+    # The description is the first section of the file, after the header with the checksum
+    data = morph.path.read_bytes()
+    size = int.from_bytes(data[16:24], "little")
+    rest = data[24 + (size + 7) // 8 * 8 :]
+
+    def described(meta: bytes) -> Analyzer:
+        body = len(meta).to_bytes(8, "little") + meta + b"\0" * (-len(meta) % 8) + rest
+        path = tmp_path / f"{zlib.crc32(meta)}.dict"
+        path.write_bytes(data[:12] + zlib.crc32(body).to_bytes(4, "little") + body)
+        return Analyzer(path)
+
+    meta = b'{"source": 1, "license": ["a"], "sha256": "x", "counts": {"release": 2, "treebanks": {"a": 1}}}'
+    assert set(described(meta).dictionary_info) == {"sha256", "word_forms", "checksum"}
+    assert set(described(b"not json").dictionary_info) == {"word_forms", "checksum"}
+
+
 def test_dictionary_paths(morph, tmp_path, monkeypatch):
     path = tmp_path / "es.dict"
     path.write_bytes(morph.path.read_bytes())
@@ -879,7 +899,7 @@ def test_verify(morph, tmp_path):
     good = tmp_path / "good.dict"
     good.write_bytes(data)
     verified = Analyzer(good, verify=True)
-    assert verified.__reduce__()[1] == (good, True)
+    assert verified.__reduce__()[1] == (str(good), True)
     assert pickle.loads(pickle.dumps(verified)) is verified
     analysis = verified.analyze("gatos")[0]
     state = analysis.__reduce__()[1]
@@ -894,7 +914,7 @@ def test_verify(morph, tmp_path):
     unverified.analyze("gatos")[0].__reduce__()
     assert esmorph._esmorph._analyzer(later, True) is unverified
     saved = unverified.analyze("gatos")[0].__reduce__()[1][7]
-    assert saved.__reduce__()[1] == (later, True)
+    assert saved.__reduce__()[1] == (str(later), True)
     for restore in (
         lambda: esmorph._esmorph._analyzer(path, True),
         lambda: esmorph._esmorph._analysis(*state[:7], path, None, True),
@@ -1100,6 +1120,8 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     assert pickle.loads(pickle.dumps(own)) is own
     analysis = pickle.loads(pickle.dumps(own.analyze("gatos")[0]))
     assert analysis.inflect(Gender="Fem") == "gatas"
+    # The path is a string: a path of pathlib of one system does not unpickle on another
+    assert b"pathlib" not in pickle.dumps(own) + pickle.dumps(own.analyze("gatos"))
     # The analyses of a file that is gone come with the dictionary of the package
     gone = esmorph._esmorph._analysis(
         "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary", tmp_path / "x"
@@ -1112,11 +1134,13 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     analyses = own.analyze_many(["gatos", "hablamos", "casa"] * 100)
     data = pickle.dumps(analyses)
     assert data.count(path.parent.name.encode()) == 1
+    # The analyses of a tag share its strings
+    assert data.count(b"Gender=Masc|Number=Plur") == 1
     assert pickle.loads(data) == analyses
     older = esmorph._esmorph._analysis(
         "gatos", "gato", "NOUN", "Gender=Masc|Number=Plur", 1.0, [], "dictionary", str(path)
     )
-    assert older.__reduce__()[1][7].__reduce__()[1] == (path, False)
+    assert older.__reduce__()[1][7].__reduce__()[1] == (str(path), False)
     assert pickle.loads(pickle.dumps(older)) == older
     # Features of an earlier version in another order: the analysis has the tag of the dictionary
     ordinal = esmorph._esmorph._analysis(

@@ -171,3 +171,28 @@ def test_document_types(morph):
         morph.annotate(Document(["ver", "la"], [Token("verla", [Word("0"), Word(1)])]))
     with pytest.raises(TypeError, match="collection of words"):
         morph.annotate(Document("ver"))
+    # Not a document, a token or a word
+    for document in ["Dime la verdad.", None]:
+        with pytest.raises(TypeError, match=r"Expected an anyseg.Document .*, not (str|NoneType)"):
+            morph.annotate(document)
+    with pytest.raises(TypeError, match="a word has index: no index, not int"):
+        morph.annotate(Document(["ver", "la"], [Token("verla", [0, 1])]))
+    with pytest.raises(TypeError, match="a word has index: no text, not str"):
+        morph.annotate(Document(["ver", "la"], ["verla"]))
+
+    # A mistake inside a property of the document is the cause
+    class Broken:
+        def column(self, name, /):
+            return ["ver"]
+
+        @property
+        def multiword_tokens(self):
+            return self.tokens
+
+        def set_columns(self, **columns):
+            pass
+
+    with pytest.raises(TypeError, match=r"Expected an anyseg\.Document") as error:
+        morph.annotate(Broken())
+    assert isinstance(error.value.__cause__, AttributeError)
+    assert "tokens" in str(error.value.__cause__)

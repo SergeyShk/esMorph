@@ -22,8 +22,9 @@
 mod alphabet;
 #[cfg(any(test, feature = "build"))]
 mod builder;
+// The command and the module of Python run it: not a part of the API
 #[cfg(feature = "cli")]
-#[cfg_attr(docsrs, doc(cfg(feature = "cli")))]
+#[doc(hidden)]
 pub mod cli;
 mod clitics;
 mod dictionary;

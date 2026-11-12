@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::ffi::OsString;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::ErrorKind;
 use std::ops::Range;
@@ -10,7 +11,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyLookupError, PyOSError, PyOverflowError, PyTypeError, PyValueError};
+use pyo3::exceptions::{
+    PyAttributeError, PyLookupError, PyOSError, PyOverflowError, PyTypeError, PyValueError,
+};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::{MutexExt, PyOnceLock};
@@ -406,17 +409,27 @@ impl Analysis {
 
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, AnalysisState)> {
         let analyzer = &self.handle.analyzer;
-        let tag = self.tag();
+        // One object for every string that analyses share: pickle writes it once
+        let (pos, feats) = match &self.tag {
+            AnalysisTag::Dictionary(ud) => {
+                let (pos, feats) = &Analyzer::tag_strings(analyzer.bind(py))[usize::from(*ud)];
+                (pos.clone_ref(py), feats.clone_ref(py))
+            }
+            AnalysisTag::Own(tag) => (
+                PyString::new(py, &tag.pos).unbind(),
+                PyString::new(py, &tag.feats).unbind(),
+            ),
+        };
         Ok((
             restorer(py, &RESTORE_ANALYSIS, "_analysis")?,
             (
                 self.word.clone(),
                 self.lemma.clone(),
-                tag.pos.clone(),
-                tag.feats.clone(),
+                pos,
+                feats,
                 self.prob,
                 self.words.clone(),
-                self.source.to_owned(),
+                PyString::intern(py, self.source).unbind(),
                 // Pickle keeps the analyzer once for all the analyses of a list
                 Some(Analyzer::saved_for_analyses(analyzer.bind(py))?.into_any()),
                 (self.entry.get())
@@ -448,11 +461,11 @@ type SavedPath = Option<Py<PyAny>>;
 type AnalysisState = (
     String,
     String,
-    String,
-    String,
+    Py<PyString>,
+    Py<PyString>,
     f64,
     Vec<String>,
-    String,
+    Py<PyString>,
     SavedPath,
     SavedEntry,
     bool,
@@ -490,7 +503,11 @@ fn _analysis(
             (Ok(analyzer), _) => analyzer.clone().unbind(),
             (_, Ok(saved)) => {
                 let saved = saved.get();
-                _analyses_analyzer(py, saved.path.clone(), saved.verify.load(Ordering::Relaxed))?
+                _analyses_analyzer(
+                    py,
+                    saved.path.clone().map(PathBuf::from),
+                    saved.verify.load(Ordering::Relaxed),
+                )?
             }
             _ => _analyses_analyzer(py, Some(path.extract()?), verify)?,
         },
@@ -556,7 +573,8 @@ fn _analyzer(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py
 /// read, the analyzer of the dictionary of the package
 #[pyclass(frozen, module = "esmorph")]
 struct SavedAnalyzer {
-    path: Option<PathBuf>,
+    /// A string, as a path of `pathlib` of one system does not unpickle on another
+    path: Option<OsString>,
     /// Set when the analyzer is verified, also after the first pickle
     verify: AtomicBool,
 }
@@ -574,7 +592,7 @@ impl SavedAnalyzer {
 
 /// Arguments of `_analyses_analyzer`: the path of the dictionary of a file and whether it is
 /// verified
-type SavedState = (Option<PathBuf>, bool);
+type SavedState = (Option<OsString>, bool);
 
 /// Restores the analyzer of analyses from pickle, as `SavedAnalyzer` describes it
 #[pyfunction]
@@ -649,6 +667,7 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
 ///     OSError: If the dictionary file cannot be read or is not a file
 ///     ValueError: If the file is no dictionary of esMorph or is damaged, or the path has a NUL
 ///         character
+///     TypeError: If the path is neither a string nor os.PathLike, or verify is not a bool
 ///
 /// Example:
 ///     >>> from esmorph import Analyzer
@@ -672,6 +691,8 @@ struct Analyzer {
     saved: PyOnceLock<Option<Py<PyAny>>>,
     /// The analyzer of its analyses in pickle, made once: one object for all analyses of a list
     saved_for_analyses: PyOnceLock<Py<SavedAnalyzer>>,
+    /// The part of speech and the features of every tag for pickle, made once
+    tag_strings: PyOnceLock<Vec<(Py<PyString>, Py<PyString>)>>,
     /// The dictionary is verified: pickle keeps it
     verified: AtomicBool,
 }
@@ -738,6 +759,7 @@ impl Analyzer {
             explicit,
             saved: PyOnceLock::new(),
             saved_for_analyses: PyOnceLock::new(),
+            tag_strings: PyOnceLock::new(),
             verified: AtomicBool::new(verify),
         })
     }
@@ -832,7 +854,13 @@ impl Analyzer {
                     .collect::<Vec<_>>()
             });
             for analyses in analyses {
-                result.append(this.convert(py, &handle, analyses)?)?;
+                let list = PyList::new(py, this.convert(py, &handle, analyses)?)?;
+                // A list of analyses refers to no tracked object, and a list per word would make
+                // the collector go over all of them again and again
+                // SAFETY: the pointer is a live list, a type with `Py_TPFLAGS_HAVE_GC`, which may be
+                // untracked at any time; its deallocation untracks it again safely
+                unsafe { pyo3::ffi::PyObject_GC_UnTrack(list.as_ptr().cast()) };
+                result.append(list)?;
             }
             py.check_signals()?;
         }
@@ -923,8 +951,8 @@ impl Analyzer {
     /// Raises:
     ///     ValueError: If the words of the multiword tokens are not consecutive words of the
     ///         document in order
-    ///     TypeError: If a form or the text of a token is not a string or the index of a word is
-    ///         not an integer
+    ///     TypeError: If the object is not a document, a form or the text of a token is not a
+    ///         string, or the index of a word is not an integer
     ///
     /// Example:
     ///     >>> from anyseg import Segmenter
@@ -934,13 +962,21 @@ impl Analyzer {
     ///     >>> [(word.form, word.lemma, word.upos) for word in document.words]
     ///     [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
     fn annotate(&self, py: Python<'_>, document: &Bound<'_, PyAny>) -> PyResult<()> {
-        let mut words = Words::new(&document.call_method1(intern!(py, "column"), ("form",))?)?;
+        let column = document_attribute(document, intern!(py, "column"))?;
+        let set_columns = document_attribute(document, intern!(py, "set_columns"))?;
+        let mut words = Words::new(&column.call1(("form",))?)?;
         let mut forms = Vec::new();
         while words.next_chunk()? {
             forms.append(&mut words.texts);
         }
+        drop(words);
         let tokens = multiword_tokens(document, forms.len())?;
-        let mut fields = Vec::with_capacity(forms.len());
+        // A part of speech, features and a lemma are one string object for all their words, and
+        // the columns are filled by chunks: a large document takes much less memory
+        let mut strings: HashMap<&str, Bound<'_, PyString>> = HashMap::new();
+        let mut lemma_strings: HashMap<String, Bound<'_, PyString>> = HashMap::new();
+        let (lemmas, parts, feats) = (PyList::empty(py), PyList::empty(py), PyList::empty(py));
+        let mut fields = Vec::with_capacity(CHUNK);
         let (mut word, mut multiword) = (0, tokens.iter().peekable());
         while word < forms.len() {
             // Chunks of about CHUNK words: Ctrl+C is checked between them
@@ -961,30 +997,32 @@ impl Analyzer {
                     }
                 }
             });
+            for field in fields.drain(..) {
+                let mut string = |text| {
+                    (strings.entry(text))
+                        .or_insert_with(|| PyString::new(py, text))
+                        .clone()
+                };
+                parts.append(string(field.pos))?;
+                feats.append(field.feats.map(string))?;
+                let lemma = match lemma_strings.get(&field.lemma) {
+                    Some(lemma) => lemma.clone(),
+                    None => {
+                        let lemma = PyString::new(py, &field.lemma);
+                        lemma_strings.insert(field.lemma, lemma.clone());
+                        lemma
+                    }
+                };
+                lemmas.append(lemma)?;
+            }
             py.check_signals()?;
         }
-        // A part of speech and features of the dictionary are one string object for all words
-        let mut strings: HashMap<&str, Bound<'_, PyString>> = HashMap::new();
-        let (mut lemmas, mut parts, mut feats) = (
-            Vec::with_capacity(fields.len()),
-            Vec::with_capacity(fields.len()),
-            Vec::with_capacity(fields.len()),
-        );
-        for word in fields {
-            let mut string = |text| {
-                (strings.entry(text))
-                    .or_insert_with(|| PyString::new(py, text))
-                    .clone()
-            };
-            lemmas.push(word.lemma);
-            parts.push(string(word.pos));
-            feats.push(word.feats.map(string));
-        }
+        drop((forms, tokens, lemma_strings));
         let columns = PyDict::new(py);
         columns.set_item(intern!(py, "lemma"), lemmas)?;
         columns.set_item(intern!(py, "upos"), parts)?;
         columns.set_item(intern!(py, "feats"), feats)?;
-        document.call_method(intern!(py, "set_columns"), (), Some(&columns))?;
+        set_columns.call((), Some(&columns))?;
         Ok(())
     }
 
@@ -1037,21 +1075,31 @@ impl Analyzer {
         let meta = py
             .import(intern!(py, "json"))?
             .call_method1(intern!(py, "loads"), (self.dictionary.meta(),));
+        // Only values of the types that the description promises are given
+        let text = |value: &Bound<'_, PyAny>| value.is_instance_of::<PyString>();
         if let Ok(meta) = meta
             && let Ok(meta) = meta.cast::<PyDict>()
         {
             for key in ["source", "snapshot", "sha256", "license"] {
-                if let Some(value) = meta.get_item(key)? {
+                if let Some(value) = meta.get_item(key)?
+                    && text(&value)
+                {
                     info.set_item(key, value)?;
                 }
             }
             if let Some(counts) = meta.get_item("counts")?
                 && let Ok(counts) = counts.cast::<PyDict>()
             {
-                for (key, name) in [("release", "ud_release"), ("treebanks", "treebanks")] {
-                    if let Some(value) = counts.get_item(key)? {
-                        info.set_item(name, value)?;
-                    }
+                if let Some(release) = counts.get_item("release")?
+                    && text(&release)
+                {
+                    info.set_item("ud_release", release)?;
+                }
+                if let Some(treebanks) = counts.get_item("treebanks")?
+                    && let Ok(treebanks) = treebanks.cast::<PyDict>()
+                    && (treebanks.iter()).all(|(name, license)| text(&name) && text(&license))
+                {
+                    info.set_item("treebanks", treebanks)?;
                 }
             }
         }
@@ -1117,7 +1165,8 @@ impl Analyzer {
             // Python objects are made before the lock: the code they run may wait for another
             // thread, and the lock is taken detached from the interpreter
             let reference = PyWeakrefReference::new(analyzer)?.unbind();
-            let path = this.path.clone().into_pyobject(py)?.into_any().unbind();
+            // A string, as a path of `pathlib` of one system does not unpickle on another
+            let path = this.path.as_os_str().into_pyobject(py)?.into_any().unbind();
             let mut files = FILES
                 .lock_py_attached(py)
                 .unwrap_or_else(PoisonError::into_inner);
@@ -1128,12 +1177,28 @@ impl Analyzer {
         Ok(saved.as_ref().map(|path| path.clone_ref(py)))
     }
 
+    /// The part of speech and the features of every tag as strings of Python, made once
+    fn tag_strings<'a>(analyzer: &'a Bound<'_, Analyzer>) -> &'a [(Py<PyString>, Py<PyString>)] {
+        let py = analyzer.py();
+        let this = analyzer.get();
+        this.tag_strings.get_or_init(py, || {
+            (this.tags.iter())
+                .map(|tag| {
+                    (
+                        PyString::new(py, &tag.pos).unbind(),
+                        PyString::new(py, &tag.feats).unbind(),
+                    )
+                })
+                .collect()
+        })
+    }
+
     /// The analyzer of its analyses in pickle, made once
     fn saved_for_analyses(analyzer: &Bound<'_, Analyzer>) -> PyResult<Py<SavedAnalyzer>> {
         let py = analyzer.py();
         let this = analyzer.get();
-        let path = Analyzer::saved_path(analyzer)?.and(Some(this.path.clone()));
         let saved = this.saved_for_analyses.get_or_try_init(py, || {
+            let path = Analyzer::saved_path(analyzer)?.and(Some(this.path.clone().into()));
             Py::new(
                 py,
                 SavedAnalyzer {
@@ -1347,19 +1412,16 @@ fn multiword_tokens(
         )
     };
     let (mut tokens, mut next) = (Vec::new(), 0);
-    for token in document
-        .getattr(intern!(py, "multiword_tokens"))?
-        .try_iter()?
-    {
+    for token in document_attribute(document, intern!(py, "multiword_tokens"))?.try_iter()? {
         let token = token?;
-        let text = token.getattr(intern!(py, "text"))?;
+        let text = token_attribute(&token, intern!(py, "text"))?;
         let Ok(text) = text.cast::<PyString>() else {
             return Err(type_error("The text of a token must be a string", &text));
         };
         let text = lossy(text)?.0;
         let mut range: Option<Range<usize>> = None;
-        for word in token.getattr(intern!(py, "words"))?.try_iter()? {
-            let index = word?.getattr(intern!(py, "index"))?;
+        for word in token_attribute(&token, intern!(py, "words"))?.try_iter()? {
+            let index = token_attribute(&word?, intern!(py, "index"))?;
             let index: usize = match index.extract::<isize>() {
                 // An index past isize is out of the document
                 Err(err) if err.is_instance_of::<PyOverflowError>(py) => return Err(unordered()),
@@ -1406,6 +1468,44 @@ fn text(word: &Bound<'_, PyAny>) -> PyResult<String> {
         return Err(type_error("A word must be a string", word));
     };
     Ok(lossy(word)?.0)
+}
+
+/// An attribute of a document: an object without it is not a document
+fn document_attribute<'py>(
+    document: &Bound<'py, PyAny>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Bound<'py, PyAny>> {
+    document.getattr(name).map_err(|err| {
+        attribute_error(
+            err,
+            "Expected an anyseg.Document or an object with column(), multiword_tokens and set_columns()",
+            document,
+        )
+    })
+}
+
+/// An attribute of a multiword token or of its word: `text`, `words`, `index`
+fn token_attribute<'py>(
+    object: &Bound<'py, PyAny>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Bound<'py, PyAny>> {
+    object.getattr(name).map_err(|err| {
+        let message =
+            format!("A multiword token has text and words, and a word has index: no {name}");
+        attribute_error(err, &message, object)
+    })
+}
+
+/// A `TypeError` for an object without an attribute, caused by the `AttributeError`: a mistake
+/// inside a property of the object raises it too
+fn attribute_error(err: PyErr, message: &str, object: &Bound<'_, PyAny>) -> PyErr {
+    let py = object.py();
+    if !err.is_instance_of::<PyAttributeError>(py) {
+        return err;
+    }
+    let error = type_error(message, object);
+    error.set_cause(py, Some(err));
+    error
 }
 
 fn type_error(message: &str, value: &Bound<'_, PyAny>) -> PyErr {
