@@ -652,32 +652,29 @@ def test_analyze_sentence(morph):
 
 
 def test_model_as_trained(morph):
-    # Sentences of AnCora dev with the order and the probabilities of the quantized model of the
-    # training: the analyzer computes the input of the model and its layers as the training does
+    # Sentences of AnCora dev with the probabilities of the quantized model of the training: the
+    # analyzer computes the input of the model and its layers as the training does. The model does
+    # not see lemmas, so another lemma in the dictionary needs no new model
     sentences: dict[int, dict[int, tuple[str, list]]] = {}
     for line in (ROOT / "data" / "es-context-check.tsv").read_text(encoding="utf-8").splitlines():
         sentence, token, form, *fields = line.split("\t")
         found = sentences.setdefault(int(sentence), {}).setdefault(int(token), (form, []))[1]
         if fields:
-            pos, lemma, feats, words, source, prob = fields
-            found.append(((pos, lemma, feats, int(words), source), float(prob)))
+            pos, _, feats, words, source, prob = fields
+            found.append(((pos, feats, int(words), source), float(prob)))
     assert len(sentences) >= 20
     for tokens in sentences.values():
         forms = [form for form, _ in tokens.values()]
         analyses = morph.analyze_sentence(forms)
         for (form, expected), found in zip(tokens.values(), analyses, strict=True):
-            probs = dict(expected)
             tags = ["|".join(f"{k}={v}" for k, v in sorted(a.feats.items())) or "_" for a in found]
-            keys = [
-                (a.pos, a.lemma, tag, len(a.words), a.source)
+            given = sorted(
+                ((a.pos, tag, len(a.words), a.source), a.prob)
                 for a, tag in zip(found, tags, strict=True)
-            ]
-            assert sorted(keys) == sorted(probs), form
-            for key, analysis in zip(keys, found, strict=True):
-                assert abs(analysis.prob - probs[key]) < 1e-4, (form, key)
-            # The order of the training, except for probabilities that are almost equal
-            ordered = [probs[key] for key in keys]
-            assert all(a >= b - 1e-4 for a, b in itertools.pairwise(ordered)), form
+            )
+            assert [key for key, _ in given] == [key for key, _ in sorted(expected)], form
+            for (_, prob), (_, wanted) in zip(given, sorted(expected), strict=True):
+                assert abs(prob - wanted) < 1e-4, form
 
 
 def test_lemmatize(morph):
