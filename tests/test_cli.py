@@ -183,7 +183,11 @@ def test_output_file_and_encoding(tmp_path):
     # The standard output appended to an input file or the dictionary: they are not grown
     dictionary = tmp_path / "es.dict"
     shutil.copy(Analyzer().path, dictionary)
-    for args, appended in [([str(path)], path), (["-d", str(dictionary), str(path)], dictionary)]:
+    cases = [([str(path)], path), (["-d", str(dictionary), str(path)], dictionary)]
+    if sys.platform != "win32":
+        # /dev/stdout of a stream open only for writing
+        cases.append((["-o", "/dev/stdout", str(path)], path))
+    for args, appended in cases:
         with appended.open("ab") as stdout:
             result = subprocess.run(
                 [sys.executable, "-m", "esmorph", *args],
@@ -193,9 +197,7 @@ def test_output_file_and_encoding(tmp_path):
                 check=False,
             )
         assert result.returncode == 1
-        assert (
-            result.stderr == b"esmorph: the standard output is an input file or the dictionary\n"
-        )
+        assert result.stderr.endswith(b"is an input file or the dictionary\n")
     assert path.read_text(encoding="utf-8") == TEXT
     assert dictionary.read_bytes() == Path(Analyzer().path).read_bytes()
     # A file in cp1252 with ASCII at the start (subtitles) is not analyzed, not even in part

@@ -331,12 +331,15 @@ fn execute(
         first_line: 0,
         next_line: 0,
         out: String::new(),
-        wrong: Vec::new(),
+        report: &mut report,
+        name: String::new(),
+        wrong: false,
     };
     let mut code = 0;
     for file in files {
         let path = Path::new(&file);
         let name = path.display().to_string();
+        writer.name.clone_from(&name);
         let result = if file == "-" {
             writer.process(stdin)
         } else {
@@ -345,17 +348,10 @@ fn execute(
                 Err(err) => Err(Failure::Open(open_error(path, &err))),
             }
         };
-        // A wrong sentence of CoNLL-U goes out as it is, as it cannot be analyzed
-        let kept = match format {
-            Format::Conllu => "written as it is",
-            _ => "skipped",
-        };
-        for (line, message) in writer.wrong.drain(..) {
-            report(format!(
-                "{name}: line {line}: {message}; the sentence is {kept}"
-            ));
+        if std::mem::take(&mut writer.wrong) {
             code = 1;
         }
+        let report = &mut writer.report;
         match result {
             Ok(None) => {}
             Ok(Some(line)) => {
@@ -376,12 +372,12 @@ fn execute(
                 report(format!("{name}: the file is not in UTF-8 (line {line})"));
                 code = 1;
             }
-            Err(Failure::Write(err)) => return write_error(&err, &mut report).max(code),
+            Err(Failure::Write(err)) => return write_error(&err, report).max(code),
         }
     }
     match writer.output.flush() {
         Ok(()) => code,
-        Err(err) => write_error(&err, &mut report).max(code),
+        Err(err) => write_error(&err, &mut writer.report).max(code),
     }
 }
 
@@ -488,7 +484,9 @@ fn opened_metadata(path: &Path) -> io::Result<std::fs::Metadata> {
     if kind.is_fifo() || kind.is_socket() {
         return Ok(metadata);
     }
+    // A standard stream open only for writing opens so too
     File::open(path)
+        .or_else(|_| File::options().append(true).open(path))
         .and_then(|file| file.metadata())
         .or(Ok(metadata))
 }
@@ -595,9 +593,11 @@ struct Writer<'a> {
     /// The output of a sentence, kept between the pieces: a block of its own for each would not be
     /// given back
     out: String,
-    /// The wrong sentences of CoNLL-U, which are written as they are: the number of the wrong line
-    /// and what is wrong
-    wrong: Vec<(usize, String)>,
+    /// Messages of the errors and the name of the file read for them; a wrong sentence of CoNLL-U
+    /// was found in the file
+    report: &'a mut dyn FnMut(String),
+    name: String,
+    wrong: bool,
 }
 
 impl Writer<'_> {
@@ -651,12 +651,14 @@ impl Writer<'_> {
             let first = starts;
             starts = ended;
             number += usize::from(first);
-            if !utf8 && bytes.contains(&0) {
+            let decoded = String::from_utf8_lossy(&bytes);
+            // Another encoding shows after the first buffer: what is complete before it goes out,
+            // as some of it has
+            if !utf8 && (bytes.contains(&0) || matches!(decoded, Cow::Owned(_))) {
+                self.write_ready()?;
                 return Err(Failure::Encoding(number));
             }
-            let decoded = String::from_utf8_lossy(&bytes);
             match decoded {
-                Cow::Owned(_) if !utf8 => return Err(Failure::Encoding(number)),
                 Cow::Owned(_) => {
                     invalid.get_or_insert(number);
                 }
@@ -859,45 +861,62 @@ impl Writer<'_> {
                 }
                 let rest = self.lines.split_off(self.ready);
                 let ready = std::mem::replace(&mut self.lines, rest);
-                let mut first = std::mem::replace(&mut self.first_line, self.next_line);
+                let first = std::mem::replace(&mut self.first_line, self.next_line);
                 self.ready = 0;
-                let mut lines = ready.as_str();
-                while !lines.is_empty() {
-                    let err = match read_conllu(lines) {
-                        Ok(documents) => {
-                            self.write_documents(documents)?;
-                            break;
-                        }
-                        Err(err) => err,
-                    };
-                    // The wrong sentence is the lines between the blank ones around the wrong line
-                    let line = err.line.max(1);
-                    let (mut start, mut end) = (0, lines.len());
-                    let mut at = 0;
-                    for (number, text) in (1..).zip(lines.split_inclusive('\n')) {
-                        at += text.len();
-                        if text.trim().is_empty() {
-                            if number >= line {
-                                end = at;
-                                break;
-                            }
-                            start = at;
-                        }
-                    }
-                    let before = read_conllu(&lines[..start]).unwrap_or_default();
-                    self.write_documents(before)?;
-                    // It goes out as it is, and the file goes on
-                    if self.format == Format::Conllu {
-                        self.output.write_all(&lines.as_bytes()[start..end])?;
-                        self.end_piece()?;
-                    }
-                    self.wrong.push((first + line - 1, err.message));
-                    first += lines[..end].matches('\n').count();
-                    lines = &lines[end..];
-                }
+                self.write_conllu(&ready, first)?;
             }
         }
         Ok(())
+    }
+
+    /// Complete sentences of CoNLL-U from the line `first` of the file: a wrong sentence is written
+    /// as it is, and the next ones go on
+    fn write_conllu(&mut self, mut lines: &str, mut first: usize) -> Result<(), Failure> {
+        while !lines.is_empty() {
+            let err = match read_conllu(lines) {
+                Ok(documents) => return self.write_documents(documents),
+                Err(err) => err,
+            };
+            // The wrong sentence is the lines between the blank ones around the wrong line
+            let line = err.line.max(1);
+            let (mut start, mut end) = (0, lines.len());
+            let mut at = 0;
+            for (number, text) in (1..).zip(lines.split_inclusive('\n')) {
+                at += text.len();
+                if text.trim().is_empty() {
+                    if number >= line {
+                        end = at;
+                        break;
+                    }
+                    start = at;
+                }
+            }
+            // A sentence before it may be wrong too: a text that does not match the words shows
+            // only after all the lines are read
+            self.write_conllu(&lines[..start], first)?;
+            if self.format == Format::Conllu {
+                self.output.write_all(&lines.as_bytes()[start..end])?;
+                self.end_piece()?;
+            }
+            self.report_wrong(first + line - 1, &err.message);
+            first += lines[..end].matches('\n').count();
+            lines = &lines[end..];
+        }
+        Ok(())
+    }
+
+    /// A wrong sentence of CoNLL-U, reported at once: the command may be kept open. It goes out as
+    /// it is, as it cannot be analyzed
+    fn report_wrong(&mut self, line: usize, message: &str) {
+        let kept = match self.format {
+            Format::Conllu => "written as it is",
+            _ => "skipped",
+        };
+        (self.report)(format!(
+            "{}: line {line}: {message}; the sentence is {kept}",
+            self.name
+        ));
+        self.wrong = true;
     }
 
     /// The document of the tokens of the complete sentences, taken from the writer: one paragraph,
@@ -1241,6 +1260,8 @@ fn json_string(out: &mut String, text: &str) {
 #[cfg(all(test, feature = "bundled"))]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     /// The exit code, the output and the messages of the command on an input
     fn command(args: &[&str], input: &[u8]) -> (u8, String, String) {
@@ -1487,6 +1508,14 @@ mod tests {
             "esmorph: -: line 4: expected 10 tab-separated columns, got 2; the sentence is skipped\n\
              esmorph: -: line 9: expected 10 tab-separated columns, got 2; the sentence is skipped\n"
         );
+        // A sentence whose text does not match its words, before a wrong line: both are found
+        let mismatch = format!("{sentence}# text = mares\n{sentence}{wrong}{sentence}");
+        let (code, out, err) = command(&["-i", "conllu"], mismatch.as_bytes());
+        assert_eq!((code, out.as_str()), (1, "mar\nmar\n"));
+        let places: Vec<String> = (err.lines())
+            .map(|line| line.splitn(4, ": ").take(3).collect::<Vec<_>>().join(": "))
+            .collect();
+        assert_eq!(places, ["esmorph: -: line 3", "esmorph: -: line 7"]);
         let analyzed = "1\tmar\tmar\tNOUN\t_\tGender=Masc|Number=Sing\t_\t_\t_\t_\n\n";
         let (code, out, err) = command(&["-i", "conllu", "-f", "conllu"], input.as_bytes());
         assert_eq!(code, 1);
@@ -1584,6 +1613,20 @@ mod tests {
         let (code, out, err) = command(&[], b"ok\ncaf\xe9\n");
         assert_eq!((code, out.as_str()), (1, ""));
         assert_eq!(err, "esmorph: -: the file is not in UTF-8 (line 2)\n");
+        // Another encoding after the first buffer: the paragraphs before it are written
+        let mut input = "Uno.\n\n".repeat(INPUT_BUFFER).into_bytes();
+        input.extend(b"caf\xe9\n");
+        let (code, out, err) = command(&[], &input);
+        assert_eq!(code, 1);
+        assert_eq!(
+            out,
+            "uno .\n".repeat(INPUT_BUFFER).replace(".\nuno", ".\n\nuno")
+        );
+        let line = 2 * INPUT_BUFFER + 1;
+        assert_eq!(
+            err,
+            format!("esmorph: -: the file is not in UTF-8 (line {line})\n")
+        );
         // A damaged line after UTF-8: its wrong bytes are U+FFFD
         let mut input = "Mamá.\n".as_bytes().to_vec();
         input.extend(b"a\xffb\n");
@@ -1780,6 +1823,52 @@ mod tests {
             let mut terminal = Terminal(vec![b"", input]);
             assert_eq!(run_with(true, &mut terminal, &mut output).0, 0);
         }
+    }
+
+    #[test]
+    fn wrong_sentences_reported_at_once() {
+        // The command may be kept open on a stream: a wrong sentence is reported before the next read
+        struct Shared(Rc<RefCell<Vec<u8>>>);
+        impl Write for Shared {
+            fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+                self.0.borrow_mut().extend_from_slice(data);
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        struct Stream(Vec<&'static [u8]>, Rc<RefCell<Vec<u8>>>, bool);
+        impl Read for Stream {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if self.0.len() == 1 {
+                    self.2 = !self.1.borrow().is_empty();
+                }
+                let piece = self.0.pop().unwrap_or_default();
+                buffer[..piece.len()].copy_from_slice(piece);
+                Ok(piece.len())
+            }
+        }
+        let errors = Rc::new(RefCell::new(Vec::new()));
+        let mut stream = Stream(
+            vec![b"1\tmar\n\n", b"1\tmar\n\n"],
+            Rc::clone(&errors),
+            false,
+        );
+        let code = execute(
+            ["-i", "conllu"].map(OsString::from).to_vec(),
+            "",
+            None,
+            false,
+            false,
+            false,
+            &mut stream,
+            &mut Vec::new(),
+            &mut Shared(Rc::clone(&errors)),
+        );
+        assert_eq!(code, 1);
+        assert!(stream.2);
+        assert_eq!(String::from_utf8_lossy(&errors.borrow()).lines().count(), 2);
     }
 
     #[test]
