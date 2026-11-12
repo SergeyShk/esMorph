@@ -500,7 +500,17 @@ fn _analysis(
     // The tag of the dictionary is shared by its analyses
     let this = analyzer.get();
     let tag = Tag { pos, feats };
-    let ud = this.tag_numbers.get(&tag).copied();
+    // A pickle of an earlier version may have the features in another order: those of ordinals
+    // had `Number` last
+    let ud = (this.tag_numbers.get(&tag).copied()).or_else(|| {
+        let mut feats: Vec<&str> = tag.feats.split('|').collect();
+        feats.sort_by_cached_key(|feat| feat.split('=').next().unwrap_or_default().to_lowercase());
+        let sorted = Tag {
+            pos: tag.pos.clone(),
+            feats: feats.join("|"),
+        };
+        this.tag_numbers.get(&sorted).copied()
+    });
     let handle = Analyzer::handle(&analyzer);
     let tag = match ud {
         Some(ud) => AnalysisTag::Dictionary(ud),

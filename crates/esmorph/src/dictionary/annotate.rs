@@ -1,7 +1,7 @@
 //! The fields of CoNLL-U of the words of a token and the analysis of a document of the anySeg
 //! segmenter
 
-use super::{Analysis, Dictionary};
+use super::{Analysis, Dictionary, normalized};
 use crate::alphabet;
 use crate::clitics;
 
@@ -37,30 +37,58 @@ impl Dictionary {
         let host = if rest.is_empty() {
             None
         } else {
-            let fitting = (self.analyze(token).into_iter()).filter(|analysis| {
+            let fits = |analysis: &Analysis| {
                 analysis.words.len() == words.len()
                     && (analysis.words.iter())
                         .zip(words)
                         .all(|(known, word)| same_word(known, word.as_ref()))
-            });
-            most_probable(fitting.collect())
+            };
+            let mut fitting: Vec<Analysis> = self.analyze(token).into_iter().filter(fits).collect();
+            // A word of the dictionary that the segmenter splits is a verb with clitics too:
+            // `dale` is an interjection, `dinos` an adjective
+            if fitting.is_empty() {
+                fitting = (self.with_clitics(&normalized(token)).into_iter())
+                    .filter(fits)
+                    .collect();
+            }
+            most_probable(fitting)
         };
         let host = host.or_else(|| self.analyze(first).into_iter().next());
         let verb = host.as_ref().is_some_and(|analysis| {
             (self.ud_tag(analysis.ud)).is_some_and(|tag| matches!(tag.pos(), "VERB" | "AUX"))
         });
         fields.push(self.fields(first, host));
-        for word in rest {
+        for (number, word) in rest.iter().enumerate() {
             let word = word.as_ref();
             let analyses = self.analyze(word);
             let pronoun = verb && clitics::is_clitic(&word.to_lowercase());
-            let pronouns: Vec<Analysis> = (analyses.iter())
-                .filter(|analysis| {
-                    pronoun && (self.ud_tag(analysis.ud)).is_some_and(|tag| tag.pos() == "PRON")
-                })
-                .cloned()
-                .collect();
-            let analysis = most_probable(pronouns).or_else(|| analyses.into_iter().next());
+            // A clitic before an accusative of the third person is a dative: `se` of `díselo`
+            let dative = (rest.get(number + 1)).is_some_and(|next| {
+                matches!(
+                    next.as_ref().to_lowercase().as_str(),
+                    "lo" | "la" | "los" | "las"
+                )
+            });
+            // An enclitic is a personal pronoun, not the `lo` of `lo que`
+            let personal = |analysis: &&Analysis| {
+                (self.ud_tag(analysis.ud))
+                    .is_some_and(|tag| tag.pos() == "PRON" && tag.feat("Definite").is_none())
+            };
+            let case = |analysis: &&Analysis| {
+                (self.ud_tag(analysis.ud)).is_some_and(|tag| tag.feat("Case") == Some("Dat"))
+            };
+            let analysis = if pronoun {
+                let personal: Vec<&Analysis> = analyses.iter().filter(personal).collect();
+                let datives: Vec<Analysis> = (personal.iter())
+                    .filter(|analysis| dative && case(analysis))
+                    .map(|&analysis| analysis.clone())
+                    .collect();
+                most_probable(datives)
+                    .or_else(|| most_probable(personal.into_iter().cloned().collect()))
+            } else {
+                None
+            };
+            let analysis = analysis.or_else(|| analyses.into_iter().next());
             fields.push(self.fields(word, analysis));
         }
     }
@@ -189,11 +217,12 @@ pub(crate) fn one_line(word: &str) -> String {
     }
 }
 
-/// Whether two spellings are one word: case and accents do not matter (the segmenter gives the host
-/// of `dámelo` as `da`, the dictionary as `da` too, but `convirtiéndose` as `convirtiendo`)
+/// Whether two spellings are one word: case, accents, combining marks and invisible characters do
+/// not matter (the segmenter gives the host of `dámelo` as `da`, the dictionary as `da` too, but
+/// `convirtiéndose` as `convirtiendo`)
 fn same_word(a: &str, b: &str) -> bool {
     let letters = |word: &str| {
-        let word = word.to_lowercase();
+        let word = normalized(word).to_lowercase();
         word.chars()
             .map(|c| alphabet::plain(c).unwrap_or(c))
             .collect::<String>()
@@ -263,6 +292,45 @@ mod tests {
         let words = fields("dárselas", &["dar", "se", "las"]);
         assert_eq!(words[2].1, "PRON");
         assert!(words[2].2.as_deref().unwrap().contains("Case=Acc"));
+        // An enclitic `lo` is a personal pronoun, not the `lo` of `lo que`
+        let feats = |token, words: &[&str]| fields(token, words).pop().unwrap().2.unwrap();
+        assert_eq!(
+            feats("verlo", &["ver", "lo"]),
+            "Case=Acc|Gender=Masc|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs"
+        );
+        // A clitic before an accusative of the third person is a dative
+        let words = fields("díselo", &["di", "se", "lo"]);
+        assert!(
+            words[1].2.as_deref().unwrap().contains("Case=Dat"),
+            "{words:?}"
+        );
+        assert!(
+            !words[2].2.as_deref().unwrap().contains("Definite"),
+            "{words:?}"
+        );
+    }
+
+    #[test]
+    fn words_of_the_dictionary_split_by_the_segmenter() {
+        // `dale` is an interjection and `dinos` an adjective of the dictionary, but split into
+        // words they are a verb with clitics
+        let host = |token, words: &[&str]| fields(token, words).swap_remove(0);
+        let dale = host("dale", &["da", "le"]);
+        assert_eq!((dale.0.as_str(), dale.1.as_str()), ("dar", "VERB"));
+        assert!(dale.2.unwrap().contains("Mood=Imp"));
+        assert_eq!(host("dinos", &["di", "nos"]).0, "decir");
+        assert_eq!(host("Cállate", &["Calla", "te"]).0, "callar");
+    }
+
+    #[test]
+    fn words_in_other_unicode_forms() {
+        // Combining marks and invisible characters in the words of the document
+        let decomposed = "di\u{301}";
+        assert_eq!(
+            summary("di\u{301}melo", &[decomposed, "me", "lo"])[0],
+            ("decir".to_owned(), "VERB".to_owned())
+        );
+        assert!(same_word("dí\u{200b}", "di"));
     }
 
     #[test]

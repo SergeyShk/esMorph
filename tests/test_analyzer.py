@@ -1118,6 +1118,11 @@ def test_pickle_takes_the_analyzer_of_a_file(morph, tmp_path):
     )
     assert older.__reduce__()[1][7].__reduce__()[1] == (path, False)
     assert pickle.loads(pickle.dumps(older)) == older
+    # Features of an earlier version in another order: the analysis has the tag of the dictionary
+    ordinal = esmorph._esmorph._analysis(
+        "2.ª", "2.º", "ADJ", "Gender=Fem|NumForm=Digit|NumType=Ord|Number=Sing", 1.0, [], "rule"
+    )
+    assert ordinal == morph.analyze("2.ª")[0]
     # Analyses of a file that is gone come with the dictionary of the package
     gone_path = tmp_path / "gone.dict"
     gone_path.write_bytes(morph.path.read_bytes())

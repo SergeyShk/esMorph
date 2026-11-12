@@ -68,7 +68,7 @@ echo "Dímelo del mar." | esmorph -f conllu
 1-3	Dímelo	_	_	_	_	_	_	_	_
 1	Di	decir	VERB	_	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	_	_	_	_
 2	me	yo	PRON	_	Case=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs	_	_	_	_
-3	lo	él	PRON	_	Case=Acc|Definite=Def|Gender=Masc|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs	_	_	_	_
+3	lo	él	PRON	_	Case=Acc|Gender=Masc|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs	_	_	_	_
 4-5	del	_	_	_	_	_	_	_	_
 4	de	de	ADP	_	_	_	_	_	_
 5	el	el	DET	_	Definite=Def|Gender=Masc|Number=Sing|PronType=Art	_	_	_	_

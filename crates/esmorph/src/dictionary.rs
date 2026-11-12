@@ -2558,6 +2558,20 @@ pub(crate) mod tests {
         builder.build().unwrap()
     }
 
+    #[test]
+    fn features_in_conllu_order() {
+        // By name without regard to case, the tags of the rules too: `Number` before `NumForm`
+        let check = |dictionary: Dictionary| {
+            for tag in dictionary.ud_tags() {
+                let names: Vec<String> = tag.feats().map(|(name, _)| name.to_lowercase()).collect();
+                assert!(names.is_sorted(), "{}", tag.feats_string());
+            }
+        };
+        check(dictionary());
+        #[cfg(feature = "bundled")]
+        check(Dictionary::bundled().unwrap());
+    }
+
     fn dictionary() -> Dictionary {
         Dictionary::from_bytes(&bytes()).unwrap()
     }
