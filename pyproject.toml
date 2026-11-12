@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "esmorph"
-version = "0.2.0.dev7"
+version = "0.2.0"
 description = "Fast Spanish morphological analyzer written in Rust with a Python API"
 readme = "README.md"
 requires-python = ">=3.11"

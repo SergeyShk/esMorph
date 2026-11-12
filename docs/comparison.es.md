@@ -1,6 +1,6 @@
 # Comparación
 
-esMorph analiza una palabra sin contexto y da todos sus análisis, primero el más probable. Su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD y que el de spaCy `es_core_news_sm` en PUD y COSER, y su primer análisis tiene los rasgos de UD correctos más a menudo que ambos etiquetadores en PUD; un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 96-99 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 1.2 millones de tokens por segundo, 28 veces más rápido que spaCy y 456 veces más rápido que Stanza, responde a un texto corto junto con la carga en 3.5 ms, y cada proceso más con el mismo diccionario añade 3.6 MB de memoria.
+esMorph analiza una palabra sin contexto y da todos sus análisis, primero el más probable. Su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD y que el de spaCy `es_core_news_sm` en PUD y COSER, y su primer análisis tiene los rasgos de UD correctos más a menudo que ambos etiquetadores en PUD; un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 96-99 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 1.7 millones de tokens por segundo, 39 veces más rápido que spaCy y 659 veces más rápido que Stanza, responde a un texto corto junto con la carga en 3.2 ms, y cada proceso más con el mismo diccionario añade 3.5 MB de memoria.
 
 ## Calidad { #quality }
 
@@ -79,16 +79,16 @@ El tiempo de análisis de un texto junto con la importación y la carga del sist
 
 ![Tiempo de análisis de un texto con la carga según su tamaño](img/speed.es.svg)
 
-En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3.5 ms, simplemma en 0.35 s, spaCy en 1.1 s y Stanza en 2.3 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:
+En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3.2 ms, simplemma en 0.37 s, spaCy en 0.89 s y Stanza en 1.8 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:
 
 | Sistema | Tokens por segundo |
 | :------ | :----------------- |
-| simplemma, solo lemas | 2 507 937 |
-| esMorph | 1 228 661 |
-| spaCy es_core_news_sm | 44 100 |
-| Stanza | 2694 |
+| simplemma, solo lemas | 2 516 195 |
+| esMorph | 1 744 647 |
+| spaCy es_core_news_sm | 44 659 |
+| Stanza | 2649 |
 
-esMorph da todos los análisis de una palabra, con rasgos y probabilidades; su lematización sola es tan rápida como simplemma, véase [Operaciones](#operations).
+esMorph da todos los análisis de una palabra, con rasgos y probabilidades; su lematización sola es casi tan rápida como simplemma, véase [Operaciones](#operations).
 
 ### Operaciones { #operations }
 
@@ -96,29 +96,29 @@ Miles de palabras, análisis o tablas por segundo; más es mejor:
 
 | Operación | esMorph | simplemma | ablaut | verbecc |
 | :-------- | :------ | :-------- | :----- | :------ |
-| Análisis de una forma de palabra: `analyze` en un bucle | 1167 | - | - | - |
-| Análisis de una lista: `analyze_many` | 1221 | - | - | - |
-| Lematización: `lemmatize`, `lemmatize(word, lang="es")` | 2042 | 2133 | - | - |
-| Lematización en 4 hilos: `lemmatize` | 6852 | - | - | - |
-| Forma de un sustantivo o un adjetivo: `inflect(Number="Plur")` | 1470 | - | - | - |
-| Forma de un verbo: `inflect(Mood="Sub", Tense="Pres", Person="1", Number="Sing")` | 374 | - | - | - |
-| Tabla de conjugación: `forms()`, `conjugate(lemma)` | 117 | - | 1.8 | 1.0 |
+| Análisis de una forma de palabra: `analyze` en un bucle | 1007 | - | - | - |
+| Análisis de una lista: `analyze_many` | 1694 | - | - | - |
+| Lematización: `lemmatize`, `lemmatize(word, lang="es")` | 1944 | 2081 | - | - |
+| Lematización en 4 hilos: `lemmatize` | 6055 | - | - | - |
+| Forma de un sustantivo o un adjetivo: `inflect(Number="Plur")` | 1492 | - | - | - |
+| Forma de un verbo: `inflect(Mood="Sub", Tense="Pres", Person="1", Number="Sing")` | 576 | - | - | - |
+| Tabla de conjugación: `forms()`, `conjugate(lemma)` | 111 | - | 1.7 | 0.9 |
 
-simplemma guarda sus respuestas en una caché: con la caché llena por una pasada anterior sobre las mismas palabras lematiza 5.4 millones de palabras por segundo. ablaut y verbecc construyen una forma solo como parte de la tabla entera. `lemmatize` libera el GIL, así que los hilos que comparten un analizador trabajan en paralelo.
+simplemma guarda sus respuestas en una caché: con la caché llena por una pasada anterior sobre las mismas palabras lematiza 5.0 millones de palabras por segundo. ablaut y verbecc construyen una forma solo como parte de la tabla entera. `lemmatize` libera el GIL, así que los hilos que comparten un analizador trabajan en paralelo.
 
 ## Carga y memoria { #memory }
 
 | | esMorph | simplemma | spaCy es_core_news_sm | Stanza |
 | :- | :------ | :-------- | :-------------------- | :----- |
-| Importación y carga | 3.6 ms | 0.31 s | 0.85 s | 1.7 s |
-| Aumento de la memoria del proceso | 10.6 MB | 131 MB | 305 MB | 577 MB |
-| Cada proceso más | 3.6 MB | 129 MB | 325 MB | 0.6-1.0 GB |
+| Importación y carga | 3.0 ms | 0.34 s | 0.97 s | 1.8 s |
+| Aumento de la memoria del proceso | 10.7 MB | 131 MB | 304 MB | 578 MB |
+| Cada proceso más | 3.5 MB | 129 MB | 360 MB | 1.6 GB |
 
-El archivo del diccionario de esMorph se proyecta en memoria, así que los procesos de `multiprocessing` o joblib y los workers de un servidor web lo comparten: la mayor parte de los 10.6 MB del primer proceso es el diccionario, y cada proceso más añade solo sus propias tablas y análisis.
+El archivo del diccionario de esMorph se proyecta en memoria, así que los procesos de `multiprocessing` o joblib y los workers de un servidor web lo comparten: la mayor parte de los 10.7 MB del primer proceso es el diccionario, y cada proceso más añade solo sus propias tablas y análisis.
 
 ## Cómo se midió { #method }
 
 - Calidad, flexión y análisis de un texto: el script [`scripts/compare.py`](https://github.com/SergeyShk/esMorph/blob/master/scripts/compare.py), `uv run scripts/compare.py target/compare --chart docs/img/speed.svg`. Instala los sistemas en un entorno aparte con las versiones de todos los paquetes fijadas en `scripts/compare.py.lock` (esMorph, la versión de ese archivo o un paquete con `uv run --with dist/esmorph-*.whl`, como para esta página), descarga las partes de prueba de los treebanks y el modelo de Stanza comprobando sus sumas de control antes de medir y analiza las palabras de referencia. Flexión: los 5939, 2893 y 1237 verbos de AnCora, PUD y COSER cuyo lema es un infinitivo, sin erratas ni palabras extranjeras.
-- Versiones: Python 3.11, esMorph 0.1.0, simplemma 2.0.0, spaCy 3.8.16 con el modelo es_core_news_sm 3.8.0 sin el analizador sintáctico ni NER, Stanza 1.15.0 con el modelo por defecto en la CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (el paquete no trae modelo y entrena uno en la primera ejecución, así que sus cifras varían hasta en 0.2 entre instalaciones). Ordenador: Apple M3 Pro, macOS 26, con otras aplicaciones abiertas (carga media de alrededor de 4), así que las velocidades indican el orden de magnitud.
-- Velocidad del análisis de un texto: los 53 622 tokens de la parte de prueba de AnCora con la puntuación; tokens por segundo, el mejor de dos análisis de la parte entera después de la carga; puntos del gráfico, la importación, la carga y el análisis de los primeros 10-50 000 tokens en un proceso nuevo. Solo se mide la llamada al sistema: esMorph, `analyze_many` de todas las palabras; simplemma, `lemmatize` de cada palabra con la caché vacía; spaCy, `nlp.pipe` de las oraciones; Stanza, el texto entero. esMorph y simplemma trabajan en un hilo, spaCy y Stanza con su configuración por defecto.
+- Versiones: Python 3.11, esMorph 0.2.0, simplemma 2.0.0, spaCy 3.8.16 con el modelo es_core_news_sm 3.8.0 sin el analizador sintáctico ni NER, Stanza 1.15.0 con el modelo por defecto en la CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (el paquete no trae modelo y entrena uno en la primera ejecución, así que sus cifras varían hasta en 0.2 entre instalaciones). Ordenador: Apple M3 Pro, macOS 26, con otras aplicaciones abiertas (carga media de 4-6), así que las velocidades indican el orden de magnitud.
+- Velocidad del análisis de un texto: los 53 622 tokens de la parte de prueba de AnCora con la puntuación; tokens por segundo, el mejor de dos análisis de la parte entera después de la carga; puntos del gráfico, la mejor de tres ejecuciones de la importación, la carga y el análisis de los primeros 10-50 000 tokens en un proceso nuevo. Solo se mide la llamada al sistema: esMorph, `analyze_many` de todas las palabras; simplemma, `lemmatize` de cada palabra con la caché vacía; spaCy, `nlp.pipe` de las oraciones; Stanza, el texto entero. esMorph y simplemma trabajan en un hilo, spaCy y Stanza con su configuración por defecto.
 - Operaciones: 47 288 palabras de la parte de prueba de AnCora sin la puntuación, la mejor de tres pasadas en un hilo, salvo la fila con hilos; verbos, los lexemas de los 4634 verbos de referencia cuyo lema es un infinitivo (verbecc, los primeros 2000, una pasada). Carga y memoria: la importación, la creación del analizador y el primer análisis, el aumento de la memoria residente del proceso (`ps -o rss`), la mediana de tres ejecuciones; cada proceso más, el aumento de la memoria que el proceso no comparte con otros (USS) en cada uno de cuatro procesos de `multiprocessing` que cargan el sistema y analizan 200 oraciones.

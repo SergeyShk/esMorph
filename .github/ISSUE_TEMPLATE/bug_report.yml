@@ -22,7 +22,7 @@ body:
     attributes:
       label: esMorph version
       description: "`python -c \"import esmorph; print(esmorph.__version__)\"`"
-      placeholder: "0.1.0"
+      placeholder: "0.2.0"
     validations:
       required: true
   - type: input

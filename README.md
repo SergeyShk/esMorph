@@ -28,7 +28,7 @@
 
 **esMorph** is a morphological analyzer of Spanish: a Rust core with a Python API. For a word form it finds the analyses in a dictionary built from [Wiktionary](https://en.wiktionary.org) - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - orders them by probability and builds the forms of the word: conjugation, gender and number.
 
-It analyzes 1.2 million tokens per second from Python, 28 times faster than spaCy, and lemmatizes as fast as simplemma, whose lemmas are right less often on the UD test sets of AnCora, PUD and COSER. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
+It analyzes 1.7 million tokens per second from Python, 39 times faster than spaCy, and lemmatizes almost as fast as simplemma, whose lemmas are right less often on the UD test sets of AnCora, PUD and COSER. Parts of speech, features and lemmas follow the UD guidelines and the conventions of the AnCora treebank, so the results can be compared with spaCy, Stanza and other UD tools.
 
 * **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, lists of words and lemmatization, documents of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, checking a word form against the dictionary
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/analysis/#ud)** - parts of speech, features and lemmas by the UD guidelines and the AnCora conventions
@@ -178,12 +178,12 @@ The share of words whose first analysis has the right lemma, and the right part 
 
 | System | Lemma, AnCora | Lemma, PUD | Lemma, COSER | All together, PUD | Tokens per second |
 | :----- | :------------ | :--------- | :----------- | :---------------- | :---------------- |
-| esMorph | 97.80 | 97.74 | 94.49 | **87.90** | 1,228,661 |
-| simplemma | 96.94 | 96.96 | 93.50 | - | **2,507,937** |
-| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 83.59 | 44,100 |
-| Stanza | **99.16** | **97.80** | **94.98** | 86.34 | 2,694 |
+| esMorph | 97.80 | 97.74 | 94.49 | **87.90** | 1,744,647 |
+| simplemma | 96.94 | 96.96 | 93.50 | - | **2,516,195** |
+| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 83.59 | 44,659 |
+| Stanza | **99.16** | **97.80** | **94.98** | 86.34 | 2,649 |
 
-esMorph analyzes a word without context, while spaCy and Stanza choose the analysis by the sentence and are trained on AnCora, so they lead on it; on PUD, new to all of them, the first analysis of esMorph has the right features and lemma together more often. An analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It gives the gold form of 99.65, 93.29 and 95.55 % of the verbs of AnCora, PUD and COSER, against 98.87, 92.71 and 93.61 % of ablaut. A short text together with loading takes 3.5 ms against 0.35-2.3 s, and every further process with the same dictionary adds 3.6 MB of memory. Measured on Apple M3 Pro, Python 3.11.
+esMorph analyzes a word without context, while spaCy and Stanza choose the analysis by the sentence and are trained on AnCora, so they lead on it; on PUD, new to all of them, the first analysis of esMorph has the right features and lemma together more often. An analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It gives the gold form of 99.65, 93.29 and 95.55 % of the verbs of AnCora, PUD and COSER, against 98.87, 92.71 and 93.61 % of ablaut. A short text together with loading takes 3.2 ms against 0.37-1.8 s, and every further process with the same dictionary adds 3.5 MB of memory. Measured on Apple M3 Pro, Python 3.11.
 
 See the [documentation](https://sergeyshk.github.io/esMorph/comparison/): all the scores, verb inflection, the chart of speed by the size of the text, memory and how it was measured.
 
