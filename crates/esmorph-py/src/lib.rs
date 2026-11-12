@@ -1190,6 +1190,21 @@ impl Analyzer {
         Ok(self.dictionary.is_known(&text(word)?))
     }
 
+    /// The analysis of the first word of a token with the words `words` among the analyses of the
+    /// token in their order, as `annotate` chooses it: for the component of spaCy
+    fn _host<'py>(
+        slf: &Bound<'py, Self>,
+        token: &str,
+        words: Vec<String>,
+        analyses: Vec<Bound<'py, Analysis>>,
+    ) -> PyResult<Option<Py<Analysis>>> {
+        let this = slf.get();
+        let analyses = (analyses.iter()).filter_map(|analysis| analysis.get().core());
+        let host = this.dictionary.host(token, &words, analyses.collect());
+        let found = this.convert(slf.py(), &Analyzer::handle(slf), host.into_iter().collect())?;
+        Ok(found.into_iter().next())
+    }
+
     /// The part of speech and the features of every UD tag of the dictionary and its rules: the
     /// tags the context model of `scripts/train_context.py` must know
     fn _ud_tags(&self) -> Vec<(&str, Vec<(&str, &str)>)> {
