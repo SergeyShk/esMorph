@@ -12,6 +12,8 @@ pub enum Error {
     Build(String),
     /// A document of the anySeg segmenter did not take the analyses
     Document(String),
+    /// The dictionary has no context model for the analysis of a sentence
+    Context(String),
 }
 
 impl fmt::Display for Error {
@@ -23,6 +25,7 @@ impl fmt::Display for Error {
             Error::Document(msg) => {
                 write!(f, "the analyses are not written to the document: {msg}")
             }
+            Error::Context(msg) => write!(f, "{msg}"),
         }
     }
 }

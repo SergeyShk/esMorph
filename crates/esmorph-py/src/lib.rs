@@ -932,25 +932,82 @@ impl Analyzer {
         Ok(result)
     }
 
+    /// Analyses of the tokens of a sentence in context
+    ///
+    /// Description:
+    ///     The analyses of analyze ordered by the context model: the first is the one the model
+    ///     chose by the tokens around, the probability is its score in this sentence. The tokens
+    ///     are those of one sentence in order, as analyze takes them ("del", "dámelo"); a sentence
+    ///     of one token is analyzed as analyze, one longer than 256 tokens by parts of 256. The
+    ///     analysis goes without the GIL
+    ///
+    /// Arguments:
+    ///     words (Iterable[str]): The tokens of the sentence
+    ///
+    /// Returns:
+    ///     list[list[Analysis]]: The analyses of every token
+    ///
+    /// Raises:
+    ///     TypeError: If a string or bytes are given instead of a collection of tokens, or a token
+    ///         is not a string
+    ///     ValueError: If the dictionary has no context model
+    ///
+    /// Example:
+    ///     >>> from esmorph import Analyzer
+    ///     >>> sentence = Analyzer().analyze_sentence(["Ella", "la", "vio"])
+    ///     >>> [(analyses[0].lemma, analyses[0].pos) for analyses in sentence]
+    ///     [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
+    fn analyze_sentence<'py>(
+        slf: &Bound<'py, Self>,
+        words: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyList>> {
+        let py = slf.py();
+        let this = slf.get();
+        let handle = Analyzer::handle(slf);
+        let mut words = Words::new(words)?;
+        let mut texts = Vec::new();
+        while words.next_chunk()? {
+            texts.append(&mut words.texts);
+        }
+        drop(words);
+        let sentence = py
+            .detach(|| this.dictionary.analyze_sentence(&texts))
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let result = PyList::empty(py);
+        for analyses in sentence {
+            let list = PyList::new(py, this.convert(py, &handle, analyses)?)?;
+            // SAFETY: as in analyze_many, a list of analyses refers to no tracked object
+            unsafe { pyo3::ffi::PyObject_GC_UnTrack(list.as_ptr().cast()) };
+            result.append(list)?;
+        }
+        Ok(result)
+    }
+
     /// Analysis of a document of the anySeg segmenter
     ///
     /// Description:
     ///     Fills the columns lemma, upos and feats of the words of the document with the most
-    ///     probable analysis of every word, as analyze orders them. The words of a multiword token
-    ///     are analyzed by the token: "dime" split into "di" and "me" is the imperative of "decir"
-    ///     with the pronoun "me", and clitics after a verb are pronouns. A token that the segmenter
-    ///     leaves as one word gets the analysis of the whole token: "devuélvenos" is the imperative
-    ///     of "devolver". A word without analyses gets its lower case as the lemma and the part of
-    ///     speech X; the earlier values of the columns are replaced. The document is an
-    ///     anyseg.Document or an object with the same column("form"), multiword_tokens (a token has
-    ///     text and words, a word has index) and set_columns. The analysis goes without the GIL
+    ///     probable analysis of every word in the context of its sentence, as analyze_sentence
+    ///     orders the analyses of its tokens. The words of a multiword token are analyzed by the
+    ///     token: "dime" split into "di" and "me" is the imperative of "decir" with the pronoun
+    ///     "me", and clitics after a verb are pronouns. A token that the segmenter leaves as one
+    ///     word gets the analysis of the whole token: "devuélvenos" is the imperative of
+    ///     "devolver". Without context the analyses of a token are ordered as analyze orders
+    ///     them. A word without analyses gets its lower case as the lemma and the part of
+    ///     speech X; the earlier values of the columns are replaced. The document
+    ///     is an anyseg.Document or an object with the same column("form"), multiword_tokens (a
+    ///     token has text and words, a word has index), sentences (a sentence has words) and
+    ///     set_columns; without sentences the document is one sentence. The analysis goes without
+    ///     the GIL
     ///
     /// Arguments:
     ///     document (anyseg.Document): The document
+    ///     context (bool): Order the analyses by the context model
     ///
     /// Raises:
-    ///     ValueError: If the words of the multiword tokens are not consecutive words of the
-    ///         document in order
+    ///     ValueError: If the words of the multiword tokens or the first words of the sentences
+    ///         are not words of the document in order, or the analysis is in context and the
+    ///         dictionary has no context model
     ///     TypeError: If the object is not a document, a form or the text of a token is not a
     ///         string, or the index of a word is not an integer
     ///
@@ -961,7 +1018,8 @@ impl Analyzer {
     ///     >>> Analyzer().annotate(document)
     ///     >>> [(word.form, word.lemma, word.upos) for word in document.words]
     ///     [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
-    fn annotate(&self, py: Python<'_>, document: &Bound<'_, PyAny>) -> PyResult<()> {
+    #[pyo3(signature = (document, *, context = true))]
+    fn annotate(&self, py: Python<'_>, document: &Bound<'_, PyAny>, context: bool) -> PyResult<()> {
         let column = document_attribute(document, intern!(py, "column"))?;
         let set_columns = document_attribute(document, intern!(py, "set_columns"))?;
         let mut words = Words::new(&column.call1(("form",))?)?;
@@ -970,33 +1028,72 @@ impl Analyzer {
             forms.append(&mut words.texts);
         }
         drop(words);
-        let tokens = multiword_tokens(document, forms.len())?;
+        let multiword = multiword_tokens(document, forms.len())?;
+        let starts = sentence_starts(document, forms.len())?;
+        if context && !self.dictionary.has_context() {
+            return Err(PyValueError::new_err(
+                "the dictionary has no context model: annotate with context=False",
+            ));
+        }
+        // Every token: the text of a multiword token or none, and its words
+        let mut tokens: Vec<(Option<&str>, Range<usize>)> = Vec::new();
+        let mut multiword = multiword.iter().peekable();
+        let mut word = 0;
+        while word < forms.len() {
+            match multiword.next_if(|(_, range)| range.start == word) {
+                Some((text, range)) => {
+                    tokens.push((Some(text.as_str()), range.clone()));
+                    word = range.end;
+                }
+                None => {
+                    tokens.push((None, word..word + 1));
+                    word += 1;
+                }
+            }
+        }
+        // The sentences by tokens: a sentence starts with the token of its first word
+        let mut bounds = vec![0];
+        let mut next_start = starts
+            .iter()
+            .copied()
+            .skip_while(|&start| start == 0)
+            .peekable();
+        for (number, (_, range)) in tokens.iter().enumerate() {
+            if next_start.next_if(|&start| start <= range.start).is_some() {
+                while next_start.next_if(|&start| start <= range.start).is_some() {}
+                bounds.push(number);
+            }
+        }
+        bounds.push(tokens.len());
+        bounds.dedup();
         // A part of speech, features and a lemma are one string object for all their words, and
         // the columns are filled by chunks: a large document takes much less memory
         let mut strings: HashMap<&str, Bound<'_, PyString>> = HashMap::new();
         let mut lemma_strings: HashMap<String, Bound<'_, PyString>> = HashMap::new();
         let (lemmas, parts, feats) = (PyList::empty(py), PyList::empty(py), PyList::empty(py));
         let mut fields = Vec::with_capacity(CHUNK);
-        let (mut word, mut multiword) = (0, tokens.iter().peekable());
-        while word < forms.len() {
-            // Chunks of about CHUNK words: Ctrl+C is checked between them
-            let end = (word + CHUNK).min(forms.len());
-            py.detach(|| {
-                while word < end {
-                    match multiword.next_if(|(_, range)| range.start == word) {
-                        Some((text, range)) => {
-                            self.dictionary
-                                .token_fields(text, &forms[range.clone()], &mut fields);
-                            word = range.end;
-                        }
-                        None => {
-                            let form = forms[word].as_str();
-                            self.dictionary.token_fields(form, &[form], &mut fields);
-                            word += 1;
-                        }
-                    }
+        let mut sentence = 0;
+        while sentence + 1 < bounds.len() {
+            // Whole sentences of about CHUNK words: Ctrl+C is checked between them
+            let first = tokens[bounds[sentence]].1.start;
+            py.detach(|| -> Result<(), esmorph::Error> {
+                while sentence + 1 < bounds.len()
+                    && tokens[bounds[sentence]].1.start - first < CHUNK
+                {
+                    let part = &tokens[bounds[sentence]..bounds[sentence + 1]];
+                    let part: Vec<(&str, &[String])> = (part.iter())
+                        .map(|(text, range)| {
+                            let words = &forms[range.clone()];
+                            (text.unwrap_or(words[0].as_str()), words)
+                        })
+                        .collect();
+                    self.dictionary
+                        .sentence_fields(&part, context, &mut fields)?;
+                    sentence += 1;
                 }
-            });
+                Ok(())
+            })
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
             for field in fields.drain(..) {
                 let mut string = |text| {
                     (strings.entry(text))
@@ -1049,6 +1146,14 @@ impl Analyzer {
     ///     (True, True, False)
     fn is_known(&self, word: &Bound<'_, PyAny>) -> PyResult<bool> {
         Ok(self.dictionary.is_known(&text(word)?))
+    }
+
+    /// The part of speech and the features of every UD tag of the dictionary and its rules: the
+    /// tags the context model of `scripts/train_context.py` must know
+    fn _ud_tags(&self) -> Vec<(&str, Vec<(&str, &str)>)> {
+        (self.dictionary.ud_tags())
+            .map(|tag| (tag.pos(), tag.feats().collect()))
+            .collect()
     }
 
     /// Description of the dictionary
@@ -1401,6 +1506,41 @@ impl<'py> Words<'py> {
 
 /// The multiword tokens of a document: the text of every token and its words, consecutive words
 /// of the `count` words of the document in order
+/// The first words of the sentences of a document in order, from its `sentences`; without them
+/// the document is one sentence
+fn sentence_starts(document: &Bound<'_, PyAny>, count: usize) -> PyResult<Vec<usize>> {
+    let py = document.py();
+    let name = intern!(py, "sentences");
+    if !document.hasattr(name)? {
+        return Ok(vec![0]);
+    }
+    let sentences = document.getattr(name)?;
+    let unordered = || {
+        PyValueError::new_err(
+            "The first words of the sentences must be words of the document in order",
+        )
+    };
+    let mut starts = Vec::new();
+    for sentence in sentences.try_iter()? {
+        let words = sentence_attribute(&sentence?, intern!(py, "words"))?;
+        // A sentence without words starts nothing
+        let Some(word) = words.try_iter()?.next() else {
+            continue;
+        };
+        let index = sentence_attribute(&word?, intern!(py, "index"))?;
+        let index: usize = match index.extract::<isize>() {
+            Err(err) if err.is_instance_of::<PyOverflowError>(py) => return Err(unordered()),
+            Err(_) => return Err(type_error("The index of a word must be an integer", &index)),
+            Ok(index) => index.try_into().map_err(|_| unordered())?,
+        };
+        if index >= count || starts.last().is_some_and(|&last| index <= last) {
+            return Err(unordered());
+        }
+        starts.push(index);
+    }
+    Ok(starts)
+}
+
 fn multiword_tokens(
     document: &Bound<'_, PyAny>,
     count: usize,
@@ -1492,6 +1632,17 @@ fn token_attribute<'py>(
     object.getattr(name).map_err(|err| {
         let message =
             format!("A multiword token has text and words, and a word has index: no {name}");
+        attribute_error(err, &message, object)
+    })
+}
+
+/// An attribute of a sentence or of its word: `words`, `index`
+fn sentence_attribute<'py>(
+    object: &Bound<'py, PyAny>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Bound<'py, PyAny>> {
+    object.getattr(name).map_err(|err| {
+        let message = format!("A sentence has words, and a word has index: no {name}");
         attribute_error(err, &message, object)
     })
 }

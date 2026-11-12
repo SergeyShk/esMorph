@@ -23,7 +23,7 @@ def columns(document):
 
 def test_annotate(morph, segmenter):
     document = segmenter.segment("Devuélvenos, dime la verdad del caso.\n\nDámelo.")
-    assert morph.annotate(document) is None
+    assert morph.annotate(document, context=False) is None
     assert columns(document) == [
         # The segmenter leaves the token one word: it is the verb
         ("Devuélvenos", "devolver", "VERB"),
@@ -96,6 +96,33 @@ def test_empty_and_long_documents(morph, segmenter):
     assert lemmas[-8:] == lemmas[:8]
 
 
+def test_context(morph, segmenter):
+    document = segmenter.segment("Ella la vio. La casa es grande.")
+    morph.annotate(document)
+    # The pronoun after a subject, the article before a noun
+    assert [word.upos for word in document.words][1] == "PRON"
+    assert [word.upos for word in document.words][4] == "DET"
+    # Without context the dictionary orders the analyses: `la` is mostly an article
+    morph.annotate(document, context=False)
+    assert [word.upos for word in document.words][1] == "DET"
+    # The sentences of a document are analyzed apart
+    whole = columns(document)
+    parts = []
+    for text in ["Ella la vio.", "La casa es grande."]:
+        part = segmenter.segment(text)
+        morph.annotate(part, context=False)
+        parts += columns(part)
+    assert whole == parts
+    morph.annotate(document)
+    whole = columns(document)
+    parts = []
+    for text in ["Ella la vio.", "La casa es grande."]:
+        part = segmenter.segment(text)
+        morph.annotate(part)
+        parts += columns(part)
+    assert whole == parts
+
+
 @dataclass
 class Word:
     index: object
@@ -121,6 +148,47 @@ class Document:
 
     def set_columns(self, **columns):
         self.columns = columns
+
+
+@dataclass
+class Sentence:
+    words: list
+
+
+@dataclass
+class SentencesDocument(Document):
+    """A document with sentences"""
+
+    sentences: list = field(default_factory=list)
+
+
+def test_document_sentences(morph):
+    forms = ["Ella", "la", "vio", "La", "casa"]
+    document = SentencesDocument(
+        forms, sentences=[Sentence([Word(i) for i in range(3)]), Sentence([Word(3), Word(4)])]
+    )
+    morph.annotate(document)
+    first, second = Document(forms[:3]), Document(forms[3:])
+    morph.annotate(first)
+    morph.annotate(second)
+    assert document.columns == {
+        name: first.columns[name] + second.columns[name] for name in first.columns
+    }
+    # Without sentences the document is one sentence; a sentence without words starts none
+    document = SentencesDocument(forms[:3], sentences=[Sentence([Word(0)]), Sentence([])])
+    morph.annotate(document)
+    morph.annotate(first)
+    assert document.columns == first.columns
+    for sentences in [
+        [Sentence([Word(1)]), Sentence([Word(0)])],
+        [Sentence([Word(0)]), Sentence([Word(0)])],
+        [Sentence([Word(5)])],
+        [Sentence([Word(-1)])],
+    ]:
+        with pytest.raises(ValueError, match="first words of the sentences"):
+            morph.annotate(SentencesDocument(forms, sentences=sentences))
+    with pytest.raises(TypeError, match="sentence has words, and a word has index: no words"):
+        morph.annotate(SentencesDocument(forms, sentences=[Word(0)]))
 
 
 def test_document_protocol(morph):

@@ -112,7 +112,7 @@ jobs:
         run: |
           uv run --no-sync python scripts/export_wiktionary.py build/wiktionary
           uv run --no-sync python scripts/export_ud.py build/ud
-          cargo run --release --locked -p esmorph-build -- build/wiktionary build/ud python/esmorph/data/es.dict
+          cargo run --release --locked -p esmorph-build -- build/wiktionary build/ud python/esmorph/data/es.dict data/es-context.bin
           uv run --no-sync python -c "import hashlib; print(hashlib.sha256(open('python/esmorph/data/es.dict', 'rb').read()).hexdigest())"
       - name: Check dictionary size
         # The dictionary goes to crates.io in the archive of the crate esmorph-dict-es, whose limit is

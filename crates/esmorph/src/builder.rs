@@ -36,6 +36,8 @@ pub struct Builder {
     frequencies: HashMap<String, u32>,
     /// How often texts have a part of speech with features
     tag_frequencies: HashMap<(String, String), u32>,
+    /// Weights of the context model
+    context: Vec<u8>,
 }
 
 /// Place of an analysis in the list of its word form
@@ -302,6 +304,19 @@ impl Builder {
         Ok(())
     }
 
+    /// Sets the weights of the context model, a file of `scripts/train_context.py`, that
+    /// `Dictionary::analyze_sentence` orders analyses with
+    pub fn context(&mut self, weights: Vec<u8>) -> Result<&mut Self, Error> {
+        crate::dictionary::Model::parse(&weights)?;
+        self.context = weights;
+        Ok(self)
+    }
+
+    /// The data a context model was trained on, a JSON object of `scripts/train_context.py`
+    pub fn context_sources(weights: &[u8]) -> Result<String, Error> {
+        crate::dictionary::context_sources(weights)
+    }
+
     /// Builds the dictionary in the binary format
     pub fn build(&self) -> Result<Vec<u8>, Error> {
         let mut tags = Interned::default();
@@ -477,6 +492,7 @@ impl Builder {
             variants,
             guesses,
             guess_records,
+            context: self.context.clone(),
         }))
     }
 }

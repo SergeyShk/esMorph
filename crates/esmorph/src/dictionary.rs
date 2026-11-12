@@ -20,7 +20,13 @@ use crate::rules::{
 use crate::ud::{UdTag, UdTags};
 
 mod annotate;
+mod context;
 mod guess;
+
+#[cfg(any(test, feature = "build"))]
+pub(crate) use context::Model;
+#[cfg(any(test, feature = "build"))]
+pub(crate) use context::sources as context_sources;
 
 #[doc(hidden)]
 pub use annotate::Fields;
@@ -167,6 +173,8 @@ pub struct Dictionary {
     rule_tags: Option<RuleTags>,
     /// Made on the first annotation and shared by the copies
     feats: Arc<OnceLock<TagFeats>>,
+    /// The context model, read on the first analysis of a sentence and shared by the copies
+    context: Arc<OnceLock<Result<context::Context, String>>>,
 }
 
 /// The features of every UD tag in CoNLL-U, `None` without them
@@ -332,6 +340,7 @@ impl Dictionary {
             gender_number: [None; 2],
             rule_tags: None,
             feats: Arc::default(),
+            context: Arc::default(),
             layout,
             storage: Arc::clone(&storage),
         };
@@ -677,6 +686,96 @@ impl Dictionary {
                 },
             );
         }
+    }
+
+    /// Analyses of the tokens of a sentence, the most probable in the context first: the analyses
+    /// of `analyze` ordered by the context model of the dictionary, the probability is its score.
+    /// The tokens are those of one sentence in order, as `analyze` takes them (`del`, `dámelo`);
+    /// a sentence of one token is analyzed as `analyze`, one longer than `SENTENCE_CHUNK` tokens
+    /// by parts of `SENTENCE_CHUNK`. The model is read on the first call
+    ///
+    /// ```
+    /// # #[cfg(feature = "bundled")] {
+    /// let dictionary = esmorph::Dictionary::bundled()?;
+    /// let sentence = dictionary.analyze_sentence(&["Ella", "la", "vio"])?;
+    /// let pos = |analysis: &esmorph::Analysis| dictionary.ud_tag(analysis.ud).unwrap().pos();
+    /// assert_eq!(pos(&sentence[1][0]), "PRON");
+    /// # }
+    /// # Ok::<(), esmorph::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Context`] if the dictionary has no context model, [`Error::Format`] if its model
+    /// is damaged
+    pub fn analyze_sentence<S: AsRef<str>>(
+        &self,
+        words: &[S],
+    ) -> Result<Vec<Vec<Analysis>>, Error> {
+        let context = self.context()?;
+        let mut sentence = Vec::with_capacity(words.len());
+        for (number, chunk) in words.chunks(SENTENCE_CHUNK).enumerate() {
+            let analyses: Vec<Vec<Analysis>> = chunk
+                .iter()
+                .map(|word| self.analyze(word.as_ref()))
+                .collect();
+            // Without neighbors the model chooses worse than the counts of the dictionary
+            if chunk.len() < 2 {
+                sentence.extend(analyses);
+                continue;
+            }
+            // The model sees a token as `analyze` reads it: without invisible characters and with
+            // combined accents
+            let normal: Vec<Cow<str>> =
+                chunk.iter().map(|word| normalized(word.as_ref())).collect();
+            let normal: Vec<&str> = normal.iter().map(AsRef::as_ref).collect();
+            sentence.extend(context.rank(&normal, analyses, number == 0));
+        }
+        Ok(sentence)
+    }
+
+    /// Whether the dictionary has a context model for `analyze_sentence`
+    pub fn has_context(&self) -> bool {
+        !self.layout.context.is_empty()
+    }
+
+    /// The context model of the dictionary: read once for the dictionary and its copies
+    fn context(&self) -> Result<&context::Context, Error> {
+        // The model is built outside the cell: a fork from another thread while the cell is busy
+        // would leave the child waiting for it forever. Two threads may build it at once, one goes
+        // to the cell
+        let context = match self.context.get() {
+            Some(context) => context,
+            None => {
+                let bytes = &self.storage.bytes()[self.layout.context.clone()];
+                let built =
+                    if bytes.is_empty() {
+                        Err("the dictionary has no context model: a sentence cannot be analyzed in \
+                         context"
+                        .into())
+                    } else {
+                        context::Model::parse(bytes)
+                            .map(|model| context::Context::new(model, &self.ud))
+                            .map_err(|err| err.to_string())
+                    };
+                self.context.get_or_init(move || built)
+            }
+        };
+        context.as_ref().map_err(|message| {
+            if self.has_context() {
+                Error::Format(message.clone())
+            } else {
+                Error::Context(message.clone())
+            }
+        })
+    }
+
+    /// Tags of the parts of speech and features of the dictionary that the dictionary of the
+    /// training of its context model had not: with them the model must be trained again
+    #[cfg(feature = "build")]
+    #[doc(hidden)]
+    pub fn context_gaps(&self) -> Result<Vec<String>, Error> {
+        Ok(self.context()?.gaps(&self.ud))
     }
 
     /// Whether the dictionary has the word form, as written or as a verb of the dictionary with
@@ -1581,6 +1680,10 @@ fn walk(fst: &fst::raw::Fst<Slice>) -> bool {
     }
     (nodes.binary_search(&fst.root().addr())).is_ok_and(|root| keys[root] == fst.len() as u64)
 }
+
+/// Length of a part of a sentence in `Dictionary::analyze_sentence`: the model analyzes a long
+/// sentence by parts, so its memory does not grow with the input
+pub const SENTENCE_CHUNK: usize = 256;
 
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
 /// joins its letter, and a hyphen of Unicode is the hyphen-minus. Tokens of a text keep them

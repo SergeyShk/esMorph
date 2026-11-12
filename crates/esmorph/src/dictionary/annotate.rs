@@ -2,6 +2,7 @@
 //! segmenter
 
 use super::{Analysis, Dictionary, normalized};
+use crate::Error;
 use crate::alphabet;
 use crate::clitics;
 
@@ -30,12 +31,56 @@ impl Dictionary {
         words: &[S],
         fields: &mut Vec<Fields<'d>>,
     ) {
+        let analyses = self.analyze(token_text(token, words));
+        self.token_fields_with(token, words, analyses, fields);
+    }
+
+    /// The fields of CoNLL-U of the words of the tokens of a sentence, each token - its text and
+    /// its words, as `token_fields` gives them. With `context` the analyses of the tokens are
+    /// ordered by the context model, without it as `analyze` orders them
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Context`] if the analysis is in context and the dictionary has no context model
+    #[doc(hidden)]
+    pub fn sentence_fields<'d, S: AsRef<str>>(
+        &'d self,
+        tokens: &[(&str, &[S])],
+        context: bool,
+        fields: &mut Vec<Fields<'d>>,
+    ) -> Result<(), Error> {
+        let texts: Vec<&str> = (tokens.iter())
+            .map(|(token, words)| token_text(token, words))
+            .collect();
+        let analyses = if context {
+            self.analyze_sentence(&texts)?
+        } else {
+            texts.iter().map(|text| self.analyze(text)).collect()
+        };
+        for ((token, words), analyses) in tokens.iter().zip(analyses) {
+            self.token_fields_with(token, words, analyses, fields);
+        }
+        Ok(())
+    }
+
+    /// `token_fields` with the analyses of the token in their order: of its text for a token of
+    /// several words, of its word for a token of one
+    fn token_fields_with<'d, S: AsRef<str>>(
+        &'d self,
+        token: &str,
+        words: &[S],
+        analyses: Vec<Analysis>,
+        fields: &mut Vec<Fields<'d>>,
+    ) {
         let Some((first, rest)) = words.split_first() else {
             return;
         };
         let first = first.as_ref();
+        let mut analyses = Some(analyses);
         let host = if rest.is_empty() {
-            None
+            analyses
+                .take()
+                .and_then(|analyses| analyses.into_iter().next())
         } else {
             let fits = |analysis: &Analysis| {
                 analysis.words.len() == words.len()
@@ -43,7 +88,9 @@ impl Dictionary {
                         .zip(words)
                         .all(|(known, word)| same_word(known, word.as_ref()))
             };
-            let mut fitting: Vec<Analysis> = self.analyze(token).into_iter().filter(fits).collect();
+            let mut fitting: Vec<Analysis> = (analyses.take().into_iter().flatten())
+                .filter(fits)
+                .collect();
             // A word of the dictionary that the segmenter splits is a verb with clitics too:
             // `dale` is an interjection, `dinos` an adjective
             if fitting.is_empty() {
@@ -124,23 +171,38 @@ impl Dictionary {
         }
     }
 
-    /// The fields of every word of a document of the anySeg segmenter, as `annotate` gives them
+    /// The fields of every word of a document of the anySeg segmenter by sentences, as
+    /// `annotate` gives them
     #[cfg(feature = "anyseg")]
-    pub(crate) fn document_fields(&self, document: &anyseg::Document) -> Vec<Fields<'_>> {
+    pub(crate) fn document_fields(
+        &self,
+        document: &anyseg::Document,
+        context: bool,
+    ) -> Result<Vec<Fields<'_>>, Error> {
         let mut fields = Vec::with_capacity(document.word_count());
-        let mut words = Vec::new();
-        for (token, span) in document.tokens().iter().enumerate() {
-            words.clear();
-            words.extend(document.token_words(token).map(|word| document.form(word)));
-            self.token_fields(span.slice(document.text()), &words, &mut fields);
+        let spans = document.tokens();
+        for number in 0..document.sentence_count() {
+            let sentence = document.sentence(number);
+            let words: Vec<Vec<&str>> = (sentence.tokens.clone())
+                .map(|token| {
+                    (document.token_words(token))
+                        .map(|word| document.form(word))
+                        .collect()
+                })
+                .collect();
+            let tokens: Vec<(&str, &[&str])> = (sentence.tokens.clone())
+                .zip(&words)
+                .map(|(token, words)| (spans[token].slice(document.text()), words.as_slice()))
+                .collect();
+            self.sentence_fields(&tokens, context, &mut fields)?;
         }
-        fields
+        Ok(fields)
     }
 
     /// Fills the columns LEMMA, UPOS and FEATS of the words of a document of the anySeg segmenter
-    /// (the crate is `esmorph::anyseg`) with the most probable analysis of every word, as
-    /// [`Dictionary::analyze`] orders them. The words of a token of several are analyzed by the
-    /// token: `dime` split into `di` + `me` is the imperative of `decir` with the pronoun `me`, and
+    /// (the crate is `esmorph::anyseg`) with the most probable analysis of every word in the
+    /// context of its sentence, as [`Dictionary::analyze_sentence`] orders the analyses of its
+    /// tokens. The words of a token of several are analyzed by the token: `dime` split into `di` + `me` is the imperative of `decir` with the pronoun `me`, and
     /// clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the
     /// analysis of the whole token: `devuélvenos` is the imperative of `devolver`. A word without
     /// analyses gets its lower case as the lemma and the part of speech X; the earlier values of
@@ -161,11 +223,25 @@ impl Dictionary {
     ///
     /// # Errors
     ///
-    /// [`crate::Error::Document`] if the document does not take the columns
+    /// [`Error::Context`] if the dictionary has no context model, [`Error::Document`] if the
+    /// document does not take the columns
     #[cfg(feature = "anyseg")]
     #[cfg_attr(docsrs, doc(cfg(feature = "anyseg")))]
-    pub fn annotate(&self, document: &mut anyseg::Document) -> Result<(), crate::Error> {
-        let fields = self.document_fields(document);
+    pub fn annotate(&self, document: &mut anyseg::Document) -> Result<(), Error> {
+        let fields = self.document_fields(document, true)?;
+        set_fields(document, &fields)
+    }
+
+    /// [`Dictionary::annotate`] without the context model: the analyses of a token are ordered
+    /// as [`Dictionary::analyze`] orders them
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Document`] if the document does not take the columns
+    #[cfg(feature = "anyseg")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "anyseg")))]
+    pub fn annotate_without_context(&self, document: &mut anyseg::Document) -> Result<(), Error> {
+        let fields = self.document_fields(document, false)?;
         set_fields(document, &fields)
     }
 }
@@ -191,6 +267,14 @@ pub(crate) fn set_fields(
     document
         .set_columns(columns, None)
         .map_err(|err| crate::Error::Document(err.to_string()))
+}
+
+/// The text a token is analyzed by: the token of several words, the word of a token of one
+fn token_text<'a, S: AsRef<str>>(token: &'a str, words: &'a [S]) -> &'a str {
+    match words {
+        [word] => word.as_ref(),
+        _ => token,
+    }
 }
 
 /// The first of the analyses that a choice is limited to, with its share among them
@@ -372,6 +456,25 @@ mod tests {
         );
     }
 
+    #[test]
+    fn sentences_in_and_without_context() {
+        let dictionary = Dictionary::bundled().unwrap();
+        let pos = |tokens: &[&str], context: bool| {
+            let tokens: Vec<(&str, [&str; 1])> =
+                (tokens.iter()).map(|&token| (token, [token])).collect();
+            let tokens: Vec<(&str, &[&str])> = (tokens.iter())
+                .map(|(token, words)| (*token, words.as_slice()))
+                .collect();
+            let mut fields = Vec::new();
+            (dictionary.sentence_fields(&tokens, context, &mut fields)).unwrap();
+            fields.into_iter().map(|word| word.pos).collect::<Vec<_>>()
+        };
+        assert_eq!(pos(&["Ella", "la", "vio"], true), ["PRON", "PRON", "VERB"]);
+        assert_eq!(pos(&["Ella", "la", "vio"], false), ["PRON", "DET", "VERB"]);
+        // A word without neighbors is analyzed as `analyze` in context too
+        assert_eq!(pos(&["Casa"], true), ["NOUN"]);
+    }
+
     #[cfg(feature = "anyseg")]
     #[test]
     fn annotates_document() {
@@ -381,7 +484,7 @@ mod tests {
         let mut document = Segmenter::new("es")
             .unwrap()
             .segment("Devuélvenos, dime la verdad del caso.\n\nDámelo.");
-        dictionary.annotate(&mut document).unwrap();
+        dictionary.annotate_without_context(&mut document).unwrap();
         let columns: Vec<(&str, &str, &str, Option<&str>)> = (0..document.word_count())
             .map(|word| {
                 (
@@ -417,7 +520,7 @@ mod tests {
         );
         assert_eq!(columns[6].3, None);
         // The analyses replace the earlier values
-        dictionary.annotate(&mut document).unwrap();
+        dictionary.annotate_without_context(&mut document).unwrap();
         assert_eq!(document.column(Column::Lemma, 0), Some("devolver"));
         // A token with a tab or a line break inside
         let text = "a\tb x\r\ny z\u{2028}w".to_owned();
@@ -438,5 +541,31 @@ mod tests {
         let mut empty = Segmenter::new("es").unwrap().segment("");
         dictionary.annotate(&mut empty).unwrap();
         assert_eq!(empty.word_count(), 0);
+    }
+
+    #[cfg(feature = "anyseg")]
+    #[test]
+    fn annotates_document_in_context() {
+        use anyseg::{Column, Segmenter};
+
+        let dictionary = Dictionary::bundled().unwrap();
+        let mut document = Segmenter::new("es")
+            .unwrap()
+            .segment("Ella la vio. Devuélvenos el libro.");
+        dictionary.annotate(&mut document).unwrap();
+        let columns: Vec<(&str, &str, &str)> = (0..document.word_count())
+            .map(|word| {
+                (
+                    document.form(word),
+                    document.column(Column::Lemma, word).unwrap(),
+                    document.column(Column::Upos, word).unwrap(),
+                )
+            })
+            .collect();
+        // The pronoun after a subject; the verb with clitics the segmenter leaves one word
+        assert_eq!(columns[1], ("la", "él", "PRON"));
+        assert_eq!(columns[4], ("Devuélvenos", "devolver", "VERB"));
+        dictionary.annotate_without_context(&mut document).unwrap();
+        assert_eq!(document.column(Column::Upos, 1), Some("DET"));
     }
 }

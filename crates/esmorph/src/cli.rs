@@ -20,7 +20,8 @@ Usage: esmorph [options] [file ...]
 
 Files are read one after another; without files and in place of \"-\" the standard input is
 read, in UTF-8. The result goes to the standard output or to the file of -o. Every word gets
-its most probable analysis; the words of a multiword token are analyzed by the token.
+its most probable analysis in the context of its sentence; the words of a multiword token are
+analyzed by the token.
 
 Options:
   -f, --format FORMAT      output format:
@@ -39,6 +40,8 @@ Options:
                              tokens - a token per line, a blank line between sentences
                              conllu - CoNLL-U: LEMMA, UPOS and FEATS are filled
   -d, --dictionary FILE    esMorph dictionary file (default: the dictionary of the package)
+      --no-context         order the analyses of a word by the dictionary, not by the context
+                           model: faster
   -o, --output FILE        write the result to a file
   -h, --help               show this help and exit
   -V, --version            show the version and exit
@@ -123,6 +126,7 @@ enum Command {
     Run {
         format: Format,
         input: Input,
+        context: bool,
         dictionary: Option<PathBuf>,
         output: Option<PathBuf>,
         files: Vec<OsString>,
@@ -132,6 +136,7 @@ enum Command {
 fn parse(args: Vec<OsString>) -> Result<Command, String> {
     let (mut format, mut input, mut dictionary, mut output) =
         (Format::Lemmas, Input::Text, None, None);
+    let mut context = true;
     let mut files = Vec::new();
     let mut options = true;
     let mut args = args.into_iter();
@@ -167,6 +172,7 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
             "--" => options = false,
             "-h" | "--help" if inline.is_none() => return Ok(Command::Help),
             "-V" | "--version" if inline.is_none() => return Ok(Command::Version),
+            "--no-context" if inline.is_none() => context = false,
             "-f" | "--format" => {
                 format = match value()?.to_str() {
                     Some("lemmas") => Format::Lemmas,
@@ -196,6 +202,7 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
     Ok(Command::Run {
         format,
         input,
+        context,
         dictionary,
         output,
         files,
@@ -225,14 +232,15 @@ fn execute(
 ) -> u8 {
     // A message to stderr: if it is closed too, there is no one to tell
     let mut report = |message: String| drop(writeln!(stderr, "esmorph: {message}"));
-    let (format, input, dictionary, output_path, files) = match parse(args) {
+    let (format, input, context, dictionary, output_path, files) = match parse(args) {
         Ok(Command::Run {
             format,
             input,
+            context,
             dictionary,
             output,
             files,
-        }) => (format, input, dictionary, output, files),
+        }) => (format, input, context, dictionary, output, files),
         Ok(Command::Help | Command::Version) if closed => {
             report("the standard output is closed".to_owned());
             return 1;
@@ -254,7 +262,7 @@ fn execute(
     };
     let dictionary_path = dictionary.as_deref().or(default);
     // A dictionary given by the user may come from anywhere: its automata are checked
-    let dictionary = match load(dictionary_path, dictionary.is_some()) {
+    let dictionary = match load(dictionary_path, dictionary.is_some(), context) {
         Ok(dictionary) => dictionary,
         Err(message) => {
             report(message);
@@ -316,6 +324,7 @@ fn execute(
         segmenter: Segmenter::new("es").expect("anyseg is built with the feature es"),
         format,
         input,
+        context,
         output,
         interactive: interactive && output_path.is_none(),
         pending: false,
@@ -392,8 +401,8 @@ fn write_error(err: &io::Error, report: &mut impl FnMut(String)) -> u8 {
 
 /// The dictionary of the file `path`, verified with `verify`; without a path, the dictionary of the
 /// crate `esmorph-dict-es`
-fn load(path: Option<&Path>, verify: bool) -> Result<Dictionary, String> {
-    match path {
+fn load(path: Option<&Path>, verify: bool, context: bool) -> Result<Dictionary, String> {
+    let dictionary = match path {
         Some(path) => Dictionary::open(path)
             .and_then(|dictionary| {
                 if verify {
@@ -415,7 +424,16 @@ fn load(path: Option<&Path>, verify: bool) -> Result<Dictionary, String> {
         None => Dictionary::bundled().map_err(|err| err.to_string()),
         #[cfg(not(feature = "bundled"))]
         None => Err("no dictionary: give the dictionary file in --dictionary".into()),
+    }?;
+    // A dictionary without a model fails before the input is read; a damaged model too
+    if context && let Err(err) = dictionary.analyze_sentence(&["", ""]) {
+        let name = path.map_or_else(String::new, |path| format!("{}: ", path.display()));
+        return Err(match err {
+            crate::Error::Context(message) => format!("{name}{message}: run with --no-context"),
+            err => format!("{name}{err}"),
+        });
     }
+    Ok(dictionary)
 }
 
 /// An error of input and output in plain words for the frequent cases
@@ -564,6 +582,8 @@ struct Writer<'a> {
     segmenter: Segmenter,
     format: Format,
     input: Input,
+    /// The analyses are ordered by the context model
+    context: bool,
     output: &'a mut dyn Write,
     /// Flush after every piece: in a terminal the result shows at once
     interactive: bool,
@@ -996,7 +1016,9 @@ impl Writer<'_> {
         // JSON Lines gives all analyses of the tokens, not the fields of the words
         let fields = match self.format {
             Format::Jsonl => Vec::new(),
-            _ => self.dictionary.document_fields(&document),
+            _ => (self.dictionary)
+                .document_fields(&document, self.context)
+                .map_err(io::Error::other)?,
         };
         if self.format == Format::Conllu {
             set_fields(&mut document, &fields).map_err(io::Error::other)?;
@@ -1082,15 +1104,30 @@ impl Writer<'_> {
             self.out.push_str(", ");
         }
         self.out.push_str("\"tokens\": [");
-        for (number, token) in sentence.tokens.enumerate() {
+        let texts: Vec<&str> = (sentence.tokens.clone())
+            .map(|token| document.tokens()[token].slice(document.text()))
+            .collect();
+        // The model was checked when the dictionary was loaded
+        let analyses = match self.context {
+            true => (self.dictionary.analyze_sentence(&texts)).unwrap_or_default(),
+            false => Vec::new(),
+        };
+        for (number, text) in texts.iter().enumerate() {
             if number > 0 {
                 self.out.push_str(", ");
             }
-            let text = document.tokens()[token].slice(document.text());
             self.out.push_str("{\"word\": ");
             json_string(&mut self.out, text);
             self.out.push_str(", \"analyses\": [");
-            for (index, analysis) in self.dictionary.analyze(text).iter().enumerate() {
+            let own;
+            let list = match analyses.get(number) {
+                Some(list) => list,
+                None => {
+                    own = self.dictionary.analyze(text);
+                    &own
+                }
+            };
+            for (index, analysis) in list.iter().enumerate() {
                 if index > 0 {
                     self.out.push_str(", ");
                 }
@@ -1301,6 +1338,17 @@ mod tests {
         document.to_conllu()
     }
 
+    /// `whole` without the context model: the long texts of the tests check the pieces of the
+    /// input, which the model would make slow in a debug build
+    fn whole_without_context(text: &str) -> String {
+        let mut document = Segmenter::new("es").unwrap().segment(text);
+        Dictionary::bundled()
+            .unwrap()
+            .annotate_without_context(&mut document)
+            .unwrap();
+        document.to_conllu()
+    }
+
     /// A file of the temporary directory with a name of this process
     fn temporary(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("esmorph-cli-{}-{name}", std::process::id()))
@@ -1338,17 +1386,20 @@ mod tests {
         assert!(text.len() > 4 * INPUT_BUFFER);
         assert_eq!(output(&["-f", "conllu"], &text), whole(&text));
         // A long text without blank lines in pieces, in one paragraph
-        let sentence = output(&[], "Mamá come la fruta.");
-        assert_eq!(sentence, "mamá comer el fruta .\n");
+        let sentence = output(&[], "El gato come la fruta.");
+        assert_eq!(sentence, "el gato comer el fruta .\n");
         for text in [
-            "Mamá come la fruta.\n".repeat(PARAGRAPH / 2),
-            "Mamá come\nla fruta.\r".repeat(PARAGRAPH / 2),
-            "Mamá come la fruta. ".repeat(PARAGRAPH / 2),
+            "El gato come la fruta.\n".repeat(PARAGRAPH / 2),
+            "El gato come\nla fruta.\r".repeat(PARAGRAPH / 2),
+            "El gato come la fruta. ".repeat(PARAGRAPH / 2),
         ] {
-            let conllu = output(&["-f", "conllu"], &text);
+            let conllu = output(&["-f", "conllu", "--no-context"], &text);
             assert_eq!(conllu.matches("# newpar").count(), 1);
-            assert_eq!(conllu, whole(&text));
-            assert_eq!(output(&[], &text), sentence.repeat(PARAGRAPH / 2));
+            assert_eq!(conllu, whole_without_context(&text));
+            assert_eq!(
+                output(&["--no-context"], &text),
+                sentence.repeat(PARAGRAPH / 2)
+            );
         }
         // A long line cut after the first word of a line: the segmenter ends a sentence before it,
         // as nothing follows
@@ -1358,10 +1409,16 @@ mod tests {
         text.push_str("El pequeño Ferragut era el capitán del\x0bMare ");
         text.push_str(&"o".repeat(INPUT_BUFFER + 100));
         text.push_str(".\x0bFin.");
-        assert_eq!(output(&["-f", "conllu"], &text), whole(&text));
+        assert_eq!(
+            output(&["-f", "conllu", "--no-context"], &text),
+            whole_without_context(&text)
+        );
         // A line without spaces longer than PARAGRAPH is cut at a character
         let word = "ñ".repeat(PARAGRAPH);
-        assert_eq!(output(&[], &word).replace(['\n', ' '], ""), word);
+        assert_eq!(
+            output(&["--no-context"], &word).replace(['\n', ' '], ""),
+            word
+        );
     }
 
     #[test]
@@ -1377,15 +1434,30 @@ mod tests {
 
     #[test]
     fn formats() {
-        assert_eq!(
-            output(&["-f", "tsv"], "Dime la verdad."),
-            "Di\tdecir\tVERB\tMood=Imp|Number=Sing|Person=2|VerbForm=Fin\t1\n\
+        let expected = "Di\tdecir\tVERB\tMood=Imp|Number=Sing|Person=2|VerbForm=Fin\t1\n\
              me\tyo\tPRON\tCase=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs\t0.45766\n\
              la\tel\tDET\tDefinite=Def|Gender=Fem|Number=Sing|PronType=Art\t0.9774450451099099\n\
              verdad\tverdad\tNOUN\tGender=Fem|Number=Sing\t0.999997\n\
-             .\t.\tPUNCT\tPunctType=Peri\t1\n\n"
+             .\t.\tPUNCT\tPunctType=Peri\t1\n\n";
+        assert_eq!(
+            output(&["-f", "tsv", "--no-context"], "Dime la verdad."),
+            expected
         );
-        let jsonl = output(&["-f", "jsonl"], "Dime.\n\nqzxw\n");
+        // With context the model gives the probabilities of the analyses it chose
+        let without_probability = |tsv: &str| {
+            (tsv.lines())
+                .map(|line| line.rsplit_once('\t').map_or(line, |(fields, _)| fields))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let tsv = output(&["-f", "tsv"], "Dime la verdad.");
+        assert_eq!(without_probability(&tsv), without_probability(expected));
+        let probability = |line: usize| {
+            let line = tsv.lines().nth(line).unwrap();
+            line.rsplit_once('\t').unwrap().1.parse::<f64>().unwrap()
+        };
+        assert!(probability(2) > 0.9 && probability(2) <= 1.0, "{tsv}");
+        let jsonl = output(&["-f", "jsonl", "--no-context"], "Dime.\n\nqzxw\n");
         let lines: Vec<&str> = jsonl.lines().collect();
         assert_eq!(lines.len(), 2);
         assert!(
@@ -1399,6 +1471,14 @@ mod tests {
             ),
             "{jsonl}"
         );
+        // With context JSON Lines gives all analyses in the order of the model
+        let jsonl = output(&["-f", "jsonl"], "Ella la vio.");
+        assert!(
+            jsonl.contains("{\"word\": \"la\", \"analyses\": [{\"word\": \"la\", \"lemma\": \"él\", \"pos\": \"PRON\""),
+            "{jsonl}"
+        );
+        let jsonl = output(&["-f", "jsonl"], "Dime.\n\nqzxw\n");
+        let lines: Vec<&str> = jsonl.lines().collect();
         // The probability of a word chosen by its token or as a clitic is among the analyses that fit
         let tsv = output(&["-f", "tsv"], "Quiero verla.");
         assert!(tsv.contains("\nla\tél\tPRON\tCase=Acc|Gender=Fem|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs\t1\n"), "{tsv}");
@@ -1546,6 +1626,7 @@ mod tests {
             (&["--frmat"], "unknown option --frmat"),
             (&["-o"], "option -o needs a value"),
             (&["--help=yes"], "unknown option --help=yes"),
+            (&["--no-context=yes"], "unknown option --no-context=yes"),
         ] {
             let (code, out, err) = command(args, b"");
             assert_eq!((code, out.as_str()), (2, ""), "{args:?}");
@@ -1555,6 +1636,7 @@ mod tests {
             [
                 "-ftsv",
                 "--input=tokens",
+                "--no-context",
                 "-d",
                 "es.dict",
                 "-o",
@@ -1572,6 +1654,7 @@ mod tests {
             Ok(Command::Run {
                 format: Format::Tsv,
                 input: Input::Tokens,
+                context: false,
                 dictionary: Some(PathBuf::from("es.dict")),
                 output: None,
                 files: vec!["-f".into(), "a.txt".into()],
@@ -1628,10 +1711,10 @@ mod tests {
             format!("esmorph: -: the file is not in UTF-8 (line {line})\n")
         );
         // A damaged line after UTF-8: its wrong bytes are U+FFFD
-        let mut input = "Mamá.\n".as_bytes().to_vec();
+        let mut input = "Café.\n".as_bytes().to_vec();
         input.extend(b"a\xffb\n");
         let (code, out, err) = command(&[], &input);
-        assert_eq!((code, out.as_str()), (1, "mamá . a \u{fffd} b\n"));
+        assert_eq!((code, out.as_str()), (1, "café . a \u{fffd} b\n"));
         assert_eq!(
             err,
             "esmorph: -: line 2: not UTF-8, the wrong bytes are replaced with U+FFFD\n"

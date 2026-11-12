@@ -31,7 +31,7 @@ pub(crate) const MAX_FILE: u64 = 1 << 31;
 const VERSION: u32 = 5;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
-const SECTIONS: usize = 13;
+const SECTIONS: usize = 14;
 
 /// Contents of a dictionary for writing into a file
 #[cfg(any(test, feature = "build"))]
@@ -70,6 +70,8 @@ pub(crate) struct Sections {
     /// Lists of the forms of tables for an ending: the length, then `(table << 16) | form` and the
     /// number of word forms of the dictionary with the ending of each
     pub guess_records: Vec<u32>,
+    /// Weights of the context model (`scripts/train_context.py`); empty without a model
+    pub context: Vec<u8>,
 }
 
 /// Value of a key in the automaton of word forms
@@ -164,6 +166,7 @@ pub(crate) struct Layout {
     pub variants: Range<usize>,
     pub guesses: Range<usize>,
     pub guess_records: Range<usize>,
+    pub context: Range<usize>,
     /// CRC32 of the file after its header
     pub checksum: u32,
 }
@@ -205,6 +208,7 @@ pub(crate) fn write(sections: &Sections) -> Vec<u8> {
     section(&u32_bytes(&sections.variants));
     section(&sections.guesses);
     section(&u32_bytes(&sections.guess_records));
+    section(&sections.context);
     let checksum = crc32fast::hash(&out[HEADER..]);
     out[12..HEADER].copy_from_slice(&checksum.to_le_bytes());
     out
@@ -272,6 +276,7 @@ pub(crate) fn layout(data: &[u8], checked: bool) -> Result<Layout, Error> {
         variants: section(4)?,
         guesses: section(1)?,
         guess_records: section(4)?,
+        context: section(1)?,
         checksum: 0,
     };
     if at != data.len() {
