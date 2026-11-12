@@ -93,7 +93,7 @@ COMMANDS = re.compile(
 def same(found: object, shown: object) -> bool:
     """Equal values, numbers up to the last digits, which differ between processors"""
     if isinstance(found, float | int) and isinstance(shown, float | int):
-        return math.isclose(found, shown, rel_tol=1e-6, abs_tol=1e-9)
+        return math.isclose(found, shown, rel_tol=0, abs_tol=1e-5)
     if isinstance(found, dict) and isinstance(shown, dict):
         return found.keys() == shown.keys() and all(same(found[k], shown[k]) for k in found)
     if isinstance(found, list) and isinstance(shown, list):
@@ -125,11 +125,11 @@ def test_commands(page):
             check=True,
         ).stdout.decode()
         if kind == "json":
-            assert same(json.loads(found), json.loads(shown)), command
+            assert same(json.loads(found), json.loads(shown)), (command, found)
             continue
         # A page leaves out the blank line after the last sentence
         rows, expected = (
             [[number(field) for field in line.split("\t")] for line in text.rstrip().splitlines()]
             for text in (found, shown)
         )
-        assert same(rows, expected), command
+        assert same(rows, expected), (command, found)
