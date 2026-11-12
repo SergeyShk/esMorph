@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "esmorph"
-version = "0.3.0.dev1"
+version = "0.3.0.dev2"
 description = "Fast Spanish morphological analyzer written in Rust with a Python API"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,8 +42,14 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+spacy = ["spacy>=3.8,<4"]
+
 [project.scripts]
 esmorph = "esmorph.__main__:main"
+
+[project.entry-points.spacy_factories]
+esmorph = "esmorph.spacy:create_component"
 
 [project.urls]
 Homepage = "https://github.com/SergeyShk/esMorph"
@@ -69,8 +75,10 @@ cache-keys = [
 ]
 
 [dependency-groups]
-# anyseg - documents for Analyzer.annotate
+# anyseg - documents for Analyzer.annotate and the tokenizer of spaCy in the tests
 test = ["pytest>=8.3", "pytest-cov>=6.0", "anyseg>=0.3"]
+# No wheels for 3.14t: CI installs the group on the other versions
+spacy = ["spacy>=3.8,<4"]
 lint = ["mypy>=1.14", "pre-commit>=4.0", "ruff>=0.9"]
 docs = [
     "mkdocs>=1.6",
@@ -80,6 +88,7 @@ docs = [
 ]
 dev = [
     { include-group = "test" },
+    { include-group = "spacy" },
     { include-group = "lint" },
     { include-group = "docs" },
 ]
