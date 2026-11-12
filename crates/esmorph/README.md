@@ -50,7 +50,7 @@ fn main() -> Result<(), esmorph::Error> {
 
 `analyze_sentence` gives the analyses of the tokens of a sentence as `analyze` gives them, ordered by the context model of the
 dictionary, a BiLSTM trained on the treebanks UD Spanish AnCora and GSD; the probability is its score in the sentence. The
-model is read on the first call, in a couple of milliseconds, and analyzes about 100 thousand tokens per second in one
+model is read on the first call, in a couple of milliseconds, and analyzes about 170 thousand tokens per second in one
 thread, while `analyze` gives over a million.
 
 ```rust
