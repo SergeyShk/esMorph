@@ -163,8 +163,11 @@ class SentencesDocument(Document):
 
 
 def test_long_sentence(morph):
-    # A sentence longer than a piece analyzed without the GIL: the pieces give the whole
+    # A sentence longer than a piece analyzed without the GIL: the pieces give the whole. The
+    # first token of the second piece is a name or a pronoun depending on whether it starts the
+    # sentence
     forms = ["la", "casa", "es", "grande"] * 3000
+    forms[8192] = "Nada"
     document = Document(forms)
     morph.annotate(document)
     first = [analyses[0] for analyses in morph.analyze_sentence(forms)]
