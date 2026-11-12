@@ -22,6 +22,7 @@
   <a href="https://github.com/SergeyShk/esMorph/actions/workflows/ci.yml"><img src="https://github.com/SergeyShk/esMorph/actions/workflows/ci.yml/badge.svg" alt="Build"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
   <a href="https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt"><img src="https://img.shields.io/github/license/sergeyshk/esmorph.svg" alt="Licencia"></a>
+  <a href="https://doi.org/10.5281/zenodo.24151767"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.24151767.svg" alt="DOI"></a>
 </p>
 
 ---
@@ -242,13 +243,14 @@ El código se distribuye bajo la licencia [MIT](https://github.com/SergeyShk/esM
 
 ## Cita
 
-Si usa **esMorph** en investigación o en programas, cítelo con la siguiente entrada de BibTeX: así ayuda al desarrollo y al mantenimiento del proyecto. Los mismos metadatos están en [CITATION.cff](https://github.com/SergeyShk/esMorph/blob/master/CITATION.cff) - GitHub los muestra en «Cite this repository».
+Si usa **esMorph** en investigación o en programas, cítelo con la siguiente entrada de BibTeX: así ayuda al desarrollo y al mantenimiento del proyecto. Los mismos metadatos están en [CITATION.cff](https://github.com/SergeyShk/esMorph/blob/master/CITATION.cff) - GitHub los muestra en «Cite this repository». El Concept DOI [10.5281/zenodo.24151767](https://doi.org/10.5281/zenodo.24151767) en Zenodo apunta a todas las versiones de la biblioteca; el DOI de una versión está en la página de su publicación.
 
 ```bibtex
 @software{esMorph,
   author = {Sergey Shkarin},
   title = {{esMorph, a fast morphological analyzer for Spanish}},
   year = 2026,
+  doi = {10.5281/zenodo.24151767},
   url = {https://github.com/SergeyShk/esMorph}
 }
 ```

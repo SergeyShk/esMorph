@@ -11,6 +11,7 @@ date-released: 2026-11-12
 repository-code: "https://github.com/SergeyShk/esMorph"
 url: "https://sergeyshk.github.io/esMorph/"
 license: MIT
+doi: 10.5281/zenodo.24151767
 keywords:
   - spanish
   - nlp
