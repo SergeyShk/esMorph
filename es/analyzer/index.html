@@ -330,6 +330,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../cli/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  El comando esmorph
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -639,7 +658,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#parametros" class="md-nav__link">
+  <a href="#parameters" class="md-nav__link">
     <span class="md-ellipsis">
       
         Parámetros
@@ -688,6 +707,17 @@
     <span class="md-ellipsis">
       
         Lematización
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#annotate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Análisis de un documento
       
     </span>
   </a>
@@ -794,6 +824,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    El comando esmorph
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -821,7 +878,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#parametros" class="md-nav__link">
+  <a href="#parameters" class="md-nav__link">
     <span class="md-ellipsis">
       
         Parámetros
@@ -870,6 +927,17 @@
     <span class="md-ellipsis">
       
         Lematización
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#annotate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Análisis de un documento
       
     </span>
   </a>
@@ -935,15 +1003,15 @@
 
 
 <h1 id="analizador">Analizador<a class="headerlink" href="#analizador" title="Permanent link">&para;</a></h1>
-<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </code></pre></div>
 <p>Analizador morfológico: para una forma de palabra busca todos sus <a href="../analysis/">análisis</a> en un diccionario creado a partir de Wiktionary - el lema, la categoría gramatical y los rasgos de <a href="https://universaldependencies.org/">Universal Dependencies</a> - y los ordena por probabilidad. Un token que el diccionario no tiene recibe los análisis de unas <a href="../analysis/#rules">reglas</a>, y una palabra desconocida en minúsculas se <a href="../analysis/#guess">estima</a>. El diccionario se carga al crear el analizador.</p>
 <p>Excepciones:</p>
 <ul>
 <li><code>FileNotFoundError</code> - el archivo del diccionario no existe;</li>
 <li><code>OSError</code> - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio, una tubería o un dispositivo;</li>
-<li><code>ValueError</code> - el archivo no es un diccionario de esMorph o está dañado, la ruta tiene un carácter NUL;</li>
-<li><code>TypeError</code> - una ruta que no es una cadena ni <code>PathLike</code>.</li>
+<li><code>ValueError</code> - el archivo no es un diccionario de esMorph o está dañado (con <code>verify=True</code>, también un archivo creado a propósito), la ruta tiene un carácter NUL;</li>
+<li><code>TypeError</code> - una ruta que no es una cadena ni <code>PathLike</code>, <code>verify</code> que no es <code>bool</code>.</li>
 </ul>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Código</label><label for="__tabbed_1_2">Resultado</label></div>
 <div class="tabbed-content">
@@ -960,7 +1028,7 @@
 </div>
 </div>
 </div>
-<h2 id="parametros">Parámetros<a class="headerlink" href="#parametros" title="Permanent link">&para;</a></h2>
+<h2 id="parameters">Parámetros<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -977,9 +1045,15 @@
 <td style="text-align: left;"><code>None</code></td>
 <td style="text-align: left;">Ruta al archivo del diccionario; por defecto, el diccionario del paquete</td>
 </tr>
+<tr>
+<td style="text-align: left;"><code>verify</code></td>
+<td style="text-align: left;"><code>bool</code></td>
+<td style="text-align: left;"><code>False</code></td>
+<td style="text-align: left;">Comprobar el diccionario entero, para un archivo de una fuente no fiable; tarda decenas de milisegundos</td>
+</tr>
 </tbody>
 </table>
-<p>El objeto guarda la ruta absoluta del diccionario en <code>path</code>, de tipo <code>Path</code> y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, así que no se deben cargar diccionarios de fuentes no fiables.</p>
+<p>El objeto guarda la ruta absoluta del diccionario en <code>path</code>, de tipo <code>Path</code> y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, que puede hacer fallar el análisis. Un diccionario de una fuente no fiable se carga con <code>verify=True</code>: entonces un archivo creado a propósito se rechaza con <code>ValueError</code>, y pickle conserva la comprobación.</p>
 <h2 id="metodos">Métodos<a class="headerlink" href="#metodos" title="Permanent link">&para;</a></h2>
 <div class="metric-card">
 <h3 id="analyze">Análisis de una forma de palabra<a class="headerlink" href="#analyze" title="Permanent link">&para;</a></h3>
@@ -1107,6 +1181,52 @@
 </div>
 </div>
 <div class="metric-card">
+<h3 id="annotate">Análisis de un documento<a class="headerlink" href="#annotate" title="Permanent link">&para;</a></h3>
+<p class="metric-meta"><code>annotate</code> · <code>None</code></p>
+<div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+</code></pre></div>
+<p>Rellena las columnas <code>lemma</code>, <code>upos</code> y <code>feats</code> de las palabras de un documento del segmentador <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> con el análisis más probable de cada palabra, en el orden de <code>analyze</code>; los valores anteriores de estas columnas se sustituyen. Las palabras de un token multipalabra se analizan por el token: <code>dime</code> dividido en <code>di</code> + <code>me</code> es el imperativo de <code>decir</code> con el pronombre <code>me</code>, y los clíticos tras un verbo son pronombres. Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: <code>devuélvenos</code> es el imperativo de <code>devolver</code>. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría <code>X</code>. El método libera el GIL. esMorph no depende de anySeg: el documento es un <code>anyseg.Document</code> o un objeto con los mismos <code>column("form")</code>, <code>multiword_tokens</code> (un token tiene <code>text</code> y <code>words</code>, una palabra tiene <code>index</code>) y <code>set_columns</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Parámetro</th>
+<th style="text-align: left;">Tipo</th>
+<th style="text-align: left;">Por defecto</th>
+<th style="text-align: left;">Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>document</code></td>
+<td style="text-align: left;"><code>anyseg.Document</code></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Documento del segmentador (<code>pip install anyseg</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Excepciones:</p>
+<ul>
+<li><code>ValueError</code> - las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden;</li>
+<li><code>TypeError</code> - un objeto que no es un documento, una forma o el texto de un token que no es una cadena, un token sin <code>text</code> o <code>words</code>, una palabra sin <code>index</code> o con un índice que no es un entero.</li>
+</ul>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Código</label><label for="__tabbed_5_2">Resultado</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">anyseg</span><span class="w"> </span><span class="kn">import</span> <span class="n">Segmenter</span>
+
+<span class="n">document</span> <span class="o">=</span> <span class="n">Segmenter</span><span class="p">(</span><span class="s2">"es"</span><span class="p">)</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span><span class="s2">"Dime la verdad."</span><span class="p">)</span>
+<span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+<span class="p">[(</span><span class="n">word</span><span class="o">.</span><span class="n">form</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">upos</span><span class="p">)</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>[('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+</code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="metric-card">
 <h3 id="is_known">Forma de palabra del diccionario<a class="headerlink" href="#is_known" title="Permanent link">&para;</a></h3>
 <p class="metric-meta"><code>is_known</code> · <code>bool</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">is_known</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
@@ -1134,7 +1254,7 @@
 <ul>
 <li><code>TypeError</code> - una palabra que no es una cadena.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Código</label><label for="__tabbed_5_2">Resultado</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Código</label><label for="__tabbed_6_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"Gatos"</span><span class="p">),</span> <span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"zumbeábamos"</span><span class="p">)</span>
@@ -1149,9 +1269,23 @@
 </div>
 <h2 id="dictionary">Diccionario<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
 <p>El diccionario del paquete se crea a partir del <a href="https://en.wiktionary.org">Wiktionary</a> en inglés de octubre de 2026: 676 mil formas de palabra de 117 mil lexemas. Los símbolos de unidades (<code>km</code>, <code>kg</code>) vienen de una tabla propia, y los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras, de una tabla según el treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, cuyas convenciones siguen los lemas y los rasgos (<a href="../analysis/#ud">Análisis de palabras</a>). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+<p>La propiedad <code>dictionary_info</code> describe el diccionario del analizador: la fuente y su instantánea con su SHA-256, la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es <code>esmorph.DictionaryInfo</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Código</label><label for="__tabbed_7_2">Resultado</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="n">info</span> <span class="o">=</span> <span class="n">morph</span><span class="o">.</span><span class="n">dictionary_info</span>
+<span class="n">info</span><span class="p">[</span><span class="s2">"source"</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="s2">"license"</span><span class="p">],</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">"treebanks"</span><span class="p">])</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>('Wiktionary', 'CC BY-SA 4.0', ['UD_Spanish-AnCora', 'UD_Spanish-GSD'])
+</code></pre></div>
+</div>
+</div>
+</div>
 <h2 id="parallel">Hilos y procesos<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
-<p>Un mismo analizador se puede usar desde varios hilos. <code>lemmatize</code> libera el GIL, así que los hilos lo aceleran. <code>analyze_many</code> crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, <code>lemmatize</code> o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con <code>multiprocessing</code> y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza <code>ValueError</code>. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero <code>forms()</code> da una lista vacía e <code>inflect</code> lanza <code>FormNotFoundError</code>.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Código</label><label for="__tabbed_6_2">Resultado</label></div>
+<p>Un mismo analizador se puede usar desde varios hilos. <code>lemmatize</code> y <code>annotate</code> liberan el GIL, así que los hilos los aceleran. <code>analyze_many</code> crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, <code>lemmatize</code> o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con <code>multiprocessing</code> y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza <code>ValueError</code>. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero <code>forms()</code> da una lista vacía e <code>inflect</code> lanza <code>FormNotFoundError</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Código</label><label for="__tabbed_8_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>

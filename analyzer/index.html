@@ -330,6 +330,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../cli/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  The esmorph command
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -695,6 +714,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#annotate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Analysis of a document
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#is_known" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -794,6 +824,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The esmorph command
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -877,6 +934,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#annotate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Analysis of a document
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#is_known" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -935,15 +1003,15 @@
 
 
 <h1 id="analyzer">Analyzer<a class="headerlink" href="#analyzer" title="Permanent link">&para;</a></h1>
-<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </code></pre></div>
 <p>Morphological analyzer: for a word form it finds all <a href="../analysis/">analyses</a> in a dictionary built from Wiktionary - the lemma, the part of speech and the <a href="https://universaldependencies.org/">Universal Dependencies</a> features - and orders them by probability. A token that the dictionary does not have gets the analyses of <a href="../analysis/#rules">rules</a>, and an unknown lowercase word is <a href="../analysis/#guess">guessed</a>. The dictionary is loaded when the analyzer is created.</p>
 <p>Exceptions:</p>
 <ul>
 <li><code>FileNotFoundError</code> - the dictionary file does not exist;</li>
 <li><code>OSError</code> - the dictionary file cannot be read: no access, the path points to a directory, a pipe or a device;</li>
-<li><code>ValueError</code> - the file is not an esMorph dictionary or is damaged, the path has a NUL character;</li>
-<li><code>TypeError</code> - a path that is neither a string nor <code>PathLike</code>.</li>
+<li><code>ValueError</code> - the file is not an esMorph dictionary or is damaged (with <code>verify=True</code>, a deliberately crafted file too), the path has a NUL character;</li>
+<li><code>TypeError</code> - a path that is neither a string nor <code>PathLike</code>, <code>verify</code> that is not <code>bool</code>.</li>
 </ul>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Code</label><label for="__tabbed_1_2">Result</label></div>
 <div class="tabbed-content">
@@ -977,9 +1045,15 @@
 <td style="text-align: left;"><code>None</code></td>
 <td style="text-align: left;">Path to the dictionary file; by default, the dictionary of the package</td>
 </tr>
+<tr>
+<td style="text-align: left;"><code>verify</code></td>
+<td style="text-align: left;"><code>bool</code></td>
+<td style="text-align: left;"><code>False</code></td>
+<td style="text-align: left;">Check the whole dictionary, for a file of an untrusted source; takes tens of milliseconds</td>
+</tr>
 </tbody>
 </table>
-<p>The object keeps the absolute dictionary path in <code>path</code> of type <code>Path</code>, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, so dictionaries from untrusted sources should not be loaded.</p>
+<p>The object keeps the absolute dictionary path in <code>path</code> of type <code>Path</code>, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, which may make the analysis fail. A dictionary of an untrusted source is loaded with <code>verify=True</code>: a deliberately crafted file is then rejected with <code>ValueError</code>, and pickle keeps the check.</p>
 <h2 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h2>
 <div class="metric-card">
 <h3 id="analyze">Analyses of a word form<a class="headerlink" href="#analyze" title="Permanent link">&para;</a></h3>
@@ -1107,6 +1181,52 @@
 </div>
 </div>
 <div class="metric-card">
+<h3 id="annotate">Analysis of a document<a class="headerlink" href="#annotate" title="Permanent link">&para;</a></h3>
+<p class="metric-meta"><code>annotate</code> · <code>None</code></p>
+<div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+</code></pre></div>
+<p>Fills the columns <code>lemma</code>, <code>upos</code> and <code>feats</code> of the words of a document of the <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> segmenter with the most probable analysis of every word, as <code>analyze</code> orders them; the earlier values of these columns are replaced. The words of a multiword token are analyzed by the token: <code>dime</code> split into <code>di</code> + <code>me</code> is the imperative of <code>decir</code> with the pronoun <code>me</code>, and clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the analysis of the whole token: <code>devuélvenos</code> is the imperative of <code>devolver</code>. A word without analyses gets its lower case as the lemma and the part of speech <code>X</code>. The method releases the GIL. esMorph does not depend on anySeg: the document is an <code>anyseg.Document</code> or an object with the same <code>column("form")</code>, <code>multiword_tokens</code> (a token has <code>text</code> and <code>words</code>, a word has <code>index</code>) and <code>set_columns</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Parameter</th>
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Default</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>document</code></td>
+<td style="text-align: left;"><code>anyseg.Document</code></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Document of the segmenter (<code>pip install anyseg</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Exceptions:</p>
+<ul>
+<li><code>ValueError</code> - the words of the multiword tokens are not consecutive words of the document in order;</li>
+<li><code>TypeError</code> - an object that is not a document, a form or the text of a token that is not a string, a token without <code>text</code> or <code>words</code>, a word without <code>index</code> or with an index that is not an integer.</li>
+</ul>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Code</label><label for="__tabbed_5_2">Result</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">anyseg</span><span class="w"> </span><span class="kn">import</span> <span class="n">Segmenter</span>
+
+<span class="n">document</span> <span class="o">=</span> <span class="n">Segmenter</span><span class="p">(</span><span class="s2">"es"</span><span class="p">)</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span><span class="s2">"Dime la verdad."</span><span class="p">)</span>
+<span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+<span class="p">[(</span><span class="n">word</span><span class="o">.</span><span class="n">form</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">upos</span><span class="p">)</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>[('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+</code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="metric-card">
 <h3 id="is_known">Word form in the dictionary<a class="headerlink" href="#is_known" title="Permanent link">&para;</a></h3>
 <p class="metric-meta"><code>is_known</code> · <code>bool</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">is_known</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
@@ -1134,7 +1254,7 @@
 <ul>
 <li><code>TypeError</code> - a word that is not a string.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Code</label><label for="__tabbed_5_2">Result</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Code</label><label for="__tabbed_6_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"Gatos"</span><span class="p">),</span> <span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"zumbeábamos"</span><span class="p">)</span>
@@ -1149,9 +1269,23 @@
 </div>
 <h2 id="dictionary">Dictionary<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
 <p>The dictionary of the package is built from the English <a href="https://en.wiktionary.org">Wiktionary</a> of October 2026: 676 thousand word forms of 117 thousand lexemes. Symbols of units (<code>km</code>, <code>kg</code>) come from a table of their own, and determiners, pronouns, prepositions, conjunctions and numerals in words from a table after the treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, whose conventions the lemmas and features follow (<a href="../analysis/#ud">Word analysis</a>). The probabilities of analyses come from the training parts of UD Spanish AnCora and <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> license.</p>
+<p>The property <code>dictionary_info</code> describes the dictionary of the analyzer: the source and its snapshot with its SHA-256, the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is <code>esmorph.DictionaryInfo</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Code</label><label for="__tabbed_7_2">Result</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="n">info</span> <span class="o">=</span> <span class="n">morph</span><span class="o">.</span><span class="n">dictionary_info</span>
+<span class="n">info</span><span class="p">[</span><span class="s2">"source"</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="s2">"license"</span><span class="p">],</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">"treebanks"</span><span class="p">])</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>('Wiktionary', 'CC BY-SA 4.0', ['UD_Spanish-AnCora', 'UD_Spanish-GSD'])
+</code></pre></div>
+</div>
+</div>
+</div>
 <h2 id="parallel">Threads and processes<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
-<p>One analyzer can be used from several threads. <code>lemmatize</code> releases the GIL, so threads speed it up. <code>analyze_many</code> creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, <code>lemmatize</code> or processes are faster. The analyzer and analyses are pickled, so they work with <code>multiprocessing</code> and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises <code>ValueError</code>. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but <code>forms()</code> gives an empty list and <code>inflect</code> raises <code>FormNotFoundError</code>.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Code</label><label for="__tabbed_6_2">Result</label></div>
+<p>One analyzer can be used from several threads. <code>lemmatize</code> and <code>annotate</code> release the GIL, so threads speed them up. <code>analyze_many</code> creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, <code>lemmatize</code> or processes are faster. The analyzer and analyses are pickled, so they work with <code>multiprocessing</code> and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises <code>ValueError</code>. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but <code>forms()</code> gives an empty list and <code>inflect</code> raises <code>FormNotFoundError</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Code</label><label for="__tabbed_8_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>

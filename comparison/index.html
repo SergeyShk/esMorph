@@ -330,6 +330,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../cli/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  The esmorph command
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -816,6 +835,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The esmorph command
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -974,7 +1020,7 @@
 
 
 <h1 id="comparison">Comparison<a class="headerlink" href="#comparison" title="Permanent link">&para;</a></h1>
-<p>esMorph analyzes a word without context and gives all its analyses, the most probable first. Its first lemma is right more often than that of simplemma on all three UD test sets and of spaCy <code>es_core_news_sm</code> on PUD and COSER, and its first analysis has the right UD features more often than both taggers on PUD; an analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 1.2 million tokens per second, 28 times faster than spaCy and 456 times faster than Stanza, answers a short text together with loading in 3.5 ms, and every further process with the same dictionary adds 3.6 MB of memory.</p>
+<p>esMorph analyzes a word without context and gives all its analyses, the most probable first. Its first lemma is right more often than that of simplemma on all three UD test sets and of spaCy <code>es_core_news_sm</code> on PUD and COSER, and its first analysis has the right UD features more often than both taggers on PUD; an analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 1.7 million tokens per second, 39 times faster than spaCy and 659 times faster than Stanza, answers a short text together with loading in 3.2 ms, and every further process with the same dictionary adds 3.5 MB of memory.</p>
 <h2 id="quality">Quality<a class="headerlink" href="#quality" title="Permanent link">&para;</a></h2>
 <p>The gold standard is the test parts of the <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">GSD</a>, <a href="https://github.com/UniversalDependencies/UD_Spanish-PUD">PUD</a> and <a href="https://github.com/UniversalDependencies/UD_Spanish-COSER">COSER</a> treebanks from the UD 2.18 release: news, web texts, translated Wikipedia sentences and rural speech. Every system gets their words, with <code>del</code> as <code>de</code> and <code>el</code> and a verb apart from its clitics, punctuation is not counted, and lemmas are compared ignoring case. The lemmas and features of GSD are assigned automatically, so only the part of speech is compared on it. The treebanks follow different conventions, so systems should be compared on the same set rather than sets against each other.</p>
 <p>AnCora is the home set of the taggers and of esMorph: spaCy <code>es_core_news_sm</code> is trained on AnCora, the default Stanza model on AnCora and GSD, and esMorph takes its conventions and the frequencies of its analyses from the training parts of AnCora and GSD. PUD and COSER are new to all of them.</p>
@@ -1193,7 +1239,7 @@
 <h3 id="text">Text analysis<a class="headerlink" href="#text" title="Permanent link">&para;</a></h3>
 <p>The time to analyze a text together with importing and loading the system in a new process, seconds, both axes on a logarithmic scale:</p>
 <p><img alt="Text analysis time with loading by text size" src="../img/speed.svg" /></p>
-<p>On a short text almost all the time goes to loading: esMorph answers in 3.5 ms, simplemma in 0.35 s, spaCy in 1.1 s, Stanza in 2.3 s. On a long text the analysis speed decides, tokens per second without loading, more is better:</p>
+<p>On a short text almost all the time goes to loading: esMorph answers in 3.2 ms, simplemma in 0.37 s, spaCy in 0.89 s, Stanza in 1.8 s. On a long text the analysis speed decides, tokens per second without loading, more is better:</p>
 <table>
 <thead>
 <tr>
@@ -1204,23 +1250,23 @@
 <tbody>
 <tr>
 <td style="text-align: left;">simplemma, lemmas only</td>
-<td style="text-align: left;">2,507,937</td>
+<td style="text-align: left;">2,516,195</td>
 </tr>
 <tr>
 <td style="text-align: left;">esMorph</td>
-<td style="text-align: left;">1,228,661</td>
+<td style="text-align: left;">1,744,647</td>
 </tr>
 <tr>
 <td style="text-align: left;">spaCy es_core_news_sm</td>
-<td style="text-align: left;">44,100</td>
+<td style="text-align: left;">44,659</td>
 </tr>
 <tr>
 <td style="text-align: left;">Stanza</td>
-<td style="text-align: left;">2,694</td>
+<td style="text-align: left;">2,649</td>
 </tr>
 </tbody>
 </table>
-<p>esMorph gives all the analyses of a word, with features and probabilities; its lemmatization alone is as fast as simplemma, see <a href="#operations">Operations</a>.</p>
+<p>esMorph gives all the analyses of a word, with features and probabilities; its lemmatization alone is almost as fast as simplemma, see <a href="#operations">Operations</a>.</p>
 <h3 id="operations">Operations<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h3>
 <p>Thousands of words, analyses or tables per second, more is better:</p>
 <table>
@@ -1236,56 +1282,56 @@
 <tbody>
 <tr>
 <td style="text-align: left;">Analysis of a word form: <code>analyze</code> in a loop</td>
-<td style="text-align: left;">1,167</td>
+<td style="text-align: left;">1,007</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Analysis of a list: <code>analyze_many</code></td>
-<td style="text-align: left;">1,221</td>
+<td style="text-align: left;">1,694</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Lemmatization: <code>lemmatize</code>, <code>lemmatize(word, lang="es")</code></td>
-<td style="text-align: left;">2,042</td>
-<td style="text-align: left;">2,133</td>
+<td style="text-align: left;">1,944</td>
+<td style="text-align: left;">2,081</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Lemmatization in 4 threads: <code>lemmatize</code></td>
-<td style="text-align: left;">6,852</td>
+<td style="text-align: left;">6,055</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Form of a noun or an adjective: <code>inflect(Number="Plur")</code></td>
-<td style="text-align: left;">1,470</td>
+<td style="text-align: left;">1,492</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Form of a verb: <code>inflect(Mood="Sub", Tense="Pres", Person="1", Number="Sing")</code></td>
-<td style="text-align: left;">374</td>
+<td style="text-align: left;">576</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Conjugation table: <code>forms()</code>, <code>conjugate(lemma)</code></td>
-<td style="text-align: left;">117</td>
+<td style="text-align: left;">111</td>
 <td style="text-align: left;">-</td>
-<td style="text-align: left;">1.8</td>
-<td style="text-align: left;">1.0</td>
+<td style="text-align: left;">1.7</td>
+<td style="text-align: left;">0.9</td>
 </tr>
 </tbody>
 </table>
-<p>simplemma keeps its answers in a cache: with the cache filled by an earlier run over the same words it lemmatizes 5.4 million words per second. ablaut and verbecc build a form only as part of the whole table. <code>lemmatize</code> releases the GIL, so threads sharing one analyzer run in parallel.</p>
+<p>simplemma keeps its answers in a cache: with the cache filled by an earlier run over the same words it lemmatizes 5.0 million words per second. ablaut and verbecc build a form only as part of the whole table. <code>lemmatize</code> releases the GIL, so threads sharing one analyzer run in parallel.</p>
 <h2 id="memory">Loading and memory<a class="headerlink" href="#memory" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1300,33 +1346,33 @@
 <tbody>
 <tr>
 <td style="text-align: left;">Import and loading</td>
-<td style="text-align: left;">3.6 ms</td>
-<td style="text-align: left;">0.31 s</td>
-<td style="text-align: left;">0.85 s</td>
-<td style="text-align: left;">1.7 s</td>
+<td style="text-align: left;">3.0 ms</td>
+<td style="text-align: left;">0.34 s</td>
+<td style="text-align: left;">0.97 s</td>
+<td style="text-align: left;">1.8 s</td>
 </tr>
 <tr>
 <td style="text-align: left;">Growth of process memory</td>
-<td style="text-align: left;">10.6 MB</td>
+<td style="text-align: left;">10.7 MB</td>
 <td style="text-align: left;">131 MB</td>
-<td style="text-align: left;">305 MB</td>
-<td style="text-align: left;">577 MB</td>
+<td style="text-align: left;">304 MB</td>
+<td style="text-align: left;">578 MB</td>
 </tr>
 <tr>
 <td style="text-align: left;">Every further process</td>
-<td style="text-align: left;">3.6 MB</td>
+<td style="text-align: left;">3.5 MB</td>
 <td style="text-align: left;">129 MB</td>
-<td style="text-align: left;">325 MB</td>
-<td style="text-align: left;">0.6-1.0 GB</td>
+<td style="text-align: left;">360 MB</td>
+<td style="text-align: left;">1.6 GB</td>
 </tr>
 </tbody>
 </table>
-<p>The dictionary file of esMorph is mapped into memory, so <code>multiprocessing</code> or joblib processes and web server workers share it: most of the 10.6 MB of the first process is the dictionary, and every further process adds only its own tables and analyses.</p>
+<p>The dictionary file of esMorph is mapped into memory, so <code>multiprocessing</code> or joblib processes and web server workers share it: most of the 10.7 MB of the first process is the dictionary, and every further process adds only its own tables and analyses.</p>
 <h2 id="method">How it was measured<a class="headerlink" href="#method" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Quality, inflection and text analysis - the <a href="https://github.com/SergeyShk/esMorph/blob/master/scripts/compare.py"><code>scripts/compare.py</code></a> script: <code>uv run scripts/compare.py target/compare --chart docs/img/speed.svg</code>. It installs the systems into a separate environment with the versions of all packages pinned in <code>scripts/compare.py.lock</code> (esMorph - the version from it, or a wheel with <code>uv run --with dist/esmorph-*.whl</code>, as for this page), downloads the treebank test parts and the Stanza model with checksum verification before measuring and analyzes the gold words. Inflection - the 5,939, 2,893 and 1,237 verbs of AnCora, PUD and COSER whose lemma is an infinitive, without typos and foreign words.</li>
-<li>Versions: Python 3.11, esMorph 0.1.0, simplemma 2.0.0, spaCy 3.8.16 with the es_core_news_sm 3.8.0 model without the parser and NER, Stanza 1.15.0 with the default model on the CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (the package has no model and trains one at the first run, so its figures vary by up to 0.2 between installations). Computer - Apple M3 Pro, macOS 26, with other applications running (load average about 4), so the speeds are an order of magnitude.</li>
-<li>Text analysis speed - the 53,622 tokens of the AnCora test part with punctuation: tokens per second - the best of two analyses of the whole part after loading, chart points - importing, loading and analyzing the first 10-50,000 tokens in a new process. Only the call of the system is measured: esMorph <code>analyze_many</code> of all the words, simplemma <code>lemmatize</code> of each word with an empty cache, spaCy <code>nlp.pipe</code> of the sentences, Stanza the whole text; esMorph and simplemma run in one thread, spaCy and Stanza with their default settings.</li>
+<li>Versions: Python 3.11, esMorph 0.2.0, simplemma 2.0.0, spaCy 3.8.16 with the es_core_news_sm 3.8.0 model without the parser and NER, Stanza 1.15.0 with the default model on the CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (the package has no model and trains one at the first run, so its figures vary by up to 0.2 between installations). Computer - Apple M3 Pro, macOS 26, with other applications running (load average 4-6), so the speeds are an order of magnitude.</li>
+<li>Text analysis speed - the 53,622 tokens of the AnCora test part with punctuation: tokens per second - the best of two analyses of the whole part after loading, chart points - the best of three runs of importing, loading and analyzing the first 10-50,000 tokens in a new process. Only the call of the system is measured: esMorph <code>analyze_many</code> of all the words, simplemma <code>lemmatize</code> of each word with an empty cache, spaCy <code>nlp.pipe</code> of the sentences, Stanza the whole text; esMorph and simplemma run in one thread, spaCy and Stanza with their default settings.</li>
 <li>Operations - 47,288 words of the AnCora test part without punctuation, the best of three runs in one thread, except the row with threads; verbs - the lexemes of the 4,634 gold verbs whose lemma is an infinitive (verbecc - the first 2,000, one run). Loading and memory - importing, creating the analyzer and the first analysis, the growth of the resident memory of the process (<code>ps -o rss</code>), the median of three runs; a further process - the growth of the memory the process does not share with others (USS), in each of four <code>multiprocessing</code> processes that load the system and analyze 200 sentences.</li>
 </ul>
 

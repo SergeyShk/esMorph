@@ -330,6 +330,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../cli/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  The esmorph command
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -738,6 +757,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The esmorph command
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -821,6 +867,7 @@
 <p>Python 3.11 or newer is required.</p>
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>esmorph
 </code></pre></div>
+<p>The package also installs the <a href="../cli/"><code>esmorph</code> command</a>.</p>
 <h2 id="prebuilt-wheels">Prebuilt wheels<a class="headerlink" href="#prebuilt-wheels" title="Permanent link">&para;</a></h2>
 <p>PyPI hosts wheels for Linux (x86_64 and aarch64, manylinux and musllinux), macOS (Intel and Apple Silicon) and Windows (x64 and arm64). One wheel serves every Python version starting with 3.11, and the free-threaded Python 3.14t has a wheel of its own; Rust is not needed to install them. The dictionary is part of the package and needs no separate installation. The free-threaded Python 3.13 is not supported: free-threaded builds start with 3.14.</p>
 <p>Pre-release versions <code>X.Y.Z.devN</code> are published only on TestPyPI:</p>
@@ -838,6 +885,9 @@ pip<span class="w"> </span>install<span class="w"> </span>esmorph
 <h2 id="rust">Rust<a class="headerlink" href="#rust" title="Permanent link">&para;</a></h2>
 <p>The analyzer core is published on crates.io as the <a href="https://crates.io/crates/esmorph"><code>esmorph</code></a> crate and the dictionary as the <a href="https://crates.io/crates/esmorph-dict-es"><code>esmorph-dict-es</code></a> crate: it is enabled by default through the feature <code>bundled</code> and loaded with <code>Dictionary::bundled()</code>. The API documentation is on <a href="https://docs.rs/esmorph">docs.rs</a>.</p>
 <div class="highlight"><pre><span></span><code>cargo<span class="w"> </span>add<span class="w"> </span>esmorph
+</code></pre></div>
+<p>The feature <code>anyseg</code> adds <code>Dictionary::annotate</code> for documents of the segmenter <a href="https://sergeyshk.github.io/anySeg/">anySeg</a>, and the feature <code>cli</code> adds the <a href="../cli/"><code>esmorph</code> command</a>, which installs without Python:</p>
+<div class="highlight"><pre><span></span><code>cargo<span class="w"> </span>install<span class="w"> </span>esmorph<span class="w"> </span>--features<span class="w"> </span>cli
 </code></pre></div>
 
 

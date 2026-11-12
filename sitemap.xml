@@ -2,112 +2,126 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
     <url>
         <loc>https://sergeyshk.github.io/esMorph/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/analysis/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/analysis/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/analysis/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/analyzer/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/analyzer/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/analyzer/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/authors/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/authors/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/authors/"/>
     </url>
     <url>
+        <loc>https://sergeyshk.github.io/esMorph/cli/</loc>
+        <lastmod>2026-11-12</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/cli/"/>
+        <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/cli/"/>
+    </url>
+    <url>
         <loc>https://sergeyshk.github.io/esMorph/comparison/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/comparison/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/comparison/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/exceptions/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/exceptions/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/exceptions/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/inflection/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/inflection/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/inflection/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/installation/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/installation/"/>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/installation/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/es/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/es/analysis/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/analysis/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/analysis/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/es/analyzer/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/analyzer/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/analyzer/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/es/authors/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/authors/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/authors/"/>
     </url>
     <url>
+        <loc>https://sergeyshk.github.io/esMorph/es/cli/</loc>
+        <lastmod>2026-11-12</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/cli/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/cli/"/>
+    </url>
+    <url>
         <loc>https://sergeyshk.github.io/esMorph/es/comparison/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/comparison/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/comparison/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/es/exceptions/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/exceptions/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/exceptions/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/es/inflection/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/inflection/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/inflection/"/>
     </url>
     <url>
         <loc>https://sergeyshk.github.io/esMorph/es/installation/</loc>
-        <lastmod>2026-11-10</lastmod>
+        <lastmod>2026-11-12</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/installation/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/installation/"/>
