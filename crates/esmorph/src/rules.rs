@@ -146,11 +146,12 @@ impl RuleTags {
         }
         let mut ordinals = [0; ORDINAL_FEATS.len()];
         for (number, &(gender, count)) in ordinals.iter_mut().zip(&ORDINAL_FEATS) {
+            // In the order of CoNLL-U: by name without regard to case
             let feats = [
                 ("Gender", gender),
+                ("Number", count),
                 ("NumForm", "Digit"),
                 ("NumType", "Ord"),
-                ("Number", count),
             ];
             *number = tags.find_or_add("ADJ", &feats)?;
         }
