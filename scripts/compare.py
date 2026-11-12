@@ -327,7 +327,7 @@ def esmorph_context_system(data: Path) -> System:
     morph = Analyzer()
 
     def analyze(text: Text) -> object:
-        morph.annotate(text.document)
+        morph.annotate(text.document, context=True)
         return text.document.columns
 
     def convert(text: Text, columns: object) -> list[list[list[Candidate]]]:

@@ -113,7 +113,7 @@ See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/)
 
 ### Analysis in context
 
-`analyze_sentence` orders the analyses of the tokens of a sentence with a small neural network trained on the treebanks UD Spanish AnCora and GSD: the first is the analysis the context chooses, and its probability is the score of the model. `annotate` and the command analyze in context by default; `context=False` and `--no-context` order the analyses as `analyze` does, about ten times faster. The `esmorph` component puts the analysis in context into a [spaCy](https://spacy.io/) pipeline (`pip install "esmorph[spacy]"`).
+`analyze_sentence` orders the analyses of the tokens of a sentence with a small neural network trained on the treebanks UD Spanish AnCora and GSD: the first is the analysis the context chooses, and its probability is the score of the model. `annotate` and the command analyze in context by default; `context=False` and `--no-context` order the analyses as `analyze` does, more than ten times faster. The `esmorph` component puts the analysis in context into a [spaCy](https://spacy.io/) pipeline (`pip install "esmorph[spacy]"`).
 
 ```python
 >>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])
@@ -205,7 +205,7 @@ The share of words whose first analysis has the right lemma, and the right part 
 | spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 95.92 | 83.59 | 85.79 | 45,108 |
 | Stanza | 99.16 | **97.80** | 94.98 | **97.50** | 86.34 | 89.16 | 2,481 |
 
-In context esMorph chooses the analysis by the sentence, as spaCy and Stanza do; they are trained on AnCora and lead on it, while on PUD and COSER, new to all of them, the part of speech, features and lemma of esMorph are right together more often. An analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It gives the gold form of 99.65, 93.29 and 95.55 % of the verbs of AnCora, PUD and COSER, against 98.87, 92.71 and 93.61 % of ablaut. A short text together with loading takes 3.5 ms against 0.38-1.9 s, and every further process with the same dictionary adds 3.5 MB of memory. Measured on Apple M3 Pro, Python 3.11.
+In context esMorph chooses the analysis by the sentence, as spaCy and Stanza do; they are trained on AnCora and lead on it in features and all together, while on PUD and COSER, new to all of them, the part of speech, features and lemma of esMorph are right together more often. An analysis with the right part of speech and lemma is among the analyses of esMorph for 96-99 % of words. It gives the gold form of 99.65, 93.29 and 95.55 % of the verbs of AnCora, PUD and COSER, against 98.87, 92.71 and 93.61 % of ablaut. A short text together with loading takes 3.5 ms against 0.38-1.9 s, and every further process with the same dictionary adds 3.5 MB of memory. Measured on Apple M3 Pro, Python 3.11.
 
 See the [documentation](https://sergeyshk.github.io/esMorph/comparison/): all the scores, verb inflection, the chart of speed by the size of the text, memory and how it was measured.
 
