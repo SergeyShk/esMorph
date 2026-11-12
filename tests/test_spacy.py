@@ -77,6 +77,15 @@ def test_sentences_by_blank_lines_and_closing_marks(nlp):
     assert annotation(nlp("«Hola.» Dijo ella.")) == expected(
         ["«", "Hola", ".", "»"], ["Dijo", "ella", "."]
     )
+    # A quote after a space or a blank line opens the next sentence
+    assert annotation(nlp('Ella la vio. "Ven", dijo.')) == expected(
+        ["Ella", "la", "vio", "."], ['"', "Ven", '"', ",", "dijo", "."]
+    )
+    assert annotation(nlp("Era ella.\n\n» Y luego.")) == [
+        *expected(["Era", "ella", "."]),
+        ("\n\n", "SPACE", {}),
+        *expected(["»", "Y", "luego", "."]),
+    ]
     assert annotation(nlp("Ella la vio.  La casa es grande.")) == [
         *expected(["Ella", "la", "vio", "."]),
         (" ", "SPACE", {}),

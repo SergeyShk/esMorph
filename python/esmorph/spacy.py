@@ -45,7 +45,7 @@ from ._esmorph import Analysis, Analyzer
 __all__ = ["Component"]
 
 # A document without marked sentences is split after a token of sentence end marks and at a blank
-# line; a token of closing marks after the end stays in the sentence
+# line; a token of closing marks right after the end stays in the sentence
 SENTENCE_END = frozenset(".!?…")
 CLOSING = frozenset("»\"\u201d\u2019')]}")
 # The key of the dictionary of the component in `Doc.user_data`: `token._.esmorph` finds the
@@ -156,8 +156,12 @@ class Component:
         Returns:
             Doc: The same document
         """
-        # The words of the tokens of the tokenizer of anySeg
-        split = Token.has_extension("anyseg_words")
+        # The words of the tokens of the tokenizer of anySeg: a document of another tokenizer has
+        # none, and its tokens are not asked for them
+        data: dict[Any, Any] = doc.user_data
+        split = Token.has_extension("anyseg_words") and any(
+            isinstance(key, tuple) and key[:2] == ("._.", "anyseg_words") for key in data
+        )
         for sentence in sentences(doc):
             tokens = [token for token in sentence if not space(token)]
             words = [token.text for token in tokens]
@@ -269,9 +273,9 @@ if not Token.has_extension("esmorph"):
 
 def sentences(doc: Doc) -> Iterator[list[Token]]:
     """
-    The sentences of a document: a marked sentence start begins one, and a word without the mark
-    begins one after a token of sentence end marks, the closing marks after it and the spaces, or
-    after a blank line; a document marked whole gives `Doc.sents`
+    The sentences of a document: a marked sentence start begins one, and a token without the mark
+    begins one after a token of sentence end marks, the closing marks right after it and the
+    spaces, or after a blank line; a document marked whole gives `Doc.sents`
 
     Arguments:
         doc (Doc): The document
@@ -284,7 +288,9 @@ def sentences(doc: Doc) -> Iterator[list[Token]]:
     for token in doc:
         start, text = token.is_sent_start, token.text
         blank = space(token)
-        if chunk and (start or (start is None and end and not blank and not closing(text))):
+        # A closing mark without a space before it: an opening quote after a space starts the next
+        kept = bool(chunk) and closing(text) and not chunk[-1].whitespace_ and not space(chunk[-1])
+        if chunk and (start or (start is None and end and not blank and not kept)):
             yield chunk
             chunk, end = [], False
         chunk.append(token)
@@ -292,7 +298,7 @@ def sentences(doc: Doc) -> Iterator[list[Token]]:
             end = end or text.count("\n") > 1
         elif set(text) <= SENTENCE_END:
             end = True
-        elif not (end and closing(text)):
+        elif not (end and kept):
             end = False
     if chunk:
         yield chunk

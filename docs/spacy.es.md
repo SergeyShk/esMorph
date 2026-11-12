@@ -31,7 +31,7 @@ Con las palabras de referencia de las partes de prueba de los treebanks ([Compar
 
 ## Modelos es_core_news { #models }
 
-En una cadena de los modelos `es_core_news_*` el componente sustituye al morfologizador y al lematizador, y se quedan el analizador sintáctico y el reconocimiento de entidades; el componente toma las oraciones que marca el analizador sintáctico y va antes de `attribute_ruler`, que rellena `tag_` según la categoría. El morfologizador y el lematizador son capas pequeñas sobre los vectores que el analizador sintáctico calcula de todos modos, así que el componente, más preciso que ellos, hace una cadena así un 15 % más lenta.
+En una cadena de los modelos `es_core_news_*` el componente sustituye al morfologizador y al lematizador, y se quedan el analizador sintáctico y el reconocimiento de entidades; el componente toma las oraciones que marca el analizador sintáctico y va antes de `attribute_ruler`, que rellena `tag_` según la categoría. El morfologizador es una capa pequeña sobre los vectores de `tok2vec`, que el analizador sintáctico necesita de todos modos, y el lematizador son reglas y tablas, así que el componente hace una cadena así alrededor de un 15 % más lenta.
 
 ``` python
 nlp = spacy.load("es_core_news_sm", exclude=["morphologizer", "lemmatizer"])
@@ -44,7 +44,7 @@ Un token de spaCy es un token del texto: una contracción (`del`, `al`) o un ver
 
 ## Oraciones { #sentences }
 
-El modelo de contexto analiza una oración entera. El componente toma las oraciones de la anotación del documento - el analizador sintáctico, `senter` o `sentencizer` - y, sin ella, divide el documento después de los tokens de signos de fin de oración («.», «!», «?», «…») con las comillas y los paréntesis de cierre que los siguen, y en una línea en blanco. Los tokens de espacios y los que solo tienen separadores invisibles (BOM, U+200B, U+2060, el guion suave) reciben la categoría `SPACE`, como en los modelos de spaCy, y el propio token como lema: el modelo no los ve. Un token sin análisis de esMorph recibe `X` y el token en minúsculas como lema, como en el [comando esmorph](cli.md).
+El modelo de contexto analiza una oración entera. El componente toma las oraciones de la anotación del documento - el analizador sintáctico, `senter` o `sentencizer` - y, sin ella, divide el documento después de los tokens de signos de fin de oración («.», «!», «?», «…») con las comillas y los paréntesis de cierre que los siguen sin espacio, y en una línea en blanco. Los tokens de espacios y los que solo tienen separadores invisibles (BOM, U+200B, U+2060, el guion suave) reciben la categoría `SPACE`, como en los modelos de spaCy, y el propio token como lema: el modelo no los ve. Un token sin análisis de esMorph recibe `X` y el token en minúsculas como lema, como en el [comando esmorph](cli.md).
 
 Los tokens, sus palabras y los inicios de oración según las convenciones de Universal Dependencies, con las que se entrena el modelo de contexto, los da el segmentador [anySeg](https://sergeyshk.github.io/anySeg/) (`pip install "anyseg[spacy]"`): el tokenizador `anyseg.Tokenizer.v1` y el componente `anyseg_sentencizer` van antes de `esmorph`. Las palabras de un token de varias también están entonces en `token._.anyseg_words`.
 
