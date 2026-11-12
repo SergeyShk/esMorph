@@ -6,6 +6,8 @@ Se requiere Python 3.11 o superior.
 pip install esmorph
 ```
 
+El paquete instala también el [comando `esmorph`](cli.md).
+
 ## Paquetes precompilados
 
 PyPI tiene paquetes precompilados para Linux (x86_64 y aarch64, manylinux y musllinux), macOS (Intel y Apple Silicon) y Windows (x64 y arm64). Un mismo paquete sirve para todas las versiones de Python a partir de la 3.11, y Python 3.14t sin GIL tiene el suyo propio; para instalarlos no hace falta Rust. El diccionario forma parte del paquete y no requiere una instalación aparte. Python 3.13 sin GIL no es compatible: las compilaciones sin GIL empiezan en la 3.14.
@@ -39,4 +41,10 @@ El núcleo del analizador se publica en crates.io como el crate [`esmorph`](http
 
 ``` bash
 cargo add esmorph
+```
+
+La característica `anyseg` añade `Dictionary::annotate` para los documentos del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), y la característica `cli` añade el [comando `esmorph`](cli.md), que se instala sin Python:
+
+``` bash
+cargo install esmorph --features cli
 ```

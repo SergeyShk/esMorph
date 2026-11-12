@@ -20,20 +20,20 @@ decir yo el verdad de el caso .
 | :----- | :---------- | :---------- |
 | `-f`, `--format` | `lemmas` | [Formato de salida](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Entrada](#input): `text`, `tokens`, `conllu` |
-| `-d`, `--dictionary` | el diccionario del paquete | Un archivo de diccionario de esMorph |
+| `-d`, `--dictionary` | el diccionario del paquete | Un archivo de diccionario de esMorph, comprobado entero como con [`verify=True`](analyzer.md#parameters) |
 | `-o`, `--output` | la salida estándar | El archivo del resultado; `-` es la salida estándar |
 | `-h`, `--help` | | Mostrar la ayuda |
 | `-V`, `--version` | | Mostrar la versión |
 
-Los archivos se leen uno tras otro; sin archivos y en lugar de `-` se lee la entrada estándar. La entrada está en UTF-8: un archivo en otra codificación (Latin-1, cp1252, UTF-16) no se analiza, y una sola línea con bytes no válidos se analiza con U+FFFD en su lugar. El valor de una opción se escribe aparte o junto: `-f conllu`, `-fconllu`, `--format=conllu`. El texto se analiza por párrafos: un párrafo se escribe en cuanto una línea en blanco o el final de la entrada lo cierra - en una terminal de inmediato, y a una tubería o un archivo cada vez que el comando espera la siguiente línea de entrada, así que se puede mantener abierto y darle texto párrafo a párrafo. Las entradas `tokens` y `conllu` se escriben por oraciones.
+Los archivos se leen uno tras otro; sin archivos y en lugar de `-` se lee la entrada estándar. La entrada está en UTF-8: un archivo en otra codificación (Latin-1, cp1252, UTF-16) no se analiza, salvo que su primera letra con tilde llegue después de los primeros 64 KiB: entonces se analiza el texto anterior a esa línea. Una sola línea con bytes no válidos se analiza con U+FFFD en su lugar. El valor de una opción se escribe aparte o junto: `-f conllu`, `-fconllu`, `--format=conllu`. El texto se analiza por párrafos: un párrafo se escribe en cuanto una línea en blanco o el final de la entrada lo cierra - en una terminal de inmediato, y a una tubería o un archivo cada vez que el comando espera la siguiente línea de entrada, así que se puede mantener abierto y darle texto párrafo a párrafo. Las entradas `tokens` y `conllu` se escriben por oraciones.
 
 En Windows PowerShell 5.1 la redirección `>` y una canalización (`Get-Content text.txt | esmorph`) estropean las letras con tilde: pase el archivo como argumento y escriba el resultado con la opción `-o` (en PowerShell 7 también funcionan). El texto pasado con `echo` en cmd llega en la codificación de la consola: ejecute antes `chcp 65001`.
 
 ## Entrada { #input }
 
-- `text` - texto: una línea en blanco termina un párrafo. Los tokens, sus palabras y las oraciones los encuentra el segmentador [anySeg](https://sergeyshk.github.io/anySeg/) según las convenciones de Universal Dependencies: `del` y `al` son dos palabras, y también un infinitivo o un gerundio con clíticos (`dárselo`) y los imperativos frecuentes (`dime`). Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: `devuélvenos` es el imperativo de `devolver`. Un texto sin líneas en blanco se analiza por partes que terminan en un límite de oración, así que la memoria no crece con la longitud de la entrada.
-- `tokens` - un token por línea, una línea en blanco separa las oraciones; los separadores alrededor del token y todo lo que sigue a una tabulación se ignoran, así que también sirve una tabla con el token en la primera columna. Un token es una palabra.
-- `conllu` - [CoNLL-U](https://universaldependencies.org/format.html): se rellenan las columnas LEMMA, UPOS y FEATS, mientras que las demás columnas, los comentarios, los tokens multipalabra y los nodos vacíos quedan como están.
+- `text` - texto: una línea en blanco termina un párrafo. Los tokens, sus palabras y las oraciones los encuentra el segmentador [anySeg](https://sergeyshk.github.io/anySeg/) según las convenciones de Universal Dependencies: `del` y `al` son dos palabras, y también un infinitivo o un gerundio con clíticos (`dárselo`) y los imperativos frecuentes (`dime`). Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: `devuélvenos` es el imperativo de `devolver`. Un párrafo de más de 256 KiB se analiza por partes que terminan en un límite de oración, así que la memoria no crece con la longitud de la entrada; sus oraciones pueden entonces diferir un poco de las del texto entero.
+- `tokens` - un token por línea, una línea en blanco separa las oraciones; los separadores alrededor del token y todo lo que sigue a una tabulación se ignoran, así que también sirve una tabla con el token en la primera columna. Un token es una palabra. Una oración sin línea en blanco se cierra tras 8192 tokens: para una lista de palabras el formato `tsv` da una línea por palabra.
+- `conllu` - [CoNLL-U](https://universaldependencies.org/format.html): se rellenan las columnas LEMMA, UPOS y FEATS, mientras que las demás columnas, los comentarios, los tokens multipalabra y los nodos vacíos quedan como están. Una oración no válida se escribe tal cual en el formato `conllu` y se omite en los demás, su línea va al mensaje de error, y el resto del archivo se analiza.
 
 ``` bash
 printf '1\tCasas\t_\t_\t_\t_\t0\troot\t_\t_\n2\tblancas\t_\t_\t_\t_\t1\tamod\t_\t_\n' | esmorph -i conllu -f conllu
@@ -54,7 +54,7 @@ Los lemas de las palabras de una oración separados por espacios, una línea por
 
 ### conllu
 
-CoNLL-U como lo escribe anySeg: los tokens multipalabra con sus palabras, los comentarios `sent_id` y `text` y, con la entrada `text`, `newdoc` al comienzo de un archivo, `newpar` al comienzo de un párrafo, `SpaceAfter=No` y `SpacesAfter` en MISC. El resultado es el mismo que el de [`annotate`](analyzer.md#annotate) del texto entero.
+CoNLL-U como lo escribe anySeg: los tokens multipalabra con sus palabras, los comentarios `sent_id` y `text` y, con la entrada `text`, `newdoc` al comienzo de un archivo, `newpar` al comienzo de un párrafo, `SpaceAfter=No` y `SpacesAfter` en MISC. El resultado es el mismo que el de [`annotate`](analyzer.md#annotate) del texto entero, salvo en los párrafos de más de 256 KiB. El análisis no da árbol sintáctico: con las entradas `text` y `tokens` las columnas HEAD y DEPREL son `_`, así que una herramienta que necesita un árbol, como el script de evaluación de la tarea compartida CoNLL 2018, lee el resultado de `-i conllu` sobre un archivo que lo tiene.
 
 ``` bash
 echo "Dímelo del mar." | esmorph -f conllu
@@ -94,7 +94,7 @@ verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.999997
 
 ### jsonl
 
-[JSON Lines](https://jsonlines.org/): una oración por línea - el texto (salvo con la entrada `tokens`) y los tokens con todos sus análisis, como los da [`analyze`](analyzer.md#analyze): la palabra, el lema, la categoría, los rasgos, las etiquetas, la probabilidad, las palabras del token y la [fuente del análisis](analysis.md). Abajo está la línea de una oración formateada para leerla.
+[JSON Lines](https://jsonlines.org/): una oración por línea - el texto (salvo con la entrada `tokens`) y los tokens con todos sus análisis, como los da [`analyze`](analyzer.md#analyze): la palabra, el lema, la categoría, los rasgos, la probabilidad, las palabras del token y la [fuente del análisis](analysis.md). Abajo está la línea de una oración formateada para leerla.
 
 ``` bash
 echo "Dime." | esmorph -f jsonl
@@ -105,13 +105,13 @@ echo "Dime." | esmorph -f jsonl
   "text": "Dime.",
   "tokens": [
     {"word": "Dime", "analyses": [
-      {"word": "Dime", "lemma": "Dime", "pos": "PROPN", "feats": {}, "labels": [],
+      {"word": "Dime", "lemma": "Dime", "pos": "PROPN", "feats": {},
        "prob": 0.9375, "words": ["Dime"], "source": "rule"},
       {"word": "dime", "lemma": "decir", "pos": "VERB", "feats": {"Mood": "Imp", "Number": "Sing", "Person": "2", "VerbForm": "Fin"},
-       "labels": [], "prob": 0.0625, "words": ["di", "me"], "source": "clitics"}
+       "prob": 0.0625, "words": ["di", "me"], "source": "clitics"}
     ]},
     {"word": ".", "analyses": [
-      {"word": ".", "lemma": ".", "pos": "PUNCT", "feats": {"PunctType": "Peri"}, "labels": [],
+      {"word": ".", "lemma": ".", "pos": "PUNCT", "feats": {"PunctType": "Peri"},
        "prob": 1, "words": ["."], "source": "rule"}
     ]}
   ]
@@ -123,9 +123,9 @@ echo "Dime." | esmorph -f jsonl
 | Código | Cuándo |
 | :----- | :----- |
 | 0 | Éxito, también cuando la salida se cierra antes del final (`esmorph text.txt \| head`) |
-| 1 | Un archivo de entrada no existe, no se puede leer o no está en UTF-8, una línea no está en UTF-8 (se analiza con U+FFFD), una línea de CoNLL-U no válida; los demás archivos se analizan igualmente |
-| 1 | El diccionario no se puede leer, el archivo de salida no se puede crear o es un archivo de entrada o el diccionario; no se analiza nada |
-| 1 | Un error de escritura, la salida estándar cerrada; el análisis se detiene |
+| 1 | Un archivo de entrada no existe, no se puede leer o no está en UTF-8, una línea no está en UTF-8 (se analiza con U+FFFD), una oración de CoNLL-U no válida; el resto se analiza igualmente |
+| 1 | El diccionario no se puede leer o está dañado, el archivo de salida no se puede crear, el archivo de salida o la salida estándar es un archivo de entrada o el diccionario; no se analiza nada |
+| 1 | Un error de escritura, la salida estándar cerrada (el comando instalado con cargo la escribe en /dev/null y termina con 0); el análisis se detiene |
 | 2 | Opciones no válidas |
 
 Los mensajes de error van a la salida de error estándar.

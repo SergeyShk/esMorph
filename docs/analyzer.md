@@ -28,7 +28,7 @@ Exceptions:
     Analysis(word='hablamos', lemma='hablar', pos='VERB', feats={'Mood': 'Ind', 'Number': 'Plur', 'Person': '1', 'Tense': 'Pres', 'VerbForm': 'Fin'}, prob=0.978261, words=('hablamos',), source='dictionary')
     ```
 
-## Parameters
+## Parameters { #parameters }
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |
