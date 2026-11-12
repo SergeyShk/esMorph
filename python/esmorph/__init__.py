@@ -6,17 +6,17 @@
 
 from ._esmorph import Analysis, Analyzer, FormNotFoundError, __version__
 
-# typing takes longer to import than the package: DictionaryInfo is imported on first use
+# typing takes longer to import than the package: the types are imported on first use
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from ._types import DictionaryInfo as DictionaryInfo
+    from ._types import ContextInfo as ContextInfo, DictionaryInfo as DictionaryInfo
 else:
 
     def __getattr__(name: str) -> object:
-        if name == "DictionaryInfo":
-            from ._types import DictionaryInfo
+        if name in ("ContextInfo", "DictionaryInfo"):
+            from . import _types
 
-            return DictionaryInfo
+            return getattr(_types, name)
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -25,4 +25,11 @@ Requires Python 3.11 or newer"""
 __author__ = "Sergey Shkarin"
 __author_email__ = "kouki.sergey@gmail.com"
 
-__all__ = ["Analysis", "Analyzer", "DictionaryInfo", "FormNotFoundError", "__version__"]
+__all__ = [
+    "Analysis",
+    "Analyzer",
+    "ContextInfo",
+    "DictionaryInfo",
+    "FormNotFoundError",
+    "__version__",
+]

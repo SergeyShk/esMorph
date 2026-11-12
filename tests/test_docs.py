@@ -4,7 +4,12 @@ and the examples of every page give the shown results"""
 import ast
 import contextlib
 import io
+import json
+import math
 import re
+import shlex
+import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -78,3 +83,53 @@ def test_examples(page):
         code, result = textwrap.dedent(code), textwrap.dedent(result)
         # Long results are wrapped on the page
         assert re.sub(r"\s+", "", run(code, namespace)) == re.sub(r"\s+", "", result), code
+
+
+COMMANDS = re.compile(
+    r"``` bash\n((?:echo|printf) [^\n]*\| esmorph[^\n]*)\n```\n\n``` ?(\w*)\n(.*?)```", re.S
+)
+
+
+def same(found: object, shown: object) -> bool:
+    """Equal values, numbers up to the last digits, which differ between processors"""
+    if isinstance(found, float | int) and isinstance(shown, float | int):
+        return math.isclose(found, shown, rel_tol=0, abs_tol=1e-5)
+    if isinstance(found, dict) and isinstance(shown, dict):
+        return found.keys() == shown.keys() and all(same(found[k], shown[k]) for k in found)
+    if isinstance(found, list) and isinstance(shown, list):
+        return len(found) == len(shown) and all(map(same, found, shown))
+    return found == shown
+
+
+def number(field: str) -> float | str:
+    try:
+        return float(field)
+    except ValueError:
+        return field
+
+
+@pytest.mark.parametrize(
+    "page", ALL_PAGES, ids=[str(page.relative_to(DOCS)) for page in ALL_PAGES]
+)
+def test_commands(page):
+    for command, kind, shown in COMMANDS.findall(page.read_text(encoding="utf-8")):
+        source, text, pipe, program, *args = shlex.split(command)
+        assert (pipe, program) == ("|", "esmorph"), command
+        text = (
+            text.replace("\\t", "\t").replace("\\n", "\n") if source == "printf" else text + "\n"
+        )
+        found = subprocess.run(
+            [sys.executable, "-X", "utf8", "-m", "esmorph", *args],
+            input=text.encode(),
+            capture_output=True,
+            check=True,
+        ).stdout.decode()
+        if kind == "json":
+            assert same(json.loads(found), json.loads(shown)), (command, found)
+            continue
+        # A page leaves out the blank line after the last sentence
+        rows, expected = (
+            [[number(field) for field in line.split("\t")] for line in text.rstrip().splitlines()]
+            for text in (found, shown)
+        )
+        assert same(rows, expected), (command, found)

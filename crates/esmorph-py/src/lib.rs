@@ -3,8 +3,9 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
+use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -605,11 +606,24 @@ fn _analyses_analyzer(
     path: Option<PathBuf>,
     verify: bool,
 ) -> PyResult<Py<Analyzer>> {
-    match path.map(|path| shared(py, Some(path), verify)) {
-        Some(Ok(analyzer)) => Ok(analyzer),
-        Some(Err(err)) if !err.is_instance_of::<PyOSError>(py) => Err(err),
-        _ => shared(py, None, verify),
+    let Some(path) = path else {
+        return shared(py, None, verify);
+    };
+    match shared(py, Some(path.clone()), verify) {
+        Ok(analyzer) => Ok(analyzer),
+        // A file that is gone or of another version of the format: the dictionary of the package
+        Err(err) if err.is_instance_of::<PyOSError>(py) || other_version(&path) => {
+            shared(py, None, verify)
+        }
+        Err(err) => Err(err),
     }
+}
+
+/// Whether the file is a dictionary of another version of the format
+fn other_version(path: &Path) -> bool {
+    let mut header = [0; 12];
+    (File::open(path).and_then(|mut file| file.read_exact(&mut header)))
+        .is_ok_and(|()| esmorph::other_version(&header))
 }
 
 /// The analyzer of the dictionary of the package, or of the file at `path`, shared in the process;
@@ -969,8 +983,10 @@ impl Analyzer {
         let handle = Analyzer::handle(slf);
         let mut words = Words::new(words)?;
         let mut texts = Vec::new();
+        // An iterator of C code runs no Python code that would see Ctrl+C
         while words.next_chunk()? {
             texts.append(&mut words.texts);
+            py.check_signals()?;
         }
         drop(words);
         let result = PyList::empty(py);
@@ -1040,10 +1056,15 @@ impl Analyzer {
         let mut forms = Vec::new();
         while words.next_chunk()? {
             forms.append(&mut words.texts);
+            py.check_signals()?;
         }
         drop(words);
         let multiword = multiword_tokens(document, forms.len())?;
-        let starts = sentence_starts(document, forms.len())?;
+        // Without context the sentences do not matter, and the document needs none
+        let starts = match context {
+            true => sentence_starts(document, forms.len())?,
+            false => Vec::new(),
+        };
         if context && !self.dictionary.has_context() {
             return Err(PyValueError::new_err(
                 "the dictionary has no context model: annotate with context=False",
@@ -1182,12 +1203,13 @@ impl Analyzer {
     /// Description:
     ///     The source of the dictionary and its snapshot with its SHA-256, the license, the
     ///     release of Universal Dependencies and the treebanks of the counts of analyses with their
-    ///     licenses, as far as the dictionary describes them, and always the number of word forms
-    ///     and the checksum of the file
+    ///     licenses, as far as the dictionary describes them; for a dictionary with a context
+    ///     model, its release and treebanks in context; and always the number of word forms and
+    ///     the checksum of the file
     ///
     /// Returns:
-    ///     dict: The keys source, snapshot, sha256, license, ud_release, treebanks, word_forms and
-    ///     checksum; every access returns a new dict
+    ///     dict: The keys source, snapshot, sha256, license, ud_release, treebanks, context,
+    ///     word_forms and checksum; every access returns a new dict
     ///
     /// Example:
     ///     >>> from esmorph import Analyzer
@@ -1203,6 +1225,25 @@ impl Analyzer {
             .call_method1(intern!(py, "loads"), (self.dictionary.meta(),));
         // Only values of the types that the description promises are given
         let text = |value: &Bound<'_, PyAny>| value.is_instance_of::<PyString>();
+        // The release and the treebanks of the training of the context model, as of the counts
+        let sources = |info: &Bound<'py, PyDict>, from: &Bound<'py, PyAny>| -> PyResult<()> {
+            let Ok(from) = from.cast::<PyDict>() else {
+                return Ok(());
+            };
+            if let Some(release) = from.get_item("release")?
+                && text(&release)
+            {
+                info.set_item("ud_release", release)?;
+            }
+            if let Some(treebanks) = from.get_item("treebanks")?
+                && let Ok(treebanks) = treebanks.cast::<PyDict>()
+                && (treebanks.iter()).all(|(name, license)| text(&name) && text(&license))
+            {
+                info.set_item("treebanks", treebanks)?;
+            }
+            Ok(())
+        };
+        let context = PyDict::new(py);
         if let Ok(meta) = meta
             && let Ok(meta) = meta.cast::<PyDict>()
         {
@@ -1213,21 +1254,15 @@ impl Analyzer {
                     info.set_item(key, value)?;
                 }
             }
-            if let Some(counts) = meta.get_item("counts")?
-                && let Ok(counts) = counts.cast::<PyDict>()
-            {
-                if let Some(release) = counts.get_item("release")?
-                    && text(&release)
-                {
-                    info.set_item("ud_release", release)?;
-                }
-                if let Some(treebanks) = counts.get_item("treebanks")?
-                    && let Ok(treebanks) = treebanks.cast::<PyDict>()
-                    && (treebanks.iter()).all(|(name, license)| text(&name) && text(&license))
-                {
-                    info.set_item("treebanks", treebanks)?;
-                }
+            if let Some(counts) = meta.get_item("counts")? {
+                sources(&info, &counts)?;
             }
+            if let Some(model) = meta.get_item("context")? {
+                sources(&context, &model)?;
+            }
+        }
+        if self.dictionary.has_context() {
+            info.set_item("context", context)?;
         }
         info.set_item("word_forms", self.dictionary.len())?;
         info.set_item("checksum", self.dictionary.checksum())?;

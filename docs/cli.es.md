@@ -21,7 +21,7 @@ decir yo el verdad de el caso .
 | `-f`, `--format` | `lemmas` | [Formato de salida](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Entrada](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | el diccionario del paquete | Un archivo de diccionario de esMorph, comprobado entero como con [`verify=True`](analyzer.md#parameters) |
-| `--no-context` | | Ordenar los análisis de una palabra como [`analyze`](analyzer.md#analyze), sin el modelo de contexto: más rápido; para un diccionario sin modelo |
+| `--no-context` | | Ordenar los análisis de una palabra como [`analyze`](analyzer.md#analyze), sin el modelo de contexto: más rápido; para una lista de palabras y un diccionario sin modelo |
 | `-o`, `--output` | la salida estándar | El archivo del resultado; `-` es la salida estándar |
 | `-h`, `--help` | | Mostrar la ayuda |
 | `-V`, `--version` | | Mostrar la versión |
@@ -33,7 +33,7 @@ En Windows PowerShell 5.1 la redirección `>` y una canalización (`Get-Content 
 ## Entrada { #input }
 
 - `text` - texto: una línea en blanco termina un párrafo. Los tokens, sus palabras y las oraciones los encuentra el segmentador [anySeg](https://sergeyshk.github.io/anySeg/) según las convenciones de Universal Dependencies: `del` y `al` son dos palabras, y también un infinitivo o un gerundio con clíticos (`dárselo`) y los imperativos frecuentes (`dime`). Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: `devuélvenos` es el imperativo de `devolver`. Un párrafo de más de 256 KiB se analiza por partes que terminan en un límite de oración, así que la memoria no crece con la longitud de la entrada; sus oraciones pueden entonces diferir un poco de las del texto entero.
-- `tokens` - un token por línea, una línea en blanco separa las oraciones; los separadores alrededor del token y todo lo que sigue a una tabulación se ignoran, así que también sirve una tabla con el token en la primera columna. Un token es una palabra. Una oración sin línea en blanco se cierra tras 8192 tokens: para una lista de palabras el formato `tsv` da una línea por palabra.
+- `tokens` - un token por línea, una línea en blanco separa las oraciones; los separadores alrededor del token y todo lo que sigue a una tabulación se ignoran, así que también sirve una tabla con el token en la primera columna. Un token es una palabra. Una oración sin línea en blanco se cierra tras 8192 tokens. Las palabras de alrededor de un token cambian su análisis, así que una lista de palabras que no forman una oración se analiza con `--no-context` o con una línea en blanco tras cada palabra; el formato `tsv` da una línea por palabra.
 - `conllu` - [CoNLL-U](https://universaldependencies.org/format.html): se rellenan las columnas LEMMA, UPOS y FEATS, mientras que las demás columnas, los comentarios, los tokens multipalabra y los nodos vacíos quedan como están. Una oración no válida se escribe tal cual en el formato `conllu` y se omite en los demás, su línea va al mensaje de error, y el resto del archivo se analiza.
 
 ``` bash
@@ -79,7 +79,7 @@ echo "Dímelo del mar." | esmorph -f conllu
 
 ### tsv
 
-La palabra, el lema, la categoría, los rasgos y la probabilidad del análisis separados por tabulaciones, sin encabezado; una línea en blanco separa las oraciones. La probabilidad de una palabra de un token multipalabra es su parte entre los análisis que encajan con el token: el verbo `di` de `dime` entre los análisis con estas palabras, el clítico `la` de `verla` entre los de un pronombre.
+La palabra, el lema, la categoría, los rasgos y la probabilidad del análisis separados por tabulaciones, sin encabezado (la probabilidad es la puntuación del modelo de contexto en la oración, como la da [`analyze_sentence`](analyzer.md#analyze_sentence), y con `--no-context`, como la da `analyze`); una línea en blanco separa las oraciones. La probabilidad de una palabra de un token multipalabra es su parte entre los análisis que encajan con el token: el verbo `di` de `dime` entre los análisis con estas palabras, el clítico `la` de `verla` entre los de un pronombre.
 
 ``` bash
 echo "Dime la verdad." | esmorph -f tsv
@@ -88,28 +88,36 @@ echo "Dime la verdad." | esmorph -f tsv
 ```
 Di	decir	VERB	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	1
 me	yo	PRON	Case=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs	0.45766
-la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.9774450451099099
-verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.999997
+la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.9989243733311355
+verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.999981820943117
 .	.	PUNCT	PunctType=Peri	1
 ```
 
 ### jsonl
 
-[JSON Lines](https://jsonlines.org/): una oración por línea - el texto (salvo con la entrada `tokens`) y los tokens con todos sus análisis, como los da [`analyze`](analyzer.md#analyze): la palabra, el lema, la categoría, los rasgos, la probabilidad, las palabras del token y la [fuente del análisis](analysis.md). Abajo está la línea de una oración formateada para leerla.
+[JSON Lines](https://jsonlines.org/): una oración por línea - el texto (salvo con la entrada `tokens`) y los tokens con todos sus análisis, en el orden que les da [`analyze_sentence`](analyzer.md#analyze_sentence) en la oración, y con `--no-context`, como los da [`analyze`](analyzer.md#analyze): la palabra, el lema, la categoría, los rasgos, la probabilidad, las palabras del token y la [fuente del análisis](analysis.md). Abajo está la línea de una oración formateada para leerla.
 
 ``` bash
-echo "Dime." | esmorph -f jsonl
+echo "Vino ayer." | esmorph -f jsonl
 ```
 
 ``` json
 {
-  "text": "Dime.",
+  "text": "Vino ayer.",
   "tokens": [
-    {"word": "Dime", "analyses": [
-      {"word": "Dime", "lemma": "Dime", "pos": "PROPN", "feats": {},
-       "prob": 0.9375, "words": ["Dime"], "source": "rule"},
-      {"word": "dime", "lemma": "decir", "pos": "VERB", "feats": {"Mood": "Imp", "Number": "Sing", "Person": "2", "VerbForm": "Fin"},
-       "prob": 0.0625, "words": ["di", "me"], "source": "clitics"}
+    {"word": "Vino", "analyses": [
+      {"word": "vino", "lemma": "venir", "pos": "VERB", "feats": {"Mood": "Ind", "Number": "Sing", "Person": "3", "Tense": "Past", "VerbForm": "Fin"},
+       "prob": 0.8093463865008943, "words": ["vino"], "source": "dictionary"},
+      {"word": "vino", "lemma": "vino", "pos": "NOUN", "feats": {"Gender": "Masc", "Number": "Sing"},
+       "prob": 0.16867937111012504, "words": ["vino"], "source": "dictionary"},
+      {"word": "Vino", "lemma": "Vino", "pos": "PROPN", "feats": {},
+       "prob": 0.021974242388980627, "words": ["Vino"], "source": "rule"}
+    ]},
+    {"word": "ayer", "analyses": [
+      {"word": "ayer", "lemma": "ayer", "pos": "ADV", "feats": {},
+       "prob": 0.9995206355999463, "words": ["ayer"], "source": "dictionary"},
+      {"word": "ayer", "lemma": "ayer", "pos": "NOUN", "feats": {"Gender": "Masc", "Number": "Sing"},
+       "prob": 0.0004793644000537769, "words": ["ayer"], "source": "dictionary"}
     ]},
     {"word": ".", "analyses": [
       {"word": ".", "lemma": ".", "pos": "PUNCT", "feats": {"PunctType": "Peri"},
@@ -125,7 +133,7 @@ echo "Dime." | esmorph -f jsonl
 | :----- | :----- |
 | 0 | Éxito, también cuando la salida se cierra antes del final (`esmorph text.txt \| head`) |
 | 1 | Un archivo de entrada no existe, no se puede leer o no está en UTF-8, una línea no está en UTF-8 (se analiza con U+FFFD), una oración de CoNLL-U no válida; el resto se analiza igualmente |
-| 1 | El diccionario no se puede leer o está dañado, el archivo de salida no se puede crear, el archivo de salida o la salida estándar es un archivo de entrada o el diccionario; no se analiza nada |
+| 1 | El diccionario no se puede leer o está dañado, no tiene modelo de contexto y no se da `--no-context`, el archivo de salida no se puede crear, el archivo de salida o la salida estándar es un archivo de entrada o el diccionario; no se analiza nada |
 | 1 | Un error de escritura, la salida estándar cerrada (el comando instalado con cargo la escribe en /dev/null y termina con 0); el análisis se detiene |
 | 2 | Opciones no válidas |
 
