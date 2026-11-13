@@ -19,7 +19,7 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 
 ```toml
 [dependencies]
-esmorph = "0.2"
+esmorph = "0.3"
 ```
 
 The dictionary is in the crate [`esmorph-dict-es`](https://crates.io/crates/esmorph-dict-es), used through the feature `bundled` (on by default). Without it the dictionary is read from a file:
@@ -73,11 +73,11 @@ echo "Dime la verdad del caso." | esmorph
 
 ## Documents of anySeg
 
-With the feature `anyseg` the dictionary fills the columns of the words of a document of the segmenter [anySeg](https://crates.io/crates/anyseg), whose crate is `esmorph::anyseg`: `annotate` chooses the analysis of every word in the context of its sentence, and `annotate_without_context` as `analyze` orders them, more than ten times faster:
+With the feature `anyseg` the dictionary fills the columns of the words of a document of the segmenter [anySeg](https://crates.io/crates/anyseg), whose crate is `esmorph::anyseg`: `annotate` chooses the analysis of every word in the context of its sentence, and `annotate_without_context` as `analyze` orders them, about nine times faster:
 
 ```toml
 [dependencies]
-esmorph = { version = "0.2", features = ["anyseg"] }
+esmorph = { version = "0.3", features = ["anyseg"] }
 ```
 
 ```rust

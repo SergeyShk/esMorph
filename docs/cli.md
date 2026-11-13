@@ -4,7 +4,7 @@
 esmorph [options] [file ...]
 ```
 
-The command analyzes text from files or the standard input and writes lemmas, parts of speech and [Universal Dependencies](https://universaldependencies.org/) features in one of four formats. It is installed with the package (`pip install esmorph`) and also runs as `python -m esmorph`; without Python, `cargo install esmorph --features cli` installs it. Every word gets its most probable analysis in the context of its sentence, as [`annotate`](analyzer.md#annotate) gives it: the words of a multiword token are analyzed by the token. The Rust core analyzes and writes in one thread, about 100 thousand tokens per second, and over a million with `--no-context`.
+The command analyzes text from files or the standard input and writes lemmas, parts of speech and [Universal Dependencies](https://universaldependencies.org/) features in one of four formats. It is installed with the package (`pip install esmorph`) and also runs as `python -m esmorph`; without Python, `cargo install esmorph --features cli` installs it. Every word gets its most probable analysis in the context of its sentence, as [`annotate`](analyzer.md#annotate) gives it: the words of a multiword token are analyzed by the token. The Rust core analyzes and writes in one thread, about 160 thousand tokens per second, and 1.7 million with `--no-context`.
 
 ``` bash
 echo "Dime la verdad del caso." | esmorph

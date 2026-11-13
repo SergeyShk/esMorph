@@ -27,7 +27,7 @@ El componente se registra en spaCy al instalar el paquete y se añade por su nom
     'Case=Acc|Gender=Fem|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs'
     ```
 
-Con las palabras de referencia de las partes de prueba de los treebanks ([Comparación](comparison.md)), la categoría, los rasgos y el lema del componente aciertan a la vez para el 95.62, el 87.50 y el 89.50 % de las palabras de AnCora, PUD y COSER, frente al 95.92, el 83.59 y el 85.79 % de `es_core_news_sm`, y una cadena con solo el componente analiza 90 mil tokens por segundo frente a 45 mil.
+Con las palabras de referencia de las partes de prueba de los treebanks ([Comparación](comparison.md)), la categoría, los rasgos y el lema del componente aciertan a la vez para el 95.61, el 87.51 y el 89.56 % de las palabras de AnCora, PUD y COSER, frente al 95.92, el 83.59 y el 85.79 % de `es_core_news_sm`, y una cadena con solo el componente analiza 113 mil tokens por segundo frente a 50 mil.
 
 ## Modelos es_core_news { #models }
 

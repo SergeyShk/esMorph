@@ -4,7 +4,7 @@
 esmorph [opciones] [archivo ...]
 ```
 
-El comando analiza texto de archivos o de la entrada estándar y escribe los lemas, las categorías y los rasgos de [Universal Dependencies](https://universaldependencies.org/) en uno de cuatro formatos. Se instala con el paquete (`pip install esmorph`) y también se ejecuta como `python -m esmorph`; sin Python, lo instala `cargo install esmorph --features cli`. Cada palabra recibe su análisis más probable en el contexto de su oración, como lo da [`annotate`](analyzer.md#annotate): las palabras de un token multipalabra se analizan por el token. El núcleo en Rust analiza y escribe en un solo hilo, unos 100 mil tokens por segundo, y más de un millón con `--no-context`.
+El comando analiza texto de archivos o de la entrada estándar y escribe los lemas, las categorías y los rasgos de [Universal Dependencies](https://universaldependencies.org/) en uno de cuatro formatos. Se instala con el paquete (`pip install esmorph`) y también se ejecuta como `python -m esmorph`; sin Python, lo instala `cargo install esmorph --features cli`. Cada palabra recibe su análisis más probable en el contexto de su oración, como lo da [`annotate`](analyzer.md#annotate): las palabras de un token multipalabra se analizan por el token. El núcleo en Rust analiza y escribe en un solo hilo, unos 160 mil tokens por segundo, y 1.7 millones con `--no-context`.
 
 ``` bash
 echo "Dime la verdad del caso." | esmorph
