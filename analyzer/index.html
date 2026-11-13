@@ -349,6 +349,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../spacy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  spaCy
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -703,6 +722,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#analyze_sentence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Analyses of a sentence in context
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#lemmatize" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -851,6 +881,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    spaCy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -916,6 +973,17 @@
     <span class="md-ellipsis">
       
         Analyses of a list of word forms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#analyze_sentence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Analyses of a sentence in context
       
     </span>
   </a>
@@ -1140,6 +1208,51 @@
 </div>
 </div>
 <div class="metric-card">
+<h3 id="analyze_sentence">Analyses of a sentence in context<a class="headerlink" href="#analyze_sentence" title="Permanent link">&para;</a></h3>
+<p class="metric-meta"><code>analyze_sentence</code> · <code>list[list[Analysis]]</code></p>
+<div class="signature highlight"><pre><span></span><code><span class="n">analyze_sentence</span><span class="p">(</span><span class="n">words</span><span class="p">)</span>
+</code></pre></div>
+<p>The analyses of the tokens of a sentence, as <a href="#analyze"><code>analyze</code></a> gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and <code>prob</code> is its score in this sentence. The tokens are those of one sentence in order, as <code>analyze</code> takes them: a contraction (<code>del</code>) or a verb with clitics (<code>dámelo</code>) is one token. A sentence of one token is analyzed as <code>analyze</code>, and one longer than 256 tokens by parts of about 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Parameter</th>
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Default</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>words</code></td>
+<td style="text-align: left;"><code>Iterable[str]</code></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Tokens of the sentence: a list, a tuple, a generator</td>
+</tr>
+</tbody>
+</table>
+<p>Exceptions:</p>
+<ul>
+<li><code>TypeError</code> - a string or bytes instead of a collection of tokens, a token that is not a string;</li>
+<li><code>ValueError</code> - the dictionary has no context model.</li>
+</ul>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Code</label><label for="__tabbed_4_2">Result</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="n">sentence</span> <span class="o">=</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze_sentence</span><span class="p">([</span><span class="s2">"Ella"</span><span class="p">,</span> <span class="s2">"la"</span><span class="p">,</span> <span class="s2">"vio"</span><span class="p">])</span>
+<span class="p">[(</span><span class="n">analyses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">analyses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">analyses</span> <span class="ow">in</span> <span class="n">sentence</span><span class="p">]</span>
+<span class="p">[</span><span class="n">analysis</span><span class="o">.</span><span class="n">pos</span> <span class="k">for</span> <span class="n">analysis</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"la"</span><span class="p">)]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>[('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
+['DET', 'PRON', 'DET', 'NOUN']
+</code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="metric-card">
 <h3 id="lemmatize">Lemmatization<a class="headerlink" href="#lemmatize" title="Permanent link">&para;</a></h3>
 <p class="metric-meta"><code>lemmatize</code> · <code>list[str]</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">lemmatize</span><span class="p">(</span><span class="n">words</span><span class="p">)</span>
@@ -1167,7 +1280,7 @@
 <ul>
 <li><code>TypeError</code> - a string or bytes instead of a collection of words, a word that is not a string.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Code</label><label for="__tabbed_4_2">Result</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Code</label><label for="__tabbed_5_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">morph</span><span class="o">.</span><span class="n">lemmatize</span><span class="p">([</span><span class="s2">"Los"</span><span class="p">,</span> <span class="s2">"niños"</span><span class="p">,</span> <span class="s2">"cantaban"</span><span class="p">,</span> <span class="s2">"canciones"</span><span class="p">])</span>
@@ -1183,9 +1296,9 @@
 <div class="metric-card">
 <h3 id="annotate">Analysis of a document<a class="headerlink" href="#annotate" title="Permanent link">&para;</a></h3>
 <p class="metric-meta"><code>annotate</code> · <code>None</code></p>
-<div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+<div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>Fills the columns <code>lemma</code>, <code>upos</code> and <code>feats</code> of the words of a document of the <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> segmenter with the most probable analysis of every word, as <code>analyze</code> orders them; the earlier values of these columns are replaced. The words of a multiword token are analyzed by the token: <code>dime</code> split into <code>di</code> + <code>me</code> is the imperative of <code>decir</code> with the pronoun <code>me</code>, and clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the analysis of the whole token: <code>devuélvenos</code> is the imperative of <code>devolver</code>. A word without analyses gets its lower case as the lemma and the part of speech <code>X</code>. The method releases the GIL. esMorph does not depend on anySeg: the document is an <code>anyseg.Document</code> or an object with the same <code>column("form")</code>, <code>multiword_tokens</code> (a token has <code>text</code> and <code>words</code>, a word has <code>index</code>) and <code>set_columns</code>.</p>
+<p>Fills the columns <code>lemma</code>, <code>upos</code> and <code>feats</code> of the words of a document of the <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> segmenter with the most probable analysis of every word in the context of its sentence, as <a href="#analyze_sentence"><code>analyze_sentence</code></a> orders the analyses of its tokens; with <code>context=False</code>, as <code>analyze</code> orders them, about nine times faster. The earlier values of these columns are replaced. The words of a multiword token are analyzed by the token: <code>dime</code> split into <code>di</code> + <code>me</code> is the imperative of <code>decir</code> with the pronoun <code>me</code>, and clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the analysis of the whole token: <code>devuélvenos</code> is the imperative of <code>devolver</code>. A word without analyses gets its lower case as the lemma and the part of speech <code>X</code>. The method releases the GIL. esMorph does not depend on anySeg: the document is an <code>anyseg.Document</code> or an object with the same <code>column("form")</code>, <code>multiword_tokens</code> (a token has <code>text</code> and <code>words</code>, a word has <code>index</code>), <code>sentences</code> (a sentence has <code>words</code>) and <code>set_columns</code>; an object without <code>sentences</code> is one sentence, and with <code>context=False</code> they are not read.</p>
 <table>
 <thead>
 <tr>
@@ -1202,14 +1315,20 @@
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">Document of the segmenter (<code>pip install anyseg</code>)</td>
 </tr>
+<tr>
+<td style="text-align: left;"><code>context</code></td>
+<td style="text-align: left;"><code>bool</code></td>
+<td style="text-align: left;"><code>True</code></td>
+<td style="text-align: left;">Order the analyses by the context model</td>
+</tr>
 </tbody>
 </table>
 <p>Exceptions:</p>
 <ul>
-<li><code>ValueError</code> - the words of the multiword tokens are not consecutive words of the document in order;</li>
+<li><code>ValueError</code> - the words of the multiword tokens are not consecutive words of the document in order, the first words of the sentences are not words of the document in order, the analysis is in context and the dictionary has no context model;</li>
 <li><code>TypeError</code> - an object that is not a document, a form or the text of a token that is not a string, a token without <code>text</code> or <code>words</code>, a word without <code>index</code> or with an index that is not an integer.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Code</label><label for="__tabbed_5_2">Result</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Code</label><label for="__tabbed_6_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">anyseg</span><span class="w"> </span><span class="kn">import</span> <span class="n">Segmenter</span>
@@ -1217,10 +1336,17 @@
 <span class="n">document</span> <span class="o">=</span> <span class="n">Segmenter</span><span class="p">(</span><span class="s2">"es"</span><span class="p">)</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span><span class="s2">"Dime la verdad."</span><span class="p">)</span>
 <span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
 <span class="p">[(</span><span class="n">word</span><span class="o">.</span><span class="n">form</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">upos</span><span class="p">)</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">]</span>
+<span class="n">document</span> <span class="o">=</span> <span class="n">Segmenter</span><span class="p">(</span><span class="s2">"es"</span><span class="p">)</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span><span class="s2">"Ella la vio."</span><span class="p">)</span>
+<span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">upos</span>
+<span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+<span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">upos</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code>[('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+'DET'
+'PRON'
 </code></pre></div>
 </div>
 </div>
@@ -1254,7 +1380,7 @@
 <ul>
 <li><code>TypeError</code> - a word that is not a string.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Code</label><label for="__tabbed_6_2">Result</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Code</label><label for="__tabbed_7_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"Gatos"</span><span class="p">),</span> <span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"zumbeábamos"</span><span class="p">)</span>
@@ -1269,8 +1395,8 @@
 </div>
 <h2 id="dictionary">Dictionary<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
 <p>The dictionary of the package is built from the English <a href="https://en.wiktionary.org">Wiktionary</a> of October 2026: 676 thousand word forms of 117 thousand lexemes. Symbols of units (<code>km</code>, <code>kg</code>) come from a table of their own, and determiners, pronouns, prepositions, conjunctions and numerals in words from a table after the treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, whose conventions the lemmas and features follow (<a href="../analysis/#ud">Word analysis</a>). The probabilities of analyses come from the training parts of UD Spanish AnCora and <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> license.</p>
-<p>The property <code>dictionary_info</code> describes the dictionary of the analyzer: the source and its snapshot with its SHA-256, the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is <code>esmorph.DictionaryInfo</code>.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Code</label><label for="__tabbed_7_2">Result</label></div>
+<p>The property <code>dictionary_info</code> describes the dictionary of the analyzer: the source and its snapshot with its SHA-256, the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, for a dictionary with a context model the release and the treebanks of its training (<code>context</code>), the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is <code>esmorph.DictionaryInfo</code>, and of <code>context</code> - <code>esmorph.ContextInfo</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Code</label><label for="__tabbed_8_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">info</span> <span class="o">=</span> <span class="n">morph</span><span class="o">.</span><span class="n">dictionary_info</span>
@@ -1284,8 +1410,8 @@
 </div>
 </div>
 <h2 id="parallel">Threads and processes<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
-<p>One analyzer can be used from several threads. <code>lemmatize</code> and <code>annotate</code> release the GIL, so threads speed them up. <code>analyze_many</code> creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, <code>lemmatize</code> or processes are faster. The analyzer and analyses are pickled, so they work with <code>multiprocessing</code> and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone takes the dictionary of the package, and a damaged file raises <code>ValueError</code>. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but <code>forms()</code> gives an empty list and <code>inflect</code> raises <code>FormNotFoundError</code>.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Code</label><label for="__tabbed_8_2">Result</label></div>
+<p>One analyzer can be used from several threads. <code>lemmatize</code>, <code>analyze_sentence</code> and <code>annotate</code> release the GIL, so threads speed them up. <code>analyze_many</code> creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, <code>lemmatize</code> or processes are faster. The analyzer and analyses are pickled, so they work with <code>multiprocessing</code> and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone or of another version of the format takes the dictionary of the package, and a damaged file raises <code>ValueError</code>. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but <code>forms()</code> gives an empty list and <code>inflect</code> raises <code>FormNotFoundError</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="9:2"><input checked="checked" id="__tabbed_9_1" name="__tabbed_9" type="radio" /><input id="__tabbed_9_2" name="__tabbed_9" type="radio" /><div class="tabbed-labels"><label for="__tabbed_9_1">Code</label><label for="__tabbed_9_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>

@@ -349,6 +349,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../spacy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  spaCy
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -703,6 +722,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#analyze_sentence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Análisis de una oración en contexto
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#lemmatize" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -851,6 +881,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    spaCy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -916,6 +973,17 @@
     <span class="md-ellipsis">
       
         Análisis de una lista de formas
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#analyze_sentence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Análisis de una oración en contexto
       
     </span>
   </a>
@@ -1140,6 +1208,51 @@
 </div>
 </div>
 <div class="metric-card">
+<h3 id="analyze_sentence">Análisis de una oración en contexto<a class="headerlink" href="#analyze_sentence" title="Permanent link">&para;</a></h3>
+<p class="metric-meta"><code>analyze_sentence</code> · <code>list[list[Analysis]]</code></p>
+<div class="signature highlight"><pre><span></span><code><span class="n">analyze_sentence</span><span class="p">(</span><span class="n">words</span><span class="p">)</span>
+</code></pre></div>
+<p>Los análisis de los tokens de una oración, tal como los da <a href="#analyze"><code>analyze</code></a>, ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y <code>prob</code> es su puntuación en esta oración. Los tokens son los de una oración en orden, tal como los toma <code>analyze</code>: una contracción (<code>del</code>) o un verbo con clíticos (<code>dámelo</code>) es un solo token. Una oración de un token se analiza como con <code>analyze</code>, y una de más de 256 tokens, por partes de unos 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Parámetro</th>
+<th style="text-align: left;">Tipo</th>
+<th style="text-align: left;">Por defecto</th>
+<th style="text-align: left;">Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>words</code></td>
+<td style="text-align: left;"><code>Iterable[str]</code></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">Tokens de la oración: una lista, una tupla, un generador</td>
+</tr>
+</tbody>
+</table>
+<p>Excepciones:</p>
+<ul>
+<li><code>TypeError</code> - una cadena o bytes en lugar de una colección de tokens, un token que no es una cadena;</li>
+<li><code>ValueError</code> - el diccionario no tiene modelo de contexto.</li>
+</ul>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Código</label><label for="__tabbed_4_2">Resultado</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="n">sentence</span> <span class="o">=</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze_sentence</span><span class="p">([</span><span class="s2">"Ella"</span><span class="p">,</span> <span class="s2">"la"</span><span class="p">,</span> <span class="s2">"vio"</span><span class="p">])</span>
+<span class="p">[(</span><span class="n">analyses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">analyses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">analyses</span> <span class="ow">in</span> <span class="n">sentence</span><span class="p">]</span>
+<span class="p">[</span><span class="n">analysis</span><span class="o">.</span><span class="n">pos</span> <span class="k">for</span> <span class="n">analysis</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"la"</span><span class="p">)]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>[('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
+['DET', 'PRON', 'DET', 'NOUN']
+</code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="metric-card">
 <h3 id="lemmatize">Lematización<a class="headerlink" href="#lemmatize" title="Permanent link">&para;</a></h3>
 <p class="metric-meta"><code>lemmatize</code> · <code>list[str]</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">lemmatize</span><span class="p">(</span><span class="n">words</span><span class="p">)</span>
@@ -1167,7 +1280,7 @@
 <ul>
 <li><code>TypeError</code> - una cadena o bytes en lugar de una colección de palabras, una palabra que no es una cadena.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Código</label><label for="__tabbed_4_2">Resultado</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Código</label><label for="__tabbed_5_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">morph</span><span class="o">.</span><span class="n">lemmatize</span><span class="p">([</span><span class="s2">"Los"</span><span class="p">,</span> <span class="s2">"niños"</span><span class="p">,</span> <span class="s2">"cantaban"</span><span class="p">,</span> <span class="s2">"canciones"</span><span class="p">])</span>
@@ -1183,9 +1296,9 @@
 <div class="metric-card">
 <h3 id="annotate">Análisis de un documento<a class="headerlink" href="#annotate" title="Permanent link">&para;</a></h3>
 <p class="metric-meta"><code>annotate</code> · <code>None</code></p>
-<div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+<div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>Rellena las columnas <code>lemma</code>, <code>upos</code> y <code>feats</code> de las palabras de un documento del segmentador <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> con el análisis más probable de cada palabra, en el orden de <code>analyze</code>; los valores anteriores de estas columnas se sustituyen. Las palabras de un token multipalabra se analizan por el token: <code>dime</code> dividido en <code>di</code> + <code>me</code> es el imperativo de <code>decir</code> con el pronombre <code>me</code>, y los clíticos tras un verbo son pronombres. Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: <code>devuélvenos</code> es el imperativo de <code>devolver</code>. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría <code>X</code>. El método libera el GIL. esMorph no depende de anySeg: el documento es un <code>anyseg.Document</code> o un objeto con los mismos <code>column("form")</code>, <code>multiword_tokens</code> (un token tiene <code>text</code> y <code>words</code>, una palabra tiene <code>index</code>) y <code>set_columns</code>.</p>
+<p>Rellena las columnas <code>lemma</code>, <code>upos</code> y <code>feats</code> de las palabras de un documento del segmentador <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> con el análisis más probable de cada palabra en el contexto de su oración, en el orden en que <a href="#analyze_sentence"><code>analyze_sentence</code></a> ordena los análisis de sus tokens; con <code>context=False</code>, en el orden de <code>analyze</code>, unas nueve veces más rápido. Los valores anteriores de estas columnas se sustituyen. Las palabras de un token multipalabra se analizan por el token: <code>dime</code> dividido en <code>di</code> + <code>me</code> es el imperativo de <code>decir</code> con el pronombre <code>me</code>, y los clíticos tras un verbo son pronombres. Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: <code>devuélvenos</code> es el imperativo de <code>devolver</code>. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría <code>X</code>. El método libera el GIL. esMorph no depende de anySeg: el documento es un <code>anyseg.Document</code> o un objeto con los mismos <code>column("form")</code>, <code>multiword_tokens</code> (un token tiene <code>text</code> y <code>words</code>, una palabra tiene <code>index</code>), <code>sentences</code> (una oración tiene <code>words</code>) y <code>set_columns</code>; un objeto sin <code>sentences</code> es una sola oración, y con <code>context=False</code> no se leen.</p>
 <table>
 <thead>
 <tr>
@@ -1202,14 +1315,20 @@
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">Documento del segmentador (<code>pip install anyseg</code>)</td>
 </tr>
+<tr>
+<td style="text-align: left;"><code>context</code></td>
+<td style="text-align: left;"><code>bool</code></td>
+<td style="text-align: left;"><code>True</code></td>
+<td style="text-align: left;">Ordenar los análisis con el modelo de contexto</td>
+</tr>
 </tbody>
 </table>
 <p>Excepciones:</p>
 <ul>
-<li><code>ValueError</code> - las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden;</li>
+<li><code>ValueError</code> - las palabras de los tokens multipalabra no son palabras consecutivas del documento en orden, las primeras palabras de las oraciones no son palabras del documento en orden, el análisis es en contexto y el diccionario no tiene modelo de contexto;</li>
 <li><code>TypeError</code> - un objeto que no es un documento, una forma o el texto de un token que no es una cadena, un token sin <code>text</code> o <code>words</code>, una palabra sin <code>index</code> o con un índice que no es un entero.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Código</label><label for="__tabbed_5_2">Resultado</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Código</label><label for="__tabbed_6_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">anyseg</span><span class="w"> </span><span class="kn">import</span> <span class="n">Segmenter</span>
@@ -1217,10 +1336,17 @@
 <span class="n">document</span> <span class="o">=</span> <span class="n">Segmenter</span><span class="p">(</span><span class="s2">"es"</span><span class="p">)</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span><span class="s2">"Dime la verdad."</span><span class="p">)</span>
 <span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
 <span class="p">[(</span><span class="n">word</span><span class="o">.</span><span class="n">form</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">word</span><span class="o">.</span><span class="n">upos</span><span class="p">)</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">]</span>
+<span class="n">document</span> <span class="o">=</span> <span class="n">Segmenter</span><span class="p">(</span><span class="s2">"es"</span><span class="p">)</span><span class="o">.</span><span class="n">segment</span><span class="p">(</span><span class="s2">"Ella la vio."</span><span class="p">)</span>
+<span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">upos</span>
+<span class="n">morph</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+<span class="n">document</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">upos</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code>[('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+'DET'
+'PRON'
 </code></pre></div>
 </div>
 </div>
@@ -1254,7 +1380,7 @@
 <ul>
 <li><code>TypeError</code> - una palabra que no es una cadena.</li>
 </ul>
-<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Código</label><label for="__tabbed_6_2">Resultado</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Código</label><label for="__tabbed_7_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"Gatos"</span><span class="p">),</span> <span class="n">morph</span><span class="o">.</span><span class="n">is_known</span><span class="p">(</span><span class="s2">"zumbeábamos"</span><span class="p">)</span>
@@ -1269,8 +1395,8 @@
 </div>
 <h2 id="dictionary">Diccionario<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
 <p>El diccionario del paquete se crea a partir del <a href="https://en.wiktionary.org">Wiktionary</a> en inglés de octubre de 2026: 676 mil formas de palabra de 117 mil lexemas. Los símbolos de unidades (<code>km</code>, <code>kg</code>) vienen de una tabla propia, y los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras, de una tabla según el treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, cuyas convenciones siguen los lemas y los rasgos (<a href="../analysis/#ud">Análisis de palabras</a>). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
-<p>La propiedad <code>dictionary_info</code> describe el diccionario del analizador: la fuente y su instantánea con su SHA-256, la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es <code>esmorph.DictionaryInfo</code>.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Código</label><label for="__tabbed_7_2">Resultado</label></div>
+<p>La propiedad <code>dictionary_info</code> describe el diccionario del analizador: la fuente y su instantánea con su SHA-256, la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, para un diccionario con modelo de contexto la versión y los treebanks de su entrenamiento (<code>context</code>), el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es <code>esmorph.DictionaryInfo</code>, y el de <code>context</code>, <code>esmorph.ContextInfo</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Código</label><label for="__tabbed_8_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="n">info</span> <span class="o">=</span> <span class="n">morph</span><span class="o">.</span><span class="n">dictionary_info</span>
@@ -1284,8 +1410,8 @@
 </div>
 </div>
 <h2 id="parallel">Hilos y procesos<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
-<p>Un mismo analizador se puede usar desde varios hilos. <code>lemmatize</code> y <code>annotate</code> liberan el GIL, así que los hilos los aceleran. <code>analyze_many</code> crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, <code>lemmatize</code> o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con <code>multiprocessing</code> y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe toma el diccionario del paquete, y un archivo dañado lanza <code>ValueError</code>. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero <code>forms()</code> da una lista vacía e <code>inflect</code> lanza <code>FormNotFoundError</code>.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Código</label><label for="__tabbed_8_2">Resultado</label></div>
+<p>Un mismo analizador se puede usar desde varios hilos. <code>lemmatize</code>, <code>analyze_sentence</code> y <code>annotate</code> liberan el GIL, así que los hilos los aceleran. <code>analyze_many</code> crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, <code>lemmatize</code> o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con <code>multiprocessing</code> y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe o es de otra versión del formato toma el diccionario del paquete, y un archivo dañado lanza <code>ValueError</code>. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero <code>forms()</code> da una lista vacía e <code>inflect</code> lanza <code>FormNotFoundError</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="9:2"><input checked="checked" id="__tabbed_9_1" name="__tabbed_9" type="radio" /><input id="__tabbed_9_2" name="__tabbed_9" type="radio" /><div class="tabbed-labels"><label for="__tabbed_9_1">Código</label><label for="__tabbed_9_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>

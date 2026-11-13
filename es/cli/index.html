@@ -16,6 +16,8 @@
         <link rel="prev" href="../inflection/">
       
       
+        <link rel="next" href="../spacy/">
+      
       
         
           <link rel="alternate" href="../../cli/" hreflang="en">
@@ -341,6 +343,25 @@
     
   
   El comando esmorph
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../spacy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  spaCy
 
       </a>
     </li>
@@ -838,6 +859,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    spaCy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -981,7 +1029,7 @@
 <h1 id="el-comando-esmorph">El comando esmorph<a class="headerlink" href="#el-comando-esmorph" title="Permanent link">&para;</a></h1>
 <div class="highlight"><pre><span></span><code>esmorph<span class="w"> </span><span class="o">[</span>opciones<span class="o">]</span><span class="w"> </span><span class="o">[</span>archivo<span class="w"> </span>...<span class="o">]</span>
 </code></pre></div>
-<p>El comando analiza texto de archivos o de la entrada estándar y escribe los lemas, las categorías y los rasgos de <a href="https://universaldependencies.org/">Universal Dependencies</a> en uno de cuatro formatos. Se instala con el paquete (<code>pip install esmorph</code>) y también se ejecuta como <code>python -m esmorph</code>; sin Python, lo instala <code>cargo install esmorph --features cli</code>. Cada palabra recibe su análisis más probable, como lo da <a href="../analyzer/#annotate"><code>annotate</code></a>: las palabras de un token multipalabra se analizan por el token. El núcleo en Rust analiza y escribe en un solo hilo, cerca de un millón de tokens por segundo.</p>
+<p>El comando analiza texto de archivos o de la entrada estándar y escribe los lemas, las categorías y los rasgos de <a href="https://universaldependencies.org/">Universal Dependencies</a> en uno de cuatro formatos. Se instala con el paquete (<code>pip install esmorph</code>) y también se ejecuta como <code>python -m esmorph</code>; sin Python, lo instala <code>cargo install esmorph --features cli</code>. Cada palabra recibe su análisis más probable en el contexto de su oración, como lo da <a href="../analyzer/#annotate"><code>annotate</code></a>: las palabras de un token multipalabra se analizan por el token. El núcleo en Rust analiza y escribe en un solo hilo, unos 160 mil tokens por segundo, y 1.7 millones con <code>--no-context</code>.</p>
 <div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">"Dime la verdad del caso."</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>esmorph
 </code></pre></div>
 <div class="highlight"><pre><span></span><code>decir yo el verdad de el caso .
@@ -1012,6 +1060,11 @@
 <td style="text-align: left;">Un archivo de diccionario de esMorph, comprobado entero como con <a href="../analyzer/#parameters"><code>verify=True</code></a></td>
 </tr>
 <tr>
+<td style="text-align: left;"><code>--no-context</code></td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">Ordenar los análisis de una palabra como <a href="../analyzer/#analyze"><code>analyze</code></a>, sin el modelo de contexto: más rápido; para una lista de palabras y un diccionario sin modelo</td>
+</tr>
+<tr>
 <td style="text-align: left;"><code>-o</code>, <code>--output</code></td>
 <td style="text-align: left;">la salida estándar</td>
 <td style="text-align: left;">El archivo del resultado; <code>-</code> es la salida estándar</td>
@@ -1033,7 +1086,7 @@
 <h2 id="input">Entrada<a class="headerlink" href="#input" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>text</code> - texto: una línea en blanco termina un párrafo. Los tokens, sus palabras y las oraciones los encuentra el segmentador <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> según las convenciones de Universal Dependencies: <code>del</code> y <code>al</code> son dos palabras, y también un infinitivo o un gerundio con clíticos (<code>dárselo</code>) y los imperativos frecuentes (<code>dime</code>). Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: <code>devuélvenos</code> es el imperativo de <code>devolver</code>. Un párrafo de más de 256 KiB se analiza por partes que terminan en un límite de oración, así que la memoria no crece con la longitud de la entrada; sus oraciones pueden entonces diferir un poco de las del texto entero.</li>
-<li><code>tokens</code> - un token por línea, una línea en blanco separa las oraciones; los separadores alrededor del token y todo lo que sigue a una tabulación se ignoran, así que también sirve una tabla con el token en la primera columna. Un token es una palabra. Una oración sin línea en blanco se cierra tras 8192 tokens: para una lista de palabras el formato <code>tsv</code> da una línea por palabra.</li>
+<li><code>tokens</code> - un token por línea, una línea en blanco separa las oraciones; los separadores alrededor del token y todo lo que sigue a una tabulación se ignoran, así que también sirve una tabla con el token en la primera columna. Un token es una palabra. Una oración sin línea en blanco se cierra tras 8192 tokens. Las palabras de alrededor de un token cambian su análisis, así que una lista de palabras que no forman una oración se analiza con <code>--no-context</code> o con una línea en blanco tras cada palabra; el formato <code>tsv</code> da una línea por palabra.</li>
 <li><code>conllu</code> - <a href="https://universaldependencies.org/format.html">CoNLL-U</a>: se rellenan las columnas LEMMA, UPOS y FEATS, mientras que las demás columnas, los comentarios, los tokens multipalabra y los nodos vacíos quedan como están. Una oración no válida se escribe tal cual en el formato <code>conllu</code> y se omite en los demás, su línea va al mensaje de error, y el resto del archivo se analiza.</li>
 </ul>
 <div class="highlight"><pre><span></span><code><span class="nb">printf</span><span class="w"> </span><span class="s1">'1\tCasas\t_\t_\t_\t_\t0\troot\t_\t_\n2\tblancas\t_\t_\t_\t_\t1\tamod\t_\t_\n'</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>esmorph<span class="w"> </span>-i<span class="w"> </span>conllu<span class="w"> </span>-f<span class="w"> </span>conllu
@@ -1064,27 +1117,35 @@
 7   .   .   PUNCT   _   PunctType=Peri  _   _   _   _
 </code></pre></div>
 <h3 id="tsv">tsv<a class="headerlink" href="#tsv" title="Permanent link">&para;</a></h3>
-<p>La palabra, el lema, la categoría, los rasgos y la probabilidad del análisis separados por tabulaciones, sin encabezado; una línea en blanco separa las oraciones. La probabilidad de una palabra de un token multipalabra es su parte entre los análisis que encajan con el token: el verbo <code>di</code> de <code>dime</code> entre los análisis con estas palabras, el clítico <code>la</code> de <code>verla</code> entre los de un pronombre.</p>
+<p>La palabra, el lema, la categoría, los rasgos y la probabilidad del análisis separados por tabulaciones, sin encabezado (la probabilidad es la puntuación del modelo de contexto en la oración, como la da <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a>, y con <code>--no-context</code>, como la da <code>analyze</code>); una línea en blanco separa las oraciones. La probabilidad de una palabra de un token multipalabra es su parte entre los análisis que encajan con el token: el verbo <code>di</code> de <code>dime</code> entre los análisis con estas palabras, el clítico <code>la</code> de <code>verla</code> entre los de un pronombre.</p>
 <div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">"Dime la verdad."</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>esmorph<span class="w"> </span>-f<span class="w"> </span>tsv
 </code></pre></div>
 <div class="highlight"><pre><span></span><code>Di  decir   VERB    Mood=Imp|Number=Sing|Person=2|VerbForm=Fin  1
 me  yo  PRON    Case=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs 0.45766
-la  el  DET Definite=Def|Gender=Fem|Number=Sing|PronType=Art    0.9774450451099099
-verdad  verdad  NOUN    Gender=Fem|Number=Sing  0.999997
+la  el  DET Definite=Def|Gender=Fem|Number=Sing|PronType=Art    0.9989243733311355
+verdad  verdad  NOUN    Gender=Fem|Number=Sing  0.999981820943117
 .   .   PUNCT   PunctType=Peri  1
 </code></pre></div>
 <h3 id="jsonl">jsonl<a class="headerlink" href="#jsonl" title="Permanent link">&para;</a></h3>
-<p><a href="https://jsonlines.org/">JSON Lines</a>: una oración por línea - el texto (salvo con la entrada <code>tokens</code>) y los tokens con todos sus análisis, como los da <a href="../analyzer/#analyze"><code>analyze</code></a>: la palabra, el lema, la categoría, los rasgos, la probabilidad, las palabras del token y la <a href="../analysis/">fuente del análisis</a>. Abajo está la línea de una oración formateada para leerla.</p>
-<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">"Dime."</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>esmorph<span class="w"> </span>-f<span class="w"> </span>jsonl
+<p><a href="https://jsonlines.org/">JSON Lines</a>: una oración por línea - el texto (salvo con la entrada <code>tokens</code>) y los tokens con todos sus análisis, en el orden que les da <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> en la oración, y con <code>--no-context</code>, como los da <a href="../analyzer/#analyze"><code>analyze</code></a>: la palabra, el lema, la categoría, los rasgos, la probabilidad, las palabras del token y la <a href="../analysis/">fuente del análisis</a>. Abajo está la línea de una oración formateada para leerla.</p>
+<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">"Vino ayer."</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>esmorph<span class="w"> </span>-f<span class="w"> </span>jsonl
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">"text"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Dime."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"text"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Vino ayer."</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"tokens"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">    </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Dime"</span><span class="p">,</span><span class="w"> </span><span class="nt">"analyses"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Dime"</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Dime"</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PROPN"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
-<span class="w">       </span><span class="nt">"prob"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.9375</span><span class="p">,</span><span class="w"> </span><span class="nt">"words"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"Dime"</span><span class="p">],</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"rule"</span><span class="p">},</span>
-<span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"dime"</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"decir"</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"VERB"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"Mood"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Imp"</span><span class="p">,</span><span class="w"> </span><span class="nt">"Number"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Sing"</span><span class="p">,</span><span class="w"> </span><span class="nt">"Person"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2"</span><span class="p">,</span><span class="w"> </span><span class="nt">"VerbForm"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Fin"</span><span class="p">},</span>
-<span class="w">       </span><span class="nt">"prob"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0625</span><span class="p">,</span><span class="w"> </span><span class="nt">"words"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"di"</span><span class="p">,</span><span class="w"> </span><span class="s2">"me"</span><span class="p">],</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"clitics"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Vino"</span><span class="p">,</span><span class="w"> </span><span class="nt">"analyses"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vino"</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"venir"</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"VERB"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"Mood"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Ind"</span><span class="p">,</span><span class="w"> </span><span class="nt">"Number"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Sing"</span><span class="p">,</span><span class="w"> </span><span class="nt">"Person"</span><span class="p">:</span><span class="w"> </span><span class="s2">"3"</span><span class="p">,</span><span class="w"> </span><span class="nt">"Tense"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Past"</span><span class="p">,</span><span class="w"> </span><span class="nt">"VerbForm"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Fin"</span><span class="p">},</span>
+<span class="w">       </span><span class="nt">"prob"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.8093463865008943</span><span class="p">,</span><span class="w"> </span><span class="nt">"words"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"vino"</span><span class="p">],</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"dictionary"</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vino"</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"vino"</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NOUN"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"Gender"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Masc"</span><span class="p">,</span><span class="w"> </span><span class="nt">"Number"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Sing"</span><span class="p">},</span>
+<span class="w">       </span><span class="nt">"prob"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.16867937111012504</span><span class="p">,</span><span class="w"> </span><span class="nt">"words"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"vino"</span><span class="p">],</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"dictionary"</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Vino"</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Vino"</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PROPN"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<span class="w">       </span><span class="nt">"prob"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.021974242388980627</span><span class="p">,</span><span class="w"> </span><span class="nt">"words"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"Vino"</span><span class="p">],</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"rule"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">]},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ayer"</span><span class="p">,</span><span class="w"> </span><span class="nt">"analyses"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ayer"</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ayer"</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ADV"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<span class="w">       </span><span class="nt">"prob"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.9995206355999463</span><span class="p">,</span><span class="w"> </span><span class="nt">"words"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"ayer"</span><span class="p">],</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"dictionary"</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ayer"</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ayer"</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"NOUN"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"Gender"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Masc"</span><span class="p">,</span><span class="w"> </span><span class="nt">"Number"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Sing"</span><span class="p">},</span>
+<span class="w">       </span><span class="nt">"prob"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0004793644000537769</span><span class="p">,</span><span class="w"> </span><span class="nt">"words"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"ayer"</span><span class="p">],</span><span class="w"> </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"dictionary"</span><span class="p">}</span>
 <span class="w">    </span><span class="p">]},</span>
 <span class="w">    </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"."</span><span class="p">,</span><span class="w"> </span><span class="nt">"analyses"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">      </span><span class="p">{</span><span class="nt">"word"</span><span class="p">:</span><span class="w"> </span><span class="s2">"."</span><span class="p">,</span><span class="w"> </span><span class="nt">"lemma"</span><span class="p">:</span><span class="w"> </span><span class="s2">"."</span><span class="p">,</span><span class="w"> </span><span class="nt">"pos"</span><span class="p">:</span><span class="w"> </span><span class="s2">"PUNCT"</span><span class="p">,</span><span class="w"> </span><span class="nt">"feats"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"PunctType"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Peri"</span><span class="p">},</span>
@@ -1112,7 +1173,7 @@ verdad  verdad  NOUN    Gender=Fem|Number=Sing  0.999997
 </tr>
 <tr>
 <td style="text-align: left;">1</td>
-<td style="text-align: left;">El diccionario no se puede leer o está dañado, el archivo de salida no se puede crear, el archivo de salida o la salida estándar es un archivo de entrada o el diccionario; no se analiza nada</td>
+<td style="text-align: left;">El diccionario no se puede leer o está dañado, no tiene modelo de contexto y no se da <code>--no-context</code>, el archivo de salida no se puede crear, el archivo de salida o la salida estándar es un archivo de entrada o el diccionario; no se analiza nada</td>
 </tr>
 <tr>
 <td style="text-align: left;">1</td>

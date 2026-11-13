@@ -349,6 +349,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../spacy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  spaCy
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -823,6 +842,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    spaCy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1002,7 +1048,7 @@
 <tr>
 <td style="text-align: left;"><code>prob</code></td>
 <td style="text-align: left;"><code>float</code></td>
-<td style="text-align: left;">Share of the analysis among the analyses of the word; it sums to 1 over all of them</td>
+<td style="text-align: left;">Share of the analysis among the analyses of the word; it sums to 1 over all of them. From <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> - the score of the context model in the sentence</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>words</code></td>
@@ -1028,7 +1074,7 @@
 </ul>
 <p>If the part of speech of a word depends on context, the word has both analyses: <code>que</code> is <code>PRON</code> and <code>SCONJ</code>, <code>la</code> is <code>DET</code> and <code>PRON</code>, a participle is <code>VERB</code> and <code>ADJ</code>. Features: gender, number, person, tense, mood, verb form, degree, negation (<code>Polarity=Neg</code> of <code>no</code>), definiteness (<code>Definite</code>), the type of a pronoun or a determiner (<code>PronType</code>), possessiveness (<code>Poss</code>), reflexivity (<code>Reflex</code>), the case of personal pronouns (<code>Case</code>) and whether they follow a preposition (<code>PrepCase</code>), politeness (<code>Polite=Form</code> of <code>usted</code>), the type of a numeral (<code>NumType</code>) and how it is written (<code>NumForm</code>), and the kind of a sign of punctuation (<code>PunctType</code>, <code>PunctSide</code>).</p>
 <h2 id="order">Order of analyses<a class="headerlink" href="#order" title="Permanent link">&para;</a></h2>
-<p>Analyses go from the most probable to the least. <code>prob</code> is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features, and a word goes before its older spelling with other accents: <code>á</code> is first of all <code>a</code>, <code>tambien</code> is <code>también</code>.</p>
+<p>Analyses go from the most probable to the least. <code>prob</code> is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features, and a word goes before its older spelling with other accents: <code>á</code> is first of all <code>a</code>, <code>tambien</code> is <code>también</code>. <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> orders the same analyses by the sentence.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Code</label><label for="__tabbed_2_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">

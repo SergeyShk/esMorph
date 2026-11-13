@@ -349,6 +349,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../spacy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  spaCy
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -714,6 +733,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    spaCy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -771,12 +817,12 @@
 <tr>
 <td style="text-align: left;"><code>ValueError</code></td>
 <td style="text-align: left;">-</td>
-<td style="text-align: left;">The feature or the value is not in the dictionary (<code>inflect</code>); the file is not an esMorph dictionary or is damaged, with <code>verify=True</code> a deliberately crafted file too, the path has a NUL character (<a href="../analyzer/"><code>Analyzer</code></a>); the words of the multiword tokens are not consecutive words of the document in order (<a href="../analyzer/#annotate"><code>annotate</code></a>)</td>
+<td style="text-align: left;">The feature or the value is not in the dictionary (<code>inflect</code>); the file is not an esMorph dictionary or is damaged, with <code>verify=True</code> a deliberately crafted file too, the path has a NUL character (<a href="../analyzer/"><code>Analyzer</code></a>); the dictionary has no context model or its model is damaged (<a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a>, <code>annotate</code> in context); the words of the multiword tokens are not consecutive words of the document in order, the first words of the sentences are not words of the document in order (<a href="../analyzer/#annotate"><code>annotate</code></a>)</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>TypeError</code></td>
 <td style="text-align: left;">-</td>
-<td style="text-align: left;">An argument of the wrong type: a word or a feature value that is not a string, a string or bytes instead of a collection of words (<a href="../analyzer/#analyze_many"><code>analyze_many</code></a>, <a href="../analyzer/#lemmatize"><code>lemmatize</code></a>), a dictionary path that is neither a string nor <code>PathLike</code>, <code>verify</code> that is not <code>bool</code> (<code>Analyzer</code>); an object that is not a document, a form or the text of a token that is not a string, the index of a word that is not an integer (<code>annotate</code>)</td>
+<td style="text-align: left;">An argument of the wrong type: a word or a feature value that is not a string, a string or bytes instead of a collection of words (<a href="../analyzer/#analyze_many"><code>analyze_many</code></a>, <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a>, <a href="../analyzer/#lemmatize"><code>lemmatize</code></a>), a dictionary path that is neither a string nor <code>PathLike</code>, <code>verify</code> that is not <code>bool</code> (<code>Analyzer</code>); an object that is not a document, a form or the text of a token that is not a string, the index of a word that is not an integer, a sentence without words (<code>annotate</code>)</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>FileNotFoundError</code></td>

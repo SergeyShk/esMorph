@@ -349,6 +349,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../spacy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  spaCy
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -862,6 +881,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    spaCy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1020,12 +1066,12 @@
 
 
 <h1 id="comparacion">Comparación<a class="headerlink" href="#comparacion" title="Permanent link">&para;</a></h1>
-<p>esMorph analiza una palabra sin contexto y da todos sus análisis, primero el más probable. Su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD y que el de spaCy <code>es_core_news_sm</code> en PUD y COSER, y su primer análisis tiene los rasgos de UD correctos más a menudo que ambos etiquetadores en PUD; un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 96-99 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 1.7 millones de tokens por segundo, 39 veces más rápido que spaCy y 659 veces más rápido que Stanza, responde a un texto corto junto con la carga en 3.2 ms, y cada proceso más con el mismo diccionario añade 3.5 MB de memoria.</p>
+<p>esMorph da todos los análisis de una palabra, primero el más probable, y los ordena según la oración con su modelo de contexto. En contexto su primer análisis tiene la categoría, los rasgos y el lema correctos a la vez para el 95.67 % de las palabras de AnCora, casi tan a menudo como spaCy <code>es_core_news_sm</code>, entrenado con él (95.92 %), y más a menudo que spaCy y Stanza en PUD y COSER, nuevos para todos ellos; su lema acierta más a menudo que el de cualquier otro sistema en AnCora y COSER. Sin contexto su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD, y un análisis con la categoría y el lema correctos está entre sus análisis para el 96-99 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 177 mil tokens por segundo en contexto, 3.5 veces más rápido que spaCy, y 1.9 millones sin él, responde a un texto corto junto con la carga en 3.0 ms, y cada proceso más con el mismo diccionario añade 3.6 MB de memoria.</p>
 <h2 id="quality">Calidad<a class="headerlink" href="#quality" title="Permanent link">&para;</a></h2>
-<p>El estándar de referencia son las partes de prueba de los treebanks <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">GSD</a>, <a href="https://github.com/UniversalDependencies/UD_Spanish-PUD">PUD</a> y <a href="https://github.com/UniversalDependencies/UD_Spanish-COSER">COSER</a> de la versión UD 2.18: noticias, textos de la web, oraciones traducidas de Wikipedia y habla rural. Cada sistema recibe sus palabras de referencia, con <code>del</code> como <code>de</code> y <code>el</code> y un verbo aparte de sus clíticos; los signos de puntuación no se cuentan, y los lemas se comparan sin distinguir mayúsculas. Los lemas y los rasgos de GSD están asignados automáticamente, así que en él solo se compara la categoría gramatical. Los treebanks siguen convenciones distintas, así que hay que comparar los sistemas en un mismo conjunto, y no los conjuntos entre sí.</p>
-<p>AnCora es el conjunto propio de los etiquetadores y de esMorph: spaCy <code>es_core_news_sm</code> está entrenado con AnCora, el modelo por defecto de Stanza con AnCora y GSD, y esMorph toma sus convenciones y las frecuencias de sus análisis de las partes de entrenamiento de AnCora y GSD. PUD y COSER son nuevos para todos ellos.</p>
+<p>El estándar de referencia son las partes de prueba de los treebanks <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">GSD</a>, <a href="https://github.com/UniversalDependencies/UD_Spanish-PUD">PUD</a> y <a href="https://github.com/UniversalDependencies/UD_Spanish-COSER">COSER</a> de la versión UD 2.18: noticias, textos de la web, oraciones traducidas de Wikipedia y habla rural. Cada sistema recibe sus palabras de referencia, con <code>del</code> como <code>de</code> y <code>el</code> y un verbo aparte de sus clíticos, y esMorph en contexto recibe los tokens de una oración, un token multipalabra con sus palabras, como <a href="../analyzer/#annotate"><code>annotate</code></a> toma un documento; los signos de puntuación no se cuentan, y los lemas se comparan sin distinguir mayúsculas. Los lemas y los rasgos de GSD están asignados automáticamente, así que en él solo se compara la categoría gramatical. Los treebanks siguen convenciones distintas, así que hay que comparar los sistemas en un mismo conjunto, y no los conjuntos entre sí.</p>
+<p>AnCora es el conjunto propio de los etiquetadores y de esMorph: spaCy <code>es_core_news_sm</code> está entrenado con AnCora, el modelo por defecto de Stanza con AnCora y GSD, y esMorph toma sus convenciones, las frecuencias de sus análisis y su modelo de contexto de las partes de entrenamiento de AnCora y GSD. PUD y COSER son nuevos para todos ellos.</p>
 <h3 id="lemma">Lema<a class="headerlink" href="#lemma" title="Permanent link">&para;</a></h3>
-<p>La proporción de palabras con el lema correcto, %; para esMorph, el lema del primer análisis, y para una palabra sin análisis, la palabra en minúsculas, como la da <a href="../analyzer/#lemmatize"><code>lemmatize</code></a>:</p>
+<p>La proporción de palabras con el lema correcto, %; para esMorph, el lema del primer análisis, y para una palabra sin análisis, la palabra en minúsculas, como la da <a href="../analyzer/#lemmatize"><code>lemmatize</code></a>, y en contexto, el lema del análisis que elige <a href="../analyzer/#annotate"><code>annotate</code></a>:</p>
 <table>
 <thead>
 <tr>
@@ -1043,6 +1089,12 @@
 <td style="text-align: left;">94.49</td>
 </tr>
 <tr>
+<td style="text-align: left;">esMorph en contexto</td>
+<td style="text-align: left;"><strong>99.29</strong></td>
+<td style="text-align: left;">97.71</td>
+<td style="text-align: left;"><strong>95.66</strong></td>
+</tr>
+<tr>
 <td style="text-align: left;">simplemma</td>
 <td style="text-align: left;">96.94</td>
 <td style="text-align: left;">96.96</td>
@@ -1056,15 +1108,15 @@
 </tr>
 <tr>
 <td style="text-align: left;">Stanza</td>
-<td style="text-align: left;"><strong>99.16</strong></td>
+<td style="text-align: left;">99.16</td>
 <td style="text-align: left;"><strong>97.80</strong></td>
-<td style="text-align: left;"><strong>94.98</strong></td>
+<td style="text-align: left;">94.98</td>
 </tr>
 </tbody>
 </table>
 <p>simplemma solo da un lema, de un diccionario sin categorías gramaticales.</p>
 <h3 id="tags">Categoría y rasgos<a class="headerlink" href="#tags" title="Permanent link">&para;</a></h3>
-<p>Los etiquetadores eligen el análisis según la oración. esMorph no ve la oración, así que para una palabra como <code>que</code>, <code>la</code> o <code>como</code> su primer análisis es el más frecuente; aun así, en los conjuntos nuevos para los etiquetadores sus rasgos aciertan más a menudo que los de ellos en PUD y tan a menudo como los de spaCy en COSER.</p>
+<p>Los etiquetadores y esMorph en contexto eligen el análisis según la oración; sin contexto el primer análisis de esMorph para una palabra como <code>que</code>, <code>la</code> o <code>como</code> es el más frecuente. En PUD el análisis sin contexto acierta un poco más a menudo que en contexto: el modelo de contexto aprende las convenciones de AnCora, y PUD etiqueta de otro modo las palabras de los nombres y los participios.</p>
 <p>La proporción de palabras con la categoría gramatical correcta, con los rasgos correctos (género, número, persona, tiempo, modo, forma verbal; en los nombres propios y los numerales no se comparan, PUD les da género y número) y con todo junto con el lema, %; para esMorph, el primer análisis, y el oráculo: al menos uno de sus análisis tiene la categoría y el lema correctos:</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:4"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">AnCora</label><label for="__tabbed_1_2">PUD</label><label for="__tabbed_1_3">COSER</label><label for="__tabbed_1_4">GSD</label></div>
 <div class="tabbed-content">
@@ -1086,6 +1138,13 @@
 <td style="text-align: left;">96.14</td>
 <td style="text-align: left;">90.05</td>
 <td style="text-align: left;">98.94</td>
+</tr>
+<tr>
+<td style="text-align: left;">esMorph en contexto</td>
+<td style="text-align: left;">97.77</td>
+<td style="text-align: left;">97.20</td>
+<td style="text-align: left;">95.67</td>
+<td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">spaCy es_core_news_sm</td>
@@ -1124,6 +1183,13 @@
 <td style="text-align: left;">97.19</td>
 </tr>
 <tr>
+<td style="text-align: left;">esMorph en contexto</td>
+<td style="text-align: left;">92.15</td>
+<td style="text-align: left;">90.94</td>
+<td style="text-align: left;">87.52</td>
+<td style="text-align: left;">-</td>
+</tr>
+<tr>
 <td style="text-align: left;">spaCy es_core_news_sm</td>
 <td style="text-align: left;">90.31</td>
 <td style="text-align: left;">88.38</td>
@@ -1160,6 +1226,13 @@
 <td style="text-align: left;">96.41</td>
 </tr>
 <tr>
+<td style="text-align: left;">esMorph en contexto</td>
+<td style="text-align: left;">92.83</td>
+<td style="text-align: left;"><strong>94.74</strong></td>
+<td style="text-align: left;"><strong>89.76</strong></td>
+<td style="text-align: left;">-</td>
+</tr>
+<tr>
 <td style="text-align: left;">spaCy es_core_news_sm</td>
 <td style="text-align: left;">90.00</td>
 <td style="text-align: left;">93.14</td>
@@ -1169,8 +1242,8 @@
 <tr>
 <td style="text-align: left;">Stanza</td>
 <td style="text-align: left;"><strong>93.60</strong></td>
-<td style="text-align: left;"><strong>94.64</strong></td>
-<td style="text-align: left;"><strong>89.16</strong></td>
+<td style="text-align: left;">94.64</td>
+<td style="text-align: left;">89.16</td>
 <td style="text-align: left;">-</td>
 </tr>
 </tbody>
@@ -1188,6 +1261,10 @@
 <tr>
 <td style="text-align: left;">esMorph</td>
 <td style="text-align: left;">92.43</td>
+</tr>
+<tr>
+<td style="text-align: left;">esMorph en contexto</td>
+<td style="text-align: left;">92.58</td>
 </tr>
 <tr>
 <td style="text-align: left;">spaCy es_core_news_sm</td>
@@ -1239,7 +1316,7 @@
 <h3 id="text">Análisis de un texto<a class="headerlink" href="#text" title="Permanent link">&para;</a></h3>
 <p>El tiempo de análisis de un texto junto con la importación y la carga del sistema en un proceso nuevo, en segundos; ambos ejes en escala logarítmica:</p>
 <p><img alt="Tiempo de análisis de un texto con la carga según su tamaño" src="../img/speed.svg" /></p>
-<p>En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3.2 ms, simplemma en 0.37 s, spaCy en 0.89 s y Stanza en 1.8 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:</p>
+<p>En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3.0 ms y en 4.9 ms en contexto, simplemma en 0.33 s, spaCy en 0.81 s y Stanza en 1.7 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:</p>
 <table>
 <thead>
 <tr>
@@ -1250,23 +1327,27 @@
 <tbody>
 <tr>
 <td style="text-align: left;">simplemma, solo lemas</td>
-<td style="text-align: left;">2 516 195</td>
+<td style="text-align: left;">2 455 730</td>
 </tr>
 <tr>
 <td style="text-align: left;">esMorph</td>
-<td style="text-align: left;">1 744 647</td>
+<td style="text-align: left;">1 877 869</td>
+</tr>
+<tr>
+<td style="text-align: left;">esMorph en contexto</td>
+<td style="text-align: left;">177 200</td>
 </tr>
 <tr>
 <td style="text-align: left;">spaCy es_core_news_sm</td>
-<td style="text-align: left;">44 659</td>
+<td style="text-align: left;">50 175</td>
 </tr>
 <tr>
 <td style="text-align: left;">Stanza</td>
-<td style="text-align: left;">2649</td>
+<td style="text-align: left;">3171</td>
 </tr>
 </tbody>
 </table>
-<p>esMorph da todos los análisis de una palabra, con rasgos y probabilidades; su lematización sola es casi tan rápida como simplemma, véase <a href="#operations">Operaciones</a>.</p>
+<p>esMorph da todos los análisis de una palabra, con rasgos y probabilidades; su lematización sola es casi tan rápida como simplemma, véase <a href="#operations">Operaciones</a>. En una cadena de spaCy el <a href="../spacy/">componente</a> analiza 112 817 tokens por segundo, y con las palabras de referencia su categoría, sus rasgos y su lema aciertan a la vez para el 95.61, el 87.51 y el 89.56 % de las palabras de AnCora, PUD y COSER.</p>
 <h3 id="operations">Operaciones<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h3>
 <p>Miles de palabras, análisis o tablas por segundo; más es mejor:</p>
 <table>
@@ -1282,56 +1363,63 @@
 <tbody>
 <tr>
 <td style="text-align: left;">Análisis de una forma de palabra: <code>analyze</code> en un bucle</td>
-<td style="text-align: left;">1007</td>
+<td style="text-align: left;">1005</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Análisis de una lista: <code>analyze_many</code></td>
-<td style="text-align: left;">1694</td>
+<td style="text-align: left;">1718</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">-</td>
+</tr>
+<tr>
+<td style="text-align: left;">Análisis de oraciones en contexto: <code>analyze_sentence</code>, tokens</td>
+<td style="text-align: left;">157</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Lematización: <code>lemmatize</code>, <code>lemmatize(word, lang="es")</code></td>
-<td style="text-align: left;">1944</td>
-<td style="text-align: left;">2081</td>
+<td style="text-align: left;">1941</td>
+<td style="text-align: left;">2107</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Lematización en 4 hilos: <code>lemmatize</code></td>
-<td style="text-align: left;">6055</td>
+<td style="text-align: left;">6541</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Forma de un sustantivo o un adjetivo: <code>inflect(Number="Plur")</code></td>
-<td style="text-align: left;">1492</td>
+<td style="text-align: left;">1594</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Forma de un verbo: <code>inflect(Mood="Sub", Tense="Pres", Person="1", Number="Sing")</code></td>
-<td style="text-align: left;">576</td>
+<td style="text-align: left;">607</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">-</td>
 </tr>
 <tr>
 <td style="text-align: left;">Tabla de conjugación: <code>forms()</code>, <code>conjugate(lemma)</code></td>
-<td style="text-align: left;">111</td>
+<td style="text-align: left;">116</td>
 <td style="text-align: left;">-</td>
 <td style="text-align: left;">1.7</td>
-<td style="text-align: left;">0.9</td>
+<td style="text-align: left;">0.8</td>
 </tr>
 </tbody>
 </table>
-<p>simplemma guarda sus respuestas en una caché: con la caché llena por una pasada anterior sobre las mismas palabras lematiza 5.0 millones de palabras por segundo. ablaut y verbecc construyen una forma solo como parte de la tabla entera. <code>lemmatize</code> libera el GIL, así que los hilos que comparten un analizador trabajan en paralelo.</p>
+<p>simplemma guarda sus respuestas en una caché: con la caché llena por una pasada anterior sobre las mismas palabras lematiza 4.7 millones de palabras por segundo. ablaut y verbecc construyen una forma solo como parte de la tabla entera. <code>lemmatize</code> libera el GIL, así que los hilos que comparten un analizador trabajan en paralelo.</p>
 <h2 id="memory">Carga y memoria<a class="headerlink" href="#memory" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1346,34 +1434,34 @@
 <tbody>
 <tr>
 <td style="text-align: left;">Importación y carga</td>
-<td style="text-align: left;">3.0 ms</td>
-<td style="text-align: left;">0.34 s</td>
-<td style="text-align: left;">0.97 s</td>
-<td style="text-align: left;">1.8 s</td>
+<td style="text-align: left;">3.2 ms</td>
+<td style="text-align: left;">0.38 s</td>
+<td style="text-align: left;">0.95 s</td>
+<td style="text-align: left;">1.9 s</td>
 </tr>
 <tr>
 <td style="text-align: left;">Aumento de la memoria del proceso</td>
-<td style="text-align: left;">10.7 MB</td>
+<td style="text-align: left;">10.1 MB</td>
 <td style="text-align: left;">131 MB</td>
-<td style="text-align: left;">304 MB</td>
+<td style="text-align: left;">305 MB</td>
 <td style="text-align: left;">578 MB</td>
 </tr>
 <tr>
 <td style="text-align: left;">Cada proceso más</td>
-<td style="text-align: left;">3.5 MB</td>
+<td style="text-align: left;">3.6 MB</td>
 <td style="text-align: left;">129 MB</td>
-<td style="text-align: left;">360 MB</td>
+<td style="text-align: left;">359 MB</td>
 <td style="text-align: left;">1.6 GB</td>
 </tr>
 </tbody>
 </table>
-<p>El archivo del diccionario de esMorph se proyecta en memoria, así que los procesos de <code>multiprocessing</code> o joblib y los workers de un servidor web lo comparten: la mayor parte de los 10.7 MB del primer proceso es el diccionario, y cada proceso más añade solo sus propias tablas y análisis.</p>
+<p>El archivo del diccionario de esMorph se proyecta en memoria, así que los procesos de <code>multiprocessing</code> o joblib y los workers de un servidor web lo comparten: la mayor parte de los 10.1 MB del primer proceso es el diccionario, y cada proceso más añade solo sus propias tablas y análisis. El modelo de contexto se lee en el primer análisis de una oración: unos 2 ms y 4 MB más.</p>
 <h2 id="method">Cómo se midió<a class="headerlink" href="#method" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Calidad, flexión y análisis de un texto: el script <a href="https://github.com/SergeyShk/esMorph/blob/master/scripts/compare.py"><code>scripts/compare.py</code></a>, <code>uv run scripts/compare.py target/compare --chart docs/img/speed.svg</code>. Instala los sistemas en un entorno aparte con las versiones de todos los paquetes fijadas en <code>scripts/compare.py.lock</code> (esMorph, la versión de ese archivo o un paquete con <code>uv run --with dist/esmorph-*.whl</code>, como para esta página), descarga las partes de prueba de los treebanks y el modelo de Stanza comprobando sus sumas de control antes de medir y analiza las palabras de referencia. Flexión: los 5939, 2893 y 1237 verbos de AnCora, PUD y COSER cuyo lema es un infinitivo, sin erratas ni palabras extranjeras.</li>
-<li>Versiones: Python 3.11, esMorph 0.2.0, simplemma 2.0.0, spaCy 3.8.16 con el modelo es_core_news_sm 3.8.0 sin el analizador sintáctico ni NER, Stanza 1.15.0 con el modelo por defecto en la CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (el paquete no trae modelo y entrena uno en la primera ejecución, así que sus cifras varían hasta en 0.2 entre instalaciones). Ordenador: Apple M3 Pro, macOS 26, con otras aplicaciones abiertas (carga media de 4-6), así que las velocidades indican el orden de magnitud.</li>
-<li>Velocidad del análisis de un texto: los 53 622 tokens de la parte de prueba de AnCora con la puntuación; tokens por segundo, el mejor de dos análisis de la parte entera después de la carga; puntos del gráfico, la mejor de tres ejecuciones de la importación, la carga y el análisis de los primeros 10-50 000 tokens en un proceso nuevo. Solo se mide la llamada al sistema: esMorph, <code>analyze_many</code> de todas las palabras; simplemma, <code>lemmatize</code> de cada palabra con la caché vacía; spaCy, <code>nlp.pipe</code> de las oraciones; Stanza, el texto entero. esMorph y simplemma trabajan en un hilo, spaCy y Stanza con su configuración por defecto.</li>
-<li>Operaciones: 47 288 palabras de la parte de prueba de AnCora sin la puntuación, la mejor de tres pasadas en un hilo, salvo la fila con hilos; verbos, los lexemas de los 4634 verbos de referencia cuyo lema es un infinitivo (verbecc, los primeros 2000, una pasada). Carga y memoria: la importación, la creación del analizador y el primer análisis, el aumento de la memoria residente del proceso (<code>ps -o rss</code>), la mediana de tres ejecuciones; cada proceso más, el aumento de la memoria que el proceso no comparte con otros (USS) en cada uno de cuatro procesos de <code>multiprocessing</code> que cargan el sistema y analizan 200 oraciones.</li>
+<li>Calidad, flexión y análisis de un texto: el script <a href="https://github.com/SergeyShk/esMorph/blob/master/scripts/compare.py"><code>scripts/compare.py</code></a>, <code>uv run scripts/compare.py target/compare --chart docs/img/speed.svg</code>. Instala los sistemas en un entorno aparte con las versiones de todos los paquetes fijadas en <code>scripts/compare.py.lock</code> (esMorph, la versión de ese archivo o un paquete con <code>uv run --with dist/esmorph-*.whl</code>, como para esta página), descarga las partes de prueba de los treebanks y el modelo de Stanza comprobando sus sumas de control antes de medir y analiza las palabras de referencia; esMorph en contexto anota un documento de los tokens de referencia, con las palabras de los tokens multipalabra y las oraciones de referencia, y spaCy con esmorph es <code>spacy.blank("es")</code> con solo el componente, un documento de las palabras de referencia por oración de referencia. Flexión: los 5939, 2893 y 1237 verbos de AnCora, PUD y COSER cuyo lema es un infinitivo, sin erratas ni palabras extranjeras.</li>
+<li>Versiones: Python 3.11, esMorph 0.3.0, simplemma 2.0.0, spaCy 3.8.16 con el modelo es_core_news_sm 3.8.0 sin el analizador sintáctico ni NER, Stanza 1.15.0 con el modelo por defecto en la CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (el paquete no trae modelo y entrena uno en la primera ejecución, así que sus cifras varían hasta en 0.2 entre instalaciones). Ordenador: Apple M3 Pro, macOS 26, con otras aplicaciones abiertas (carga media de 3-8), así que las velocidades indican el orden de magnitud.</li>
+<li>Velocidad del análisis de un texto: los 53 622 tokens de la parte de prueba de AnCora con la puntuación; tokens por segundo, el mejor de dos análisis de la parte entera después de la carga; puntos del gráfico, la mejor de tres ejecuciones de la importación, la carga y el análisis de los primeros 10-50 000 tokens en un proceso nuevo. Solo se mide la llamada al sistema: esMorph, <code>analyze_many</code> de todas las palabras y en contexto <code>annotate</code> del documento; simplemma, <code>lemmatize</code> de cada palabra con la caché vacía; spaCy, <code>nlp.pipe</code> de las oraciones; Stanza, el texto entero. esMorph y simplemma trabajan en un hilo, spaCy y Stanza con su configuración por defecto.</li>
+<li>Operaciones: 47 288 palabras de la parte de prueba de AnCora sin la puntuación, para <code>analyze_sentence</code> sus 1721 oraciones de 52 454 tokens con la puntuación, un token multipalabra como un solo token; la mejor de tres pasadas en un hilo, salvo la fila con hilos; verbos, los lexemas de los 4634 verbos de referencia cuyo lema es un infinitivo (verbecc, los primeros 2000, una pasada). Carga y memoria: la importación, la creación del analizador y el primer análisis, el aumento de la memoria residente del proceso (<code>ps -o rss</code>), la mediana de seis ejecuciones (de siete para esMorph); cada proceso más, el aumento de la memoria que el proceso no comparte con otros (USS) en cada uno de cuatro procesos de <code>multiprocessing</code> que cargan el sistema y analizan 200 oraciones.</li>
 </ul>
 
 

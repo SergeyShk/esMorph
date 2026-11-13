@@ -349,6 +349,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../spacy/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  spaCy
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -823,6 +842,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    spaCy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1002,7 +1048,7 @@
 <tr>
 <td style="text-align: left;"><code>prob</code></td>
 <td style="text-align: left;"><code>float</code></td>
-<td style="text-align: left;">Parte del análisis entre los análisis de la palabra; la suma de todos es 1</td>
+<td style="text-align: left;">Parte del análisis entre los análisis de la palabra; la suma de todos es 1. En <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> - la puntuación del modelo de contexto en la oración</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>words</code></td>
@@ -1028,7 +1074,7 @@
 </ul>
 <p>Si la categoría de una palabra depende del contexto, la palabra tiene ambos análisis: <code>que</code> es <code>PRON</code> y <code>SCONJ</code>, <code>la</code> es <code>DET</code> y <code>PRON</code>, un participio es <code>VERB</code> y <code>ADJ</code>. Rasgos: género, número, persona, tiempo, modo, forma verbal, grado, negación (<code>Polarity=Neg</code> de <code>no</code>), definitud (<code>Definite</code>), el tipo de pronombre o de determinante (<code>PronType</code>), la posesión (<code>Poss</code>), la reflexividad (<code>Reflex</code>), el caso de los pronombres personales (<code>Case</code>) y si van tras una preposición (<code>PrepCase</code>), la cortesía (<code>Polite=Form</code> de <code>usted</code>), el tipo de numeral (<code>NumType</code>) y cómo se escribe (<code>NumForm</code>), y la clase de un signo de puntuación (<code>PunctType</code>, <code>PunctSide</code>).</p>
 <h2 id="order">Orden de los análisis<a class="headerlink" href="#order" title="Permanent link">&para;</a></h2>
-<p>Los análisis van del más probable al menos probable. <code>prob</code> es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: <code>á</code> es ante todo <code>a</code>, <code>tambien</code> es <code>también</code>.</p>
+<p>Los análisis van del más probable al menos probable. <code>prob</code> es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: <code>á</code> es ante todo <code>a</code>, <code>tambien</code> es <code>también</code>. <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> ordena los mismos análisis por la oración.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Código</label><label for="__tabbed_2_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
