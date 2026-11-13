@@ -23,48 +23,48 @@
 <text x="540.0" y="388" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">50,000</text>
 <text x="305.0" y="412" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">tokens</text>
 <text x="16" y="195.0" transform="rotate(-90 16 195.0)" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#888">seconds</text>
-<polyline points="70.0,332.3 197.1,331.3 324.1,323.8 451.2,298.4 540.0,243.0" fill="none" stroke="#e53935" stroke-width="2"/>
-<circle cx="70.0" cy="332.3" r="4.5" fill="#e53935"/>
-<circle cx="197.1" cy="331.3" r="4.5" fill="#e53935"/>
-<circle cx="324.1" cy="323.8" r="4.5" fill="#e53935"/>
-<circle cx="451.2" cy="298.4" r="4.5" fill="#e53935"/>
-<circle cx="540.0" cy="243.0" r="4.5" fill="#e53935"/>
+<polyline points="70.0,336.3 197.1,336.6 324.1,330.0 451.2,302.9 540.0,255.3" fill="none" stroke="#e53935" stroke-width="2"/>
+<circle cx="70.0" cy="336.3" r="4.5" fill="#e53935"/>
+<circle cx="197.1" cy="336.6" r="4.5" fill="#e53935"/>
+<circle cx="324.1" cy="330.0" r="4.5" fill="#e53935"/>
+<circle cx="451.2" cy="302.9" r="4.5" fill="#e53935"/>
+<circle cx="540.0" cy="255.3" r="4.5" fill="#e53935"/>
 <line x1="556" y1="30" x2="580" y2="30" stroke="#e53935" stroke-width="2"/>
 <circle cx="568.0" cy="30.0" r="4.5" fill="#e53935"/>
 <text x="588" y="34" font-family="sans-serif" font-size="13" fill="#888">esMorph</text>
-<polyline points="70.0,320.6 197.1,316.9 324.1,291.3 451.2,234.6 540.0,187.3" fill="none" stroke="#e53935" stroke-width="2" stroke-dasharray="6 4"/>
-<circle cx="70.0" cy="320.6" r="4.5" fill="#e53935"/>
-<circle cx="197.1" cy="316.9" r="4.5" fill="#e53935"/>
-<circle cx="324.1" cy="291.3" r="4.5" fill="#e53935"/>
-<circle cx="451.2" cy="234.6" r="4.5" fill="#e53935"/>
-<circle cx="540.0" cy="187.3" r="4.5" fill="#e53935"/>
+<polyline points="70.0,321.8 197.1,318.9 324.1,297.7 451.2,245.2 540.0,198.1" fill="none" stroke="#e53935" stroke-width="2" stroke-dasharray="6 4"/>
+<circle cx="70.0" cy="321.8" r="4.5" fill="#e53935"/>
+<circle cx="197.1" cy="318.9" r="4.5" fill="#e53935"/>
+<circle cx="324.1" cy="297.7" r="4.5" fill="#e53935"/>
+<circle cx="451.2" cy="245.2" r="4.5" fill="#e53935"/>
+<circle cx="540.0" cy="198.1" r="4.5" fill="#e53935"/>
 <line x1="556" y1="52" x2="580" y2="52" stroke="#e53935" stroke-width="2" stroke-dasharray="6 4"/>
 <circle cx="568.0" cy="52.0" r="4.5" fill="#e53935"/>
 <text x="588" y="56" font-family="sans-serif" font-size="13" fill="#888">esMorph in context</text>
-<polyline points="70.0,189.4 197.1,189.6 324.1,189.4 451.2,189.8 540.0,187.9" fill="none" stroke="#2a78d6" stroke-width="2"/>
-<rect x="66.0" y="185.4" width="8" height="8" fill="#2a78d6"/>
-<rect x="193.1" y="185.6" width="8" height="8" fill="#2a78d6"/>
-<rect x="320.1" y="185.4" width="8" height="8" fill="#2a78d6"/>
-<rect x="447.2" y="185.8" width="8" height="8" fill="#2a78d6"/>
-<rect x="536.0" y="183.9" width="8" height="8" fill="#2a78d6"/>
+<polyline points="70.0,193.5 197.1,196.1 324.1,196.1 451.2,195.9 540.0,193.8" fill="none" stroke="#2a78d6" stroke-width="2"/>
+<rect x="66.0" y="189.5" width="8" height="8" fill="#2a78d6"/>
+<rect x="193.1" y="192.1" width="8" height="8" fill="#2a78d6"/>
+<rect x="320.1" y="192.1" width="8" height="8" fill="#2a78d6"/>
+<rect x="447.2" y="191.9" width="8" height="8" fill="#2a78d6"/>
+<rect x="536.0" y="189.8" width="8" height="8" fill="#2a78d6"/>
 <line x1="556" y1="74" x2="580" y2="74" stroke="#2a78d6" stroke-width="2"/>
 <rect x="564.0" y="70.0" width="8" height="8" fill="#2a78d6"/>
 <text x="588" y="78" font-family="sans-serif" font-size="13" fill="#888">simplemma</text>
-<polyline points="70.0,161.0 197.1,160.3 324.1,159.6 451.2,151.3 540.0,132.0" fill="none" stroke="#199e70" stroke-width="2"/>
-<polygon points="70.0,156.0 75.0,165.0 65.0,165.0" fill="#199e70"/>
-<polygon points="197.1,155.3 202.1,164.3 192.1,164.3" fill="#199e70"/>
-<polygon points="324.1,154.6 329.1,163.6 319.1,163.6" fill="#199e70"/>
-<polygon points="451.2,146.3 456.2,155.3 446.2,155.3" fill="#199e70"/>
-<polygon points="540.0,127.0 545.0,136.0 535.0,136.0" fill="#199e70"/>
+<polyline points="70.0,166.6 197.1,166.7 324.1,165.4 451.2,156.6 540.0,136.8" fill="none" stroke="#199e70" stroke-width="2"/>
+<polygon points="70.0,161.6 75.0,170.6 65.0,170.6" fill="#199e70"/>
+<polygon points="197.1,161.7 202.1,170.7 192.1,170.7" fill="#199e70"/>
+<polygon points="324.1,160.4 329.1,169.4 319.1,169.4" fill="#199e70"/>
+<polygon points="451.2,151.6 456.2,160.6 446.2,160.6" fill="#199e70"/>
+<polygon points="540.0,131.8 545.0,140.8 535.0,140.8" fill="#199e70"/>
 <line x1="556" y1="96" x2="580" y2="96" stroke="#199e70" stroke-width="2"/>
 <polygon points="568.0,91.0 573.0,100.0 563.0,100.0" fill="#199e70"/>
 <text x="588" y="100" font-family="sans-serif" font-size="13" fill="#888">spaCy es_core_news_sm</text>
-<polyline points="70.0,140.1 197.1,134.9 324.1,131.0 451.2,102.2 540.0,65.3" fill="none" stroke="#c98500" stroke-width="2"/>
-<polygon points="70.0,134.6 75.5,140.1 70.0,145.6 64.5,140.1" fill="#c98500"/>
-<polygon points="197.1,129.4 202.6,134.9 197.1,140.4 191.6,134.9" fill="#c98500"/>
-<polygon points="324.1,125.5 329.6,131.0 324.1,136.5 318.6,131.0" fill="#c98500"/>
-<polygon points="451.2,96.7 456.7,102.2 451.2,107.7 445.7,102.2" fill="#c98500"/>
-<polygon points="540.0,59.8 545.5,65.3 540.0,70.8 534.5,65.3" fill="#c98500"/>
+<polyline points="70.0,143.4 197.1,141.1 324.1,136.7 451.2,109.4 540.0,73.2" fill="none" stroke="#c98500" stroke-width="2"/>
+<polygon points="70.0,137.9 75.5,143.4 70.0,148.9 64.5,143.4" fill="#c98500"/>
+<polygon points="197.1,135.6 202.6,141.1 197.1,146.6 191.6,141.1" fill="#c98500"/>
+<polygon points="324.1,131.2 329.6,136.7 324.1,142.2 318.6,136.7" fill="#c98500"/>
+<polygon points="451.2,103.9 456.7,109.4 451.2,114.9 445.7,109.4" fill="#c98500"/>
+<polygon points="540.0,67.7 545.5,73.2 540.0,78.7 534.5,73.2" fill="#c98500"/>
 <line x1="556" y1="118" x2="580" y2="118" stroke="#c98500" stroke-width="2"/>
 <polygon points="568.0,112.5 573.5,118.0 568.0,123.5 562.5,118.0" fill="#c98500"/>
 <text x="588" y="122" font-family="sans-serif" font-size="13" fill="#888">Stanza</text>

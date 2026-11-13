@@ -27,7 +27,7 @@ The component registers with spaCy when the package is installed and is added by
     'Case=Acc|Gender=Fem|Number=Sing|Person=3|PrepCase=Npr|PronType=Prs'
     ```
 
-On the gold words of the test parts of the treebanks ([Comparison](comparison.md)) the part of speech, features and lemma of the component are right together for 95.62, 87.50 and 89.50 % of the words of AnCora, PUD and COSER, against 95.92, 83.59 and 85.79 % of `es_core_news_sm`, and a pipeline of the component alone analyzes 90 thousand tokens per second against 45 thousand.
+On the gold words of the test parts of the treebanks ([Comparison](comparison.md)) the part of speech, features and lemma of the component are right together for 95.61, 87.51 and 89.56 % of the words of AnCora, PUD and COSER, against 95.92, 83.59 and 85.79 % of `es_core_news_sm`, and a pipeline of the component alone analyzes 113 thousand tokens per second against 50 thousand.
 
 ## es_core_news models { #models }
 
