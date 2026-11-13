@@ -73,7 +73,7 @@ echo "Dime la verdad del caso." | esmorph
 
 ## Documents of anySeg
 
-With the feature `anyseg` the dictionary fills the columns of the words of a document of the segmenter [anySeg](https://crates.io/crates/anyseg), whose crate is `esmorph::anyseg`: `annotate` chooses the analysis of every word in the context of its sentence, and `annotate_without_context` as `analyze` orders them, about nine times faster:
+With the feature `anyseg` the dictionary fills the columns of the words of a document of the segmenter [anySeg](https://crates.io/crates/anyseg), whose crate is `esmorph::anyseg`: `annotate` chooses the analysis of every word in the context of its sentence, and `annotate_without_context` as `analyze` orders them, more than ten times faster:
 
 ```toml
 [dependencies]

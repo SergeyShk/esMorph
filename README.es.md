@@ -113,7 +113,7 @@ Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esM
 
 ### Análisis en contexto
 
-`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas nueve veces más rápido. El componente `esmorph` lleva el análisis en contexto a una cadena de [spaCy](https://spacy.io/) (`pip install "esmorph[spacy]"`).
+`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas nueve y diez veces más rápido. El componente `esmorph` lleva el análisis en contexto a una cadena de [spaCy](https://spacy.io/) (`pip install "esmorph[spacy]"`).
 
 ```python
 >>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])

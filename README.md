@@ -113,7 +113,7 @@ See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/)
 
 ### Analysis in context
 
-`analyze_sentence` orders the analyses of the tokens of a sentence with a small neural network trained on the treebanks UD Spanish AnCora and GSD: the first is the analysis the context chooses, and its probability is the score of the model. `annotate` and the command analyze in context by default; `context=False` and `--no-context` order the analyses as `analyze` does, about nine times faster. The `esmorph` component puts the analysis in context into a [spaCy](https://spacy.io/) pipeline (`pip install "esmorph[spacy]"`).
+`analyze_sentence` orders the analyses of the tokens of a sentence with a small neural network trained on the treebanks UD Spanish AnCora and GSD: the first is the analysis the context chooses, and its probability is the score of the model. `annotate` and the command analyze in context by default; `context=False` and `--no-context` order the analyses as `analyze` does, about nine and ten times faster. The `esmorph` component puts the analysis in context into a [spaCy](https://spacy.io/) pipeline (`pip install "esmorph[spacy]"`).
 
 ```python
 >>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])
