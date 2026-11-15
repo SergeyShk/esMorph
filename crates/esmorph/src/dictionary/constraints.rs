@@ -1,10 +1,10 @@
 //! Constraints of Spanish on the analyses the context model chooses: an article before a finite
 //! verb is a pronoun (`no la descubras`), an infinitive after a verb is no noun (`puede ser`), a
 //! form of `ser` and `ir` is `ir` where only `ir` fits (`se fue`, `fue a casa`, `fue cayendo`), an
-//! imperative opening a sentence is no name (`Indique si desea`), a word after a clitic is a
-//! verb (`que te vayas`), a word that is mostly a verb with clitics is one (`¡Cállate!`) and a
-//! rare verb does not take the place of a frequent one with the same form (`venga` is `venir`, not
-//! `vengar`)
+//! imperative opening a sentence is no name (`Indique si desea`), a word after a clitic or the
+//! negation is a verb (`que te vayas`, `no vayas`), a word that is mostly a verb with clitics is
+//! one (`¡Cállate!`) and a rare verb does not take the place of a frequent one with the same form
+//! (`venga` is `venir`, not `vengar`)
 
 use super::{Analysis, Dictionary, Source};
 use crate::clitics;
@@ -37,6 +37,8 @@ const SER_IR: [&str; 19] = [
 ];
 /// Parts of speech of a word that heads the goal of `ir a`: `fue a casa`, `fue a ver`
 const GOAL: [&str; 6] = ["DET", "NOUN", "PROPN", "PRON", "NUM", "VERB"];
+/// Words a verb follows, not a noun without a determiner: the negation and the subject `tú`
+const BEFORE_VERB: [&str; 2] = ["no", "tú"];
 /// Lemmas of the copulas, whose predicate is a noun (`será titular`)
 const COPULAS: [&str; 2] = ["ser", "estar"];
 /// Shares of the verbs of a form in the counts of the dictionary: the model, which sees no lemma,
@@ -65,7 +67,7 @@ impl Dictionary {
                 .or_else(|| self.article_clitic(&lower, sentence, at))
                 .or_else(|| self.infinitive(sentence, at))
                 .or_else(|| self.ser_ir(&lower, sentence, at))
-                .or_else(|| self.verb_after_clitic(&lower, sentence, at))
+                .or_else(|| self.verb_after(&lower, sentence, at))
                 .or_else(|| self.opening_word(words, sentence, at, start))
                 .or_else(|| self.frequent_lemma(&sentence[at], &shares[at]));
             if let Some(index) = chosen {
@@ -167,18 +169,14 @@ impl Dictionary {
         list.iter().position(|analysis| analysis.lemma == "ir")
     }
 
-    /// A word the model reads as a noun after a reflexive or a dative clitic is a finite verb:
-    /// `que te vayas`
-    fn verb_after_clitic(
-        &self,
-        lower: &[String],
-        sentence: &[Vec<Analysis>],
-        at: usize,
-    ) -> Option<usize> {
+    /// A word the model reads as a noun after a reflexive or a dative clitic, the negation or
+    /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`
+    fn verb_after(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
-        if at == 0
-            || !PROCLITICS.contains(&lower[at - 1].as_str())
-            || self.top_pos(sentence, at - 1) != "PRON"
+        let before = at.checked_sub(1)?;
+        let clitic = PROCLITICS.contains(&lower[before].as_str())
+            && self.top_pos(sentence, before) == "PRON";
+        if !(clitic || BEFORE_VERB.contains(&lower[before].as_str()))
             || !matches!(self.pos(list.first()?), "NOUN" | "PROPN")
         {
             return None;

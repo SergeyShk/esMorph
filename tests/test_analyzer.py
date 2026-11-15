@@ -783,8 +783,10 @@ def test_analyze_sentence(morph):
         ("Me fue imposible .", 1, ("ser", "AUX")),
         ("La casa fue construida .", 2, ("ser", "AUX")),
         ("Nos fuimos temprano .", 1, ("ir", "VERB")),
-        # A word after a clitic is a verb
+        # A word after a clitic or the negation is a verb
         ("Quiero que te vayas .", 3, ("ir", "VERB")),
+        ("No comas , que es tarde .", 1, ("comer", "VERB")),
+        ("Adonde tú vayas , voy .", 2, ("ir", "VERB")),
         # An imperative opening a sentence is no name, a name stays one
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
         ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
