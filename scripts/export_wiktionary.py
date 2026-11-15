@@ -96,6 +96,9 @@ CLITIC_ENDING = re.compile(r"(me|te|se|nos|os|lo|la|le|los|las|les)$")
 REFLEXIVE_ENDING = re.compile(r"(nos|os|te|se)$")
 ACUTE = set("áéíóú")
 DEMONSTRATIVES = {"este", "ese", "aquel"}
+# Tags of a spelling of an old language: such a verb keeps its infinitive but no table, as its
+# forms are written today as those of the verb it spells (`fuir` - `huir`: `fuimos` is `ir`)
+OLD_SPELLING = {"archaic", "obsolete"}
 # Vowels of a syllable: two strong vowels are two syllables
 SYLLABLE_VOWELS = re.compile(r"[iuü]*[aeo][iuü]*|[iuü]+")
 NON_FINITE_ROWS = {"infinitive", "gerund"}
@@ -565,7 +568,8 @@ def entry_rows(entry: dict, entries: set[str], lower_entries: set[str]) -> Itera
     Description:
         A sense with `form_of` gives the word as a form of that lemma, any other sense gives the
         word as a lemma, for a verb only if it looks like an infinitive. The forms of the table
-        belong to an entry that has a sense of its own. An adjective with a feminine form is
+        belong to an entry that has a sense of its own, for a verb one that is no old spelling of
+        another verb (OLD_SPELLING). An adjective with a feminine form is
         masculine in its base form. An acronym with the spelling of a word in lower case is left
         out, as `SE` for `se`: the analyzer does not see case
 
@@ -582,7 +586,7 @@ def entry_rows(entry: dict, entries: set[str], lower_entries: set[str]) -> Itera
     if pos is None or (word == word.upper() != word.lower() and word.lower() in lower_entries):
         return
     forms = [(form, set(tags)) for form, tags in entry["forms"]]
-    own = False
+    own = table = False
     gender = {tag for sense in entry["senses"] if not sense["form_of"] for tag in sense["tags"]}
     gender &= GENDERS
     if pos == "ADJ" and any("feminine" in tags and "plural" not in tags for _, tags in forms):
@@ -598,12 +602,13 @@ def entry_rows(entry: dict, entries: set[str], lower_entries: set[str]) -> Itera
             yield from form_of_rows(word, pos, tags, sense["form_of"])
         elif pos != "VERB" or all(INFINITIVE.search(name) for name in [word, *targets]):
             own = True
+            table = table or not (targets and tags & OLD_SPELLING)
             yield from lemma_rows(word, pos, tags | gender, targets, entries)
-    if own and pos == "VERB":
+    if own and table and pos == "VERB":
         for place, (form, tags) in enumerate(verb_rows(word, forms)):
             for feats in verb_features(tags):
                 yield word, pos, form, feats, is_variant_row(tags), place
-    elif own:
+    elif own and pos != "VERB":
         yield from nominal_rows(word, pos, forms, gender)
 
 

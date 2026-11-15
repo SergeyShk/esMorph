@@ -50,7 +50,7 @@ If the part of speech of a word depends on context, the word has both analyses: 
 
 ## Order of analyses { #order }
 
-Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features, and a word goes before its older spelling with other accents: `á` is first of all `a`, `tambien` is `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) orders the same analyses by the sentence.
+Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; of the verbs of a form the one they have more often in all its forms has the larger share, even where a few counts of the form say otherwise: `vengo` is first of all `venir`, not `vengar`. For a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features; a form of several verbs they have seen in other forms gets shares by the frequency of the verbs and of the features instead (`vengamos` is first of all the subjunctive of `venir`). A word goes before its older spelling with other accents: `á` is first of all `a`, `tambien` is `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) orders the same analyses by the sentence.
 
 === "Code"
 
@@ -66,7 +66,7 @@ Analyses go from the most probable to the least. `prob` is the share of an analy
 
 ## Words with clitics { #clitics }
 
-A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. In older and literary writing a finite form takes enclitics too, when the accent of the token marks it: `díjole` is `dijo` + `le`. `del` and `al` also have their two words, as do the contractions of `de` with a pronoun or a demonstrative in older writing: `desta` is `de` + `esta`. A word of the dictionary is not split: `comete` is a form of `cometer`, though a few are mostly verbs with clitics: `verse` is first of all `ver` + `se`.
+A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. In older and literary writing a finite form takes enclitics too, when the accent of the token marks it: `díjole` is `dijo` + `le`. `del` and `al` also have their two words, as do the contractions of `de` with a pronoun or a demonstrative in older writing: `desta` is `de` + `esta`. A word of the dictionary is not split: `comete` is a form of `cometer`, though a few are mostly verbs with clitics: `verse` is first of all `ver` + `se`, `cállate` is `calla` + `te`, and in a sentence they are always such verbs.
 
 === "Code"
 

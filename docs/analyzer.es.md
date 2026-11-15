@@ -122,7 +122,20 @@ Excepciones:
 analyze_sentence(words)
 ```
 
-Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyze), ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y `prob` es su puntuación en esta oración. Los tokens son los de una oración en orden, tal como los toma `analyze`: una contracción (`del`) o un verbo con clíticos (`dámelo`) es un solo token. Una oración de un token se analiza como con `analyze`, y una de más de 256 tokens, por partes de unos 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.
+Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyze), ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y `prob` es su puntuación en esta oración. Unas pocas reglas del español ponen después primero otro análisis donde solo él cabe, y las puntuaciones del modelo se conservan:
+
+- un artículo ante un verbo en forma personal es el pronombre clítico (`no la descubras`), aunque no tras una preposición o un determinante (`de la luthiere`);
+- un sustantivo justo tras un verbo que rige un infinitivo sin preposición es ese infinitivo (`puede ser`, `parecía pesar`), pero no tras otro verbo (`siento pesar`);
+- una forma de `ser` e `ir` es `ir`:
+    - tras un clítico reflexivo, salvo que siga un predicado (`se fue`, pero `me fue muy difícil`);
+    - ante `a` y su destino, salvo que siga una locución prepositiva o una hora (`fue a casa`, pero `fue a partir de 1990`, `fue a las cinco`);
+    - ante un gerundio (`fue cayendo`);
+- una palabra tras un clítico, la negación o `tú` es un verbo (`que te vayas`, `no vayas`), aunque no tras una preposición (`punto de no retorno`);
+- un imperativo con mayúscula que abre una oración no es un nombre (`Indique si desea`), salvo que el modelo ponga por encima un sustantivo del diccionario (`Sangre de Abel`);
+- una palabra del diccionario que suele ser un verbo con clíticos lo es (`¡Cállate!`);
+- un verbo raro cede ante uno frecuente con la misma forma (`aunque vengan` es `venir`, no `vengar`), salvo que el modelo haya elegido un participio (`había entrevisto`).
+
+Los tokens son los de una oración en orden, tal como los toma `analyze`: una contracción (`del`) o un verbo con clíticos (`dámelo`) es un solo token. Una oración de un token se analiza como con `analyze`, y una de más de 256 tokens, por partes de unos 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |

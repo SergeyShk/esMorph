@@ -21,6 +21,7 @@ use crate::ud::{UdTag, UdTags};
 use crate::{clitics, colloquial};
 
 mod annotate;
+mod constraints;
 mod context;
 mod guess;
 mod own;
@@ -97,9 +98,9 @@ pub struct Analysis {
     pub lemma: String,
     /// Number of the UD tag for `Dictionary::ud_tag`
     pub ud: u16,
-    /// Share of the analysis among the analyses of the word: by the counts of treebanks, equal for
-    /// a word they did not see; of `Dictionary::analyze_sentence` - the score of the context model
-    /// in the sentence
+    /// Share of the analysis among the analyses of the word: by the counts of treebanks; for a word
+    /// they did not see equal, unless it is a form of several verbs they saw in other forms; of
+    /// `Dictionary::analyze_sentence` - the score of the context model in the sentence
     pub prob: f64,
     /// Where the analysis comes from
     pub source: Source,
@@ -760,24 +761,28 @@ impl Dictionary {
         start: bool,
     ) -> Result<Vec<Vec<Analysis>>, Error> {
         let context = self.context()?;
+        // The model sees a token as `analyze` reads it: without invisible characters and with
+        // combined accents
+        let normal: Vec<Cow<str>> = words.iter().map(|word| normalized(word.as_ref())).collect();
+        let normal: Vec<&str> = normal.iter().map(AsRef::as_ref).collect();
         let mut sentence = Vec::with_capacity(words.len());
+        // The shares of the verbs of every word in the counts, before the model scores
+        let mut shares = Vec::with_capacity(words.len());
         for (number, range) in sentence_parts(words.len(), SENTENCE_CHUNK).enumerate() {
-            let chunk = &words[range];
-            let analyses: Vec<Vec<Analysis>> = chunk
+            let analyses: Vec<Vec<Analysis>> = words[range.clone()]
                 .iter()
                 .map(|word| self.analyze(word.as_ref()))
                 .collect();
+            shares.extend(analyses.iter().map(|list| self.verb_shares(list)));
             // Without neighbors the model chooses worse than the counts of the dictionary
-            if chunk.len() < 2 {
+            if range.len() < 2 {
                 sentence.extend(analyses);
                 continue;
             }
-            // The model sees a token as `analyze` reads it: without invisible characters and with
-            // combined accents
-            let normal: Vec<Cow<str>> =
-                chunk.iter().map(|word| normalized(word.as_ref())).collect();
-            let normal: Vec<&str> = normal.iter().map(AsRef::as_ref).collect();
-            sentence.extend(context.rank(&normal, analyses, start && number == 0));
+            sentence.extend(context.rank(&normal[range], analyses, start && number == 0));
+        }
+        if words.len() > 1 {
+            self.constrain(&normal, &mut sentence, &shares, start);
         }
         Ok(sentence)
     }

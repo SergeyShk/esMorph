@@ -50,7 +50,7 @@ Si la categoría de una palabra depende del contexto, la palabra tiene ambos an�
 
 ## Orden de los análisis { #order }
 
-Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: `á` es ante todo `a`, `tambien` es `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) ordena los mismos análisis por la oración.
+Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; de los verbos de una forma, el que tienen más a menudo en todas sus formas tiene la parte mayor, aunque unos pocos casos de la forma digan otra cosa: `vengo` es ante todo `venir`, no `vengar`. Para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes; una forma de varios verbos que han visto en otras formas recibe en cambio partes según la frecuencia de los verbos y de los rasgos (`vengamos` es ante todo el subjuntivo de `venir`). Una palabra va antes que su grafía antigua con otras tildes: `á` es ante todo `a`, `tambien` es `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) ordena los mismos análisis por la oración.
 
 === "Código"
 
@@ -66,7 +66,7 @@ Los análisis van del más probable al menos probable. `prob` es la parte de un 
 
 ## Palabras con clíticos { #clitics }
 
-Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: `díjole` es `dijo` + `le`. `del` y `al` también tienen sus dos palabras, como las contracciones de `de` con un pronombre o un demostrativo en la escritura antigua: `desta` es `de` + `esta`. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`, aunque unas pocas suelen ser verbos con clíticos: `verse` es ante todo `ver` + `se`.
+Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: `díjole` es `dijo` + `le`. `del` y `al` también tienen sus dos palabras, como las contracciones de `de` con un pronombre o un demostrativo en la escritura antigua: `desta` es `de` + `esta`. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`, aunque unas pocas suelen ser verbos con clíticos: `verse` es ante todo `ver` + `se`, `cállate` es `calla` + `te`, y en una oración siempre son esos verbos.
 
 === "Código"
 

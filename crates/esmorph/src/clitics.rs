@@ -22,8 +22,13 @@ const MAX_CLITICS: usize = 3;
 const MIN_HOST: usize = 2;
 
 /// Words of the dictionary that are mostly a verb with clitics: in AnCora and GSD train and dev 26
-/// tokens of 26 (`verse` is `ver` + `se`)
-const HOMONYMS: [&str; 4] = ["verme", "verse", "verte", "vete"];
+/// tokens of 26 (`verse` is `ver` + `se`), the imperative of `dar` with `se` written without an
+/// accent (`dese traslado`, `dense por notificados`) and the imperatives and infinitives of prose
+/// (`cállate`, `dale la mano`, `ir a buscarla`)
+const HOMONYMS: [&str; 13] = [
+    "buscarla", "cállate", "dale", "date", "dense", "dese", "detente", "dinos", "verme", "veros",
+    "verse", "verte", "vete",
+];
 /// Share of the verb with clitics among the analyses of such a word: the words of the dictionary
 /// keep one in 27
 pub(crate) const HOMONYM_SHARE: f64 = 26.0 / 27.0;

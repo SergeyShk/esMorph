@@ -122,7 +122,20 @@ Exceptions:
 analyze_sentence(words)
 ```
 
-The analyses of the tokens of a sentence, as [`analyze`](#analyze) gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and `prob` is its score in this sentence. The tokens are those of one sentence in order, as `analyze` takes them: a contraction (`del`) or a verb with clitics (`dámelo`) is one token. A sentence of one token is analyzed as `analyze`, and one longer than 256 tokens by parts of about 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.
+The analyses of the tokens of a sentence, as [`analyze`](#analyze) gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and `prob` is its score in this sentence. A few rules of Spanish then put another analysis first where only it fits, with the scores of the model kept:
+
+- an article before a finite verb is the clitic pronoun (`no la descubras`), though not after a preposition or a determiner (`de la luthiere`);
+- a noun right after a verb that takes a bare infinitive is that infinitive (`puede ser`, `parecía pesar`), but not after another verb (`siento pesar`);
+- a form of `ser` and `ir` is `ir`:
+    - after a reflexive clitic, unless a predicate follows (`se fue`, but `me fue muy difícil`);
+    - before `a` and its goal, unless a prepositional phrase or an hour follows (`fue a casa`, but `fue a partir de 1990`, `fue a las cinco`);
+    - before a gerund (`fue cayendo`);
+- a word after a clitic, the negation or `tú` is a verb (`que te vayas`, `no vayas`), though not after a preposition (`punto de no retorno`);
+- a capitalized imperative opening a sentence is no name (`Indique si desea`), unless the model ranks a noun of the dictionary above it (`Sangre de Abel`);
+- a word of the dictionary that is mostly a verb with clitics is one (`¡Cállate!`);
+- a rare verb gives way to a frequent one with the same form (`aunque vengan` is `venir`, not `vengar`), unless the model chose a participle (`había entrevisto`).
+
+The tokens are those of one sentence in order, as `analyze` takes them: a contraction (`del`) or a verb with clitics (`dámelo`) is one token. A sentence of one token is analyzed as `analyze`, and one longer than 256 tokens by parts of about 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |
