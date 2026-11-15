@@ -23,6 +23,7 @@ use crate::{clitics, colloquial};
 mod annotate;
 mod context;
 mod guess;
+mod own;
 
 #[cfg(any(test, feature = "build"))]
 pub(crate) use context::Model;
@@ -33,6 +34,7 @@ pub(crate) use context::sources as context_sources;
 pub use annotate::Fields;
 #[cfg(feature = "cli")]
 pub(crate) use annotate::{one_line, set_fields};
+pub use own::Sample;
 
 /// Where an analysis comes from
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,6 +180,8 @@ pub struct Dictionary {
     feats: Arc<OnceLock<TagFeats>>,
     /// The context model, read on the first analysis of a sentence and shared by the copies
     context: Arc<OnceLock<Result<context::Context, String>>>,
+    /// Own words of the copy (`Dictionary::with_words`)
+    own_words: Arc<own::OwnWords>,
 }
 
 /// The features of every UD tag in CoNLL-U, `None` without them
@@ -344,6 +348,7 @@ impl Dictionary {
             rule_tags: None,
             feats: Arc::default(),
             context: Arc::default(),
+            own_words: Arc::default(),
             layout,
             storage: Arc::clone(&storage),
         };
@@ -829,7 +834,7 @@ impl Dictionary {
     /// clitics; the analyses of the rules and the guesses do not count
     pub fn is_known(&self, word: &str) -> bool {
         let word = normalized(word);
-        self.lookup(&word).is_some() || !self.with_clitics(&word).is_empty()
+        self.lookup(&word).is_some() || self.is_own(&word) || !self.with_clitics(&word).is_empty()
     }
 
     /// Analyses of a verb with clitics: of the first split into a host and clitics, the most
@@ -935,8 +940,18 @@ impl Dictionary {
         self.spelled(word).0
     }
 
-    /// Analyses of a word form in the dictionary and whether the dictionary has it as written
+    /// Analyses of a word form in the dictionary and its own words, and whether they have it as
+    /// written
     fn spelled(&self, word: &str) -> (Vec<Analysis>, bool) {
+        let (analyses, exact) = self.spelled_in_automaton(word);
+        if self.own_words.is_empty() {
+            return (analyses, exact);
+        }
+        self.with_own(word, analyses, exact)
+    }
+
+    /// Analyses of a word form in the automaton and whether it has the word as written
+    fn spelled_in_automaton(&self, word: &str) -> (Vec<Analysis>, bool) {
         let Some((key, spellings, as_written)) = self.lookup(word) else {
             return (Vec::new(), false);
         };

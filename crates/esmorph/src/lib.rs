@@ -45,7 +45,7 @@ pub use anyseg;
 pub use builder::Builder;
 #[doc(hidden)]
 pub use dictionary::Fields;
-pub use dictionary::{Analysis, Dictionary, Entry, SENTENCE_CHUNK, Source, sentence_parts};
+pub use dictionary::{Analysis, Dictionary, Entry, SENTENCE_CHUNK, Sample, Source, sentence_parts};
 pub use error::Error;
 #[doc(hidden)]
 pub use format::other_version;

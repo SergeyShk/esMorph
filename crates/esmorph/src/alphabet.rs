@@ -162,6 +162,29 @@ impl Alphabet {
         keys
     }
 
+    /// Gives the letters of `word` that the alphabet has not free bytes: the letters of own words
+    /// of a copy of a dictionary, which its automaton has not; `false` if no byte is free
+    pub fn extend(&mut self, word: &str) -> bool {
+        for letter in word.chars().flat_map(char::to_lowercase) {
+            let letter = plain(letter).unwrap_or(letter);
+            if self.code(letter).is_some() {
+                continue;
+            }
+            let Some(code) = (1..=u8::MAX).find(|&code| self.letters[usize::from(code)] == '\0')
+            else {
+                return false;
+            };
+            self.letters[usize::from(code)] = letter;
+            if letter.is_ascii() {
+                self.ascii[letter as usize] = code;
+            } else {
+                let at = (self.other).partition_point(|&(known, _)| known < letter);
+                self.other.insert(at, (letter, code));
+            }
+        }
+        true
+    }
+
     /// Spelling of a key with accents on the places of `marks`
     pub fn spelling(&self, key: &Key, marks: u64) -> String {
         self.decode(key.bytes(), marks)
