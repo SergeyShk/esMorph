@@ -122,6 +122,32 @@ def test_word_absent_as_written_looks_through_accents(morph):
     assert morph.analyze("cámion")[0].word == "camión"
 
 
+@pytest.mark.parametrize(
+    ("token", "word", "lemma"),
+    [
+        ("trabajao", "trabajado", "trabajar"),
+        ("venío", "venido", "venir"),
+        # Not the preterite `perdió` nor the name `Mario`
+        ("perdío", "perdido", "perder"),
+        ("marío", "marido", "marido"),
+        ("caridá", "caridad", "caridad"),
+        ("juerza", "fuerza", "fuerza"),
+        ("ajuera", "afuera", "afuera"),
+    ],
+)
+def test_colloquial_spelling_has_the_analyses_of_the_standard_word(morph, token, word, lemma):
+    analysis = morph.analyze(token)[0]
+    assert (analysis.word, analysis.lemma, analysis.source) == (word, lemma, "dictionary")
+    assert analysis in analysis.forms()
+
+
+def test_colloquial_spelling_is_only_for_unknown_lowercase_words(morph):
+    # A word of the dictionary and a verb with clitics stay themselves, a capital letter is a name
+    assert morph.analyze("cacao")[0].lemma == "cacao"
+    assert morph.analyze("sentaos")[0].words == ("sentad", "os")
+    assert morph.analyze("Julita")[0].pos == "PROPN"
+
+
 def test_lost_diaeresis(morph):
     assert morph.analyze("pinguino")[0].word == "pingüino"
     assert morph.analyze("verguenza")[0].word == "vergüenza"

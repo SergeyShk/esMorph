@@ -8,7 +8,6 @@ use fst::Map;
 
 use crate::Error;
 use crate::alphabet::{Alphabet, Key};
-use crate::clitics;
 use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
     Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS, WordValue, unpack_spelling,
@@ -18,6 +17,7 @@ use crate::rules::{
     RuleTags, SHORT_CAPS,
 };
 use crate::ud::{UdTag, UdTags};
+use crate::{clitics, colloquial};
 
 mod annotate;
 mod context;
@@ -86,8 +86,9 @@ impl Entry {
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct Analysis {
-    /// The word form as the dictionary spells it: with its accents; a verb with clitics as written,
-    /// in lower case
+    /// The word form as the dictionary spells it: with its accents, the standard word of a
+    /// colloquial spelling (`trabajado` of `trabajao`); a verb with clitics as written, in lower
+    /// case
     pub word: String,
     /// The lemma
     pub lemma: String,
@@ -440,12 +441,14 @@ impl Dictionary {
     /// Analyses of a word form, the most probable first. Case does not matter for finding the word,
     /// though a token with a capital letter may also be a name. A word spelled as in the dictionary
     /// gives the analyses of that spelling; a word absent as written is a verb with clitics
-    /// (`dámelo`) or is looked for without its accents and with a lost diaeresis. A token that is
-    /// neither gets the analyses of the rules: punctuation, a symbol, a number, an ordinal number
-    /// in digits, a Roman numeral, a name with a capital letter, an address, an abbreviation. A
-    /// lowercase word that is none of these is guessed: by its last part after a hyphen, by the
-    /// word without a known prefix, as a verb with clitics of a guessed host or by the dictionary
-    /// words with its ending
+    /// (`dámelo`) or is looked for without its accents and with a lost diaeresis; a lowercase word
+    /// that is neither may be a colloquial spelling of a word of the dictionary (`trabajao`,
+    /// `caridá`, `juera`), as a participle without its `d` is before other accents (`perdío` is
+    /// `perdido`, not `perdió`). A token that is none of these gets the analyses of the rules:
+    /// punctuation, a symbol, a number, an ordinal number in digits, a Roman numeral, a name with a
+    /// capital letter, an address, an abbreviation. A lowercase word that is none of these is
+    /// guessed: by its last part after a hyphen, by the word without a known prefix, as a verb with
+    /// clitics of a guessed host or by the dictionary words with its ending
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
         let (found, exact) = self.spelled(&word);
@@ -508,6 +511,16 @@ impl Dictionary {
                 analysis.prob /= total;
             }
         }
+        // The accent of a participle without its `d` is no lost one: `perdío` is `perdido`, not
+        // `perdió`, `marío` is `marido`, not `Mario`
+        if !word.chars().any(char::is_uppercase)
+            && (analyses.is_empty() || (!exact && colloquial::is_participle(&word)))
+        {
+            let standard = self.colloquial(&word);
+            if !standard.is_empty() {
+                analyses = standard;
+            }
+        }
         if analyses.is_empty() {
             let ruled = self.ruled(&word);
             return if ruled.is_empty() {
@@ -539,6 +552,16 @@ impl Dictionary {
             }
         }
         analyses
+    }
+
+    /// Analyses of a lowercase word that the dictionary has not as a colloquial spelling: those of
+    /// the first standard spelling it has (`trabajao` is `trabajado`, `caridá` is `caridad`). A
+    /// word with a capital letter is mostly a name: `Julita` is no `fulita`
+    fn colloquial(&self, word: &str) -> Vec<Analysis> {
+        colloquial::standard(word)
+            .map(|standard| self.found(&standard))
+            .find(|analyses| !analyses.is_empty())
+            .unwrap_or_default()
     }
 
     fn is_name(&self, analysis: &Analysis) -> bool {
@@ -1973,6 +1996,79 @@ pub(crate) mod tests {
         let participle = "Gender=Masc|Number=Plur|Tense=Past|VerbForm=Part";
         (builder.add_form("distribuir", "VERB", "distribuidos", participle)).unwrap();
         Dictionary::from_bytes(&builder.build().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_colloquial_spelling_has_the_analyses_of_the_standard_word() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let participle = "Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part";
+        let forms = [
+            ("trabajar", "VERB", "trabajado", participle),
+            ("caer", "VERB", "caído", participle),
+            ("perder", "VERB", "perdido", participle),
+            (
+                "perder",
+                "VERB",
+                "perdió",
+                "Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin",
+            ),
+            ("verdad", "NOUN", "verdad", "Gender=Fem|Number=Sing"),
+            ("fuera", "ADV", "fuera", ""),
+            ("huero", "ADJ", "huera", "Gender=Fem|Number=Sing"),
+            ("huevo", "NOUN", "huevo", "Gender=Masc|Number=Sing"),
+            (
+                "sentar",
+                "VERB",
+                "sentad",
+                "Mood=Imp|Number=Plur|Person=2|VerbForm=Fin",
+            ),
+            (
+                "sentar",
+                "VERB",
+                "sentados",
+                "Gender=Masc|Number=Plur|Tense=Past|VerbForm=Part",
+            ),
+            ("cacao", "NOUN", "cacao", "Gender=Masc|Number=Sing"),
+        ];
+        for (lemma, pos, form, feats) in forms {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let first = |token: &str| {
+            let analyses = dictionary.analyze(token);
+            let analysis = analyses.first().unwrap();
+            (
+                analysis.word.clone(),
+                analysis.lemma.clone(),
+                analysis.source,
+            )
+        };
+        let standard =
+            |word: &str, lemma: &str| (word.to_owned(), lemma.to_owned(), Source::Dictionary);
+        assert_eq!(first("trabajao"), standard("trabajado", "trabajar"));
+        assert_eq!(first("verdá"), standard("verdad", "verdad"));
+        assert_eq!(first("juevo"), standard("huevo", "huevo"));
+        // The standard word gets its accents back
+        assert_eq!(first("caío"), standard("caído", "caer"));
+        // A participle goes before a word with other accents
+        assert_eq!(first("perdío"), standard("perdido", "perder"));
+        // The first rule with a word of the dictionary
+        assert_eq!(first("juera"), standard("fuera", "fuera"));
+        assert_eq!(dictionary.analyze("juera").len(), 1);
+        // A word of the dictionary and a verb with clitics stay themselves
+        assert_eq!(first("cacao"), standard("cacao", "cacao"));
+        let sentaos = dictionary.analyze("sentaos");
+        assert_eq!(sentaos[0].source, Source::Clitics);
+        assert_eq!(sentaos[0].words, ["sentad", "os"]);
+        // A word with a capital letter is a name
+        assert_eq!(dictionary.analyze("Trabajao")[0].source, Source::Rule);
+        assert!(
+            !dictionary
+                .analyze("ju")
+                .iter()
+                .any(|a| a.source == Source::Dictionary)
+        );
     }
 
     #[test]

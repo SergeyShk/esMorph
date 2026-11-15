@@ -66,6 +66,12 @@ def test_unknown_words(morph, segmenter):
     assert document.column("feats") == [None]
 
 
+def test_colloquial_spelling_has_the_standard_lemma(morph, segmenter):
+    document = segmenter.segment("Hemos trabajao toa la mañana.")
+    morph.annotate(document)
+    assert columns(document)[1] == ("trabajao", "trabajar", "VERB")
+
+
 def test_tabs_and_line_breaks_in_tokens(morph):
     document = anyseg.Document.from_tokens("a\tb x\r\ny", [0, 4], [3, 8])
     morph.annotate(document)
