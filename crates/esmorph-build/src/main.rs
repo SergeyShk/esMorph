@@ -256,14 +256,16 @@ fn build(
             "variant" => builder
                 .mark_variant(lemma, pos, form, plain(feats))
                 .map_err(at)?,
-            _ if let Some(standard) = kind.strip_prefix("spoken:") => builder
-                .mark_spoken(lemma, pos, form, plain(feats), standard)
-                .map_err(at)?,
-            _ => {
-                return Err(at(Error::Build(format!(
-                    "the kind is `variant`, `spoken:<form>` or `_`, not {kind:?}"
-                ))));
-            }
+            _ => match kind.strip_prefix("spoken:") {
+                Some(standard) => builder
+                    .mark_spoken(lemma, pos, form, plain(feats), standard)
+                    .map_err(at)?,
+                None => {
+                    return Err(at(Error::Build(format!(
+                        "the kind is `variant`, `spoken:<form>` or `_`, not {kind:?}"
+                    ))));
+                }
+            },
         }
         if rank != "_" {
             let rank = rank.parse().map_err(|_| {

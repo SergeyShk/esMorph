@@ -803,7 +803,9 @@ mod tests {
         spoken(&mut builder, "Number=Sing", "nada").unwrap();
         assert!(builder.build().is_ok());
         // A variant is no spoken spelling any more
-        builder.mark_variant("nada", "PRON", "na", "Number=Sing").unwrap();
+        builder
+            .mark_variant("nada", "PRON", "na", "Number=Sing")
+            .unwrap();
         crate::Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
     }
 
