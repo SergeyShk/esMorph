@@ -813,7 +813,8 @@ impl Analyzer {
                 };
                 (word.as_str(), sample)
             });
-            (dictionary.with_words(samples))
+            // Many words take a while: other threads run meanwhile
+            (py.detach(|| dictionary.with_words(samples)))
                 .map_err(|err| PyValueError::new_err(err.to_string()))?
         };
         let tags: Vec<Arc<Tag>> = dictionary

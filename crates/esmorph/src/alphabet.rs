@@ -267,6 +267,27 @@ mod tests {
     }
 
     #[test]
+    fn letters_out_of_the_alphabet_take_free_bytes() {
+        let mut letters = alphabet();
+        assert!(letters.input_key("øzé").is_none());
+        assert!(letters.extend("ØZÉ"));
+        let key = letters.input_key("øzé").unwrap();
+        assert_eq!(
+            (letters.spelling(&key, key.marks), key.marks),
+            ("øzé".to_owned(), 0b100)
+        );
+        // The letters of the dictionary keep their bytes, the new ones sort among the others
+        assert_eq!(
+            letters.input_key("ñ").unwrap().bytes(),
+            alphabet().input_key("ñ").unwrap().bytes()
+        );
+        assert!(letters.input_key("ü").is_some() && letters.input_key("Ø").is_some());
+        // No byte is free for more than 255 letters
+        let many: String = ('\u{4e00}'..).take(255).collect();
+        assert!(!letters.extend(&many));
+    }
+
+    #[test]
     fn keys_of_words() {
         let alphabet = alphabet();
         assert!(

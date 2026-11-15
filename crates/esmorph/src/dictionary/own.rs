@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use super::{Analysis, Dictionary, Entry, normalized};
 use crate::Error;
-use crate::alphabet::MAX_KEY;
-use crate::format::{LEMMA_ONLY, SPOKEN};
+use crate::alphabet::{Key, MAX_KEY};
+use crate::format::{LEMMA_ONLY, SPOKEN, VARIANT};
 
 /// Sample of an own word: a word of the dictionary in the same form as the own word (mostly the
 /// lemma) and the UD part of speech if the sample has lexemes of several (`bajo` is ADJ, ADP, ADV,
@@ -42,12 +42,15 @@ impl<'a> From<(&'a str, &'a str)> for Sample<'a> {
 /// Own words by the bytes of their keys
 pub(super) type OwnWords = HashMap<Box<[u8]>, Vec<OwnForm>, BuildHasherDefault<KeyHasher>>;
 
-/// A form of an own word: the accents of its key, its spelling and the form of a table
-#[derive(Clone, PartialEq)]
+/// A form of an own word: the accents of its key, its spelling, the form of a table, and the share
+/// and the place of that form among the analyses of the spelling of the sample
+#[derive(Clone)]
 pub(super) struct OwnForm {
     marks: u64,
     spelling: String,
     entry: Entry,
+    share: f64,
+    place: usize,
 }
 
 /// Hash of the keys of own words: they are looked for on every token, so it is faster than
@@ -96,9 +99,21 @@ impl Dictionary {
         words: impl IntoIterator<Item = (&'a str, S)>,
     ) -> Result<Self, Error> {
         for (word, sample) in words {
-            let forms = self.sample_forms(word, sample.into())?;
+            let mut forms = Vec::new();
+            for (spelling, entry, like) in self.sample_forms(word, sample.into())? {
+                // The analyses of a spelling go in the order and by the shares of the sample: in
+                // `blogueaba` the third person goes first
+                let analyses = self.spelled(&like).0;
+                let (share, place) = (analyses.iter().enumerate())
+                    .find(|(_, analysis)| analysis.entry == Some(entry))
+                    .map_or(
+                        (1.0 / analyses.len().max(1) as f64, analyses.len()),
+                        |(at, found)| (found.prob, at),
+                    );
+                forms.push((spelling, entry, share, place));
+            }
             let own = Arc::make_mut(&mut self.own_words);
-            for (spelling, entry) in forms {
+            for (spelling, entry, share, place) in forms {
                 // Letters that the dictionary has not take free bytes of the alphabet of the copy
                 if !self.alphabet.extend(&spelling) {
                     return Err(Error::Word(format!(
@@ -110,23 +125,30 @@ impl Dictionary {
                         "the word {spelling:?} is longer than {MAX_KEY} letters"
                     )));
                 };
-                let form = OwnForm {
-                    marks: key.marks,
-                    spelling,
-                    entry,
-                };
                 let forms = own.entry(key.bytes().into()).or_default();
-                if !forms.contains(&form) {
-                    forms.push(form);
+                if !(forms.iter()).any(|known| known.entry == entry && known.spelling == spelling) {
+                    forms.push(OwnForm {
+                        marks: key.marks,
+                        spelling,
+                        entry,
+                        share,
+                        place,
+                    });
                 }
             }
         }
         Ok(self)
     }
 
-    /// Forms of the word `word` like the sample: the spelling and the form of the table of each
-    /// form of the lexemes of the sample, without the spoken spellings
-    fn sample_forms(&self, word: &str, sample: Sample<'_>) -> Result<Vec<(String, Entry)>, Error> {
+    /// Forms of the word `word` like the sample: the spelling, the form of the table and the
+    /// spelling of the sample of each form of the lexemes of the sample, without the spoken
+    /// spellings and, but of a verb (`hablás` of `hablas`), without the variants: those of a noun
+    /// are other spellings (`yoghurt` of `yogur`)
+    fn sample_forms(
+        &self,
+        word: &str,
+        sample: Sample<'_>,
+    ) -> Result<Vec<(String, Entry, String)>, Error> {
         let normal = |text: &str| normalized(text).to_lowercase();
         let (word, like) = (normal(word), normal(sample.word));
         if word.is_empty() || word.chars().any(|c| c.is_whitespace() || c.is_control()) {
@@ -173,10 +195,20 @@ impl Dictionary {
         }
         let mut forms = Vec::new();
         let mut lexemes: Vec<(u16, &str)> = Vec::new();
+        // The endings of the sample that the word needs, for the error
+        let mut endings: Vec<&str> = Vec::new();
         for analysis in &analyses {
             let Some(entry) = analysis.entry else {
                 continue;
             };
+            let Some(sample_lexeme) = self.lexeme(entry, &analysis.word) else {
+                continue;
+            };
+            if let Some(ending) = analysis.word.strip_prefix(sample_lexeme.stem)
+                && !endings.contains(&ending)
+            {
+                endings.push(ending);
+            }
             let Some(lexeme) = self
                 .lexeme(entry, &word)
                 .filter(|lexeme| !lexeme.stem.is_empty())
@@ -187,23 +219,32 @@ impl Dictionary {
                 continue;
             }
             lexemes.push((entry.table, lexeme.stem));
+            let skipped = match pos(analysis) {
+                "VERB" | "AUX" => LEMMA_ONLY | SPOKEN,
+                _ => LEMMA_ONLY | SPOKEN | VARIANT,
+            };
             for form in 0..lexeme.cells.len() {
-                if lexeme.cells[form] & (LEMMA_ONLY | SPOKEN) != 0 {
+                if lexeme.cells[form] & skipped != 0 {
                     continue;
                 }
-                if let Some(spelling) = lexeme.spell(&self.suffixes, form) {
+                if let (Some(spelling), Some(like)) = (
+                    lexeme.spell(&self.suffixes, form),
+                    sample_lexeme.spell(&self.suffixes, form),
+                ) {
                     let entry = Entry {
                         table: entry.table,
                         form: form as u16,
                     };
-                    forms.push((spelling, entry));
+                    forms.push((spelling, entry, like));
                 }
             }
         }
         if forms.is_empty() {
+            let endings: Vec<String> = endings.iter().map(|ending| format!("{ending:?}")).collect();
             return Err(Error::Word(format!(
-                "{word:?} does not inflect as {like:?}: the word and the sample need the same form \
-                 and ending, and the word a stem"
+                "{word:?} does not inflect as {like:?}: the word needs the ending {} of the sample \
+                 and a stem before it",
+                endings.join(" or ")
             )));
         }
         Ok(forms)
@@ -211,29 +252,38 @@ impl Dictionary {
 
     /// The analyses of a word with its own words: an own word of the exact spelling, or of any
     /// spelling of the key if neither the dictionary nor the own words have the exact one, as the
-    /// spellings of the dictionary. An own analysis takes the mean share of the analyses of the
-    /// dictionary and goes after them on equal shares; one that the dictionary has is not repeated
+    /// spellings of the dictionary; then with a lost diaeresis restored. The analyses of an own
+    /// spelling take the order and the shares of the sample; together they take the mean share of
+    /// the analyses of the dictionary each and go after them on equal shares; one that the
+    /// dictionary has is not repeated
     pub(super) fn with_own(
         &self,
         word: &str,
         mut analyses: Vec<Analysis>,
         exact: bool,
     ) -> (Vec<Analysis>, bool) {
-        let Some(key) = self.alphabet.input_key(word) else {
+        let Some((key, forms, as_written)) = self.own_forms(word) else {
             return (analyses, exact);
         };
-        let Some(forms) = self.own_words.get(key.bytes()) else {
-            return (analyses, exact);
-        };
-        let own_exact = forms.iter().any(|own| own.marks == key.marks);
+        let own_exact = as_written && forms.iter().any(|own| own.marks == key.marks);
         // The analyses of the dictionary with other accents give way to the exact own word
         if own_exact && !exact {
             analyses.clear();
         }
         let exact = exact || own_exact;
-        let share = 1.0 / analyses.len().max(1) as f64;
+        let mut chosen: Vec<&OwnForm> = (forms.iter())
+            .filter(|own| !exact || own.marks == key.marks)
+            .collect();
+        chosen.sort_by_key(|own| own.place);
+        let total: f64 = chosen.iter().map(|own| own.share).sum();
+        let scale = chosen.len() as f64 / analyses.len().max(1) as f64;
         let known = analyses.len();
-        for own in forms.iter().filter(|own| !exact || own.marks == key.marks) {
+        for own in chosen {
+            let share = if total > 0.0 {
+                own.share / total * scale
+            } else {
+                scale
+            };
             let Some(analysis) = self.analysis(own.spelling.clone(), own.entry, share) else {
                 continue;
             };
@@ -256,11 +306,22 @@ impl Dictionary {
         (analyses, exact)
     }
 
-    /// Whether an own word is spelled as `word` with any accents
+    /// The key of a word, the own words of it and whether the key is as written: the key as written,
+    /// then with a lost diaeresis restored
+    fn own_forms(&self, word: &str) -> Option<(Key, &[OwnForm], bool)> {
+        let key = self.alphabet.input_key(word)?;
+        if let Some(forms) = self.own_words.get(key.bytes()) {
+            return Some((key, forms, true));
+        }
+        (self.alphabet.diaeresis_keys(&key).into_iter()).find_map(|key| {
+            let forms = self.own_words.get(key.bytes())?;
+            Some((key, forms.as_slice(), false))
+        })
+    }
+
+    /// Whether an own word is spelled as `word` with any accents or with a lost diaeresis
     pub(super) fn is_own(&self, word: &str) -> bool {
-        !self.own_words.is_empty()
-            && (self.alphabet.input_key(word))
-                .is_some_and(|key| self.own_words.contains_key(key.bytes()))
+        !self.own_words.is_empty() && self.own_forms(word).is_some()
     }
 }
 
@@ -366,6 +427,71 @@ mod tests {
         // The same analysis is not repeated
         let again = dictionary.with_words([("casa", ("bajo", "ADJ"))]).unwrap();
         assert_eq!(again.analyze("casa").len(), 2);
+    }
+
+    #[test]
+    fn an_own_word_follows_the_order_and_variants_of_its_sample() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let past =
+            |person: &str| format!("Mood=Ind|Number=Sing|Person={person}|Tense=Imp|VerbForm=Fin");
+        let (first_person, third_person) = (past("1"), past("3"));
+        let (sing, plur) = ("Gender=Masc|Number=Sing", "Gender=Masc|Number=Plur");
+        let forms = [
+            ("bloguear", "VERB", "bloguear", "VerbForm=Inf"),
+            ("bloguear", "VERB", "blogueaba", first_person.as_str()),
+            ("bloguear", "VERB", "blogueaba", third_person.as_str()),
+            ("yogur", "NOUN", "yogur", sing),
+            ("yogur", "NOUN", "yogures", plur),
+            ("yogur", "NOUN", "yoghurt", sing),
+            ("pingüino", "NOUN", "pingüino", sing),
+        ];
+        for (lemma, pos, form, feats) in forms {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        builder
+            .mark_variant("yogur", "NOUN", "yoghurt", sing)
+            .unwrap();
+        // The sample has the third person first
+        builder
+            .place("bloguear", "VERB", "blogueaba", &third_person, 0, Some(0.8))
+            .unwrap();
+        builder
+            .place("bloguear", "VERB", "blogueaba", &first_person, 1, Some(0.2))
+            .unwrap();
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let dictionary = dictionary
+            .with_words([
+                ("tiktokear", "bloguear"),
+                ("zogur", "yogur"),
+                ("zingüino", "pingüino"),
+            ])
+            .unwrap();
+        let analyses = dictionary.analyze("tiktokeaba");
+        let tag = |analysis: &Analysis| dictionary.ud_tag(analysis.ud).unwrap();
+        assert_eq!(tag(&analyses[0]).feat("Person"), Some("3"));
+        assert!(
+            (analyses[0].prob - 0.8).abs() < 1e-6,
+            "{}",
+            analyses[0].prob
+        );
+        // A noun takes no other spellings of its sample as words, and inflection gives none
+        assert!((dictionary.analyze("zoghurt").iter()).all(|a| a.source != Source::Dictionary));
+        let zogures = dictionary.analyze("zogures").remove(0);
+        let singular = dictionary.inflect(&zogures, &[("Number", "Sing")]).unwrap();
+        assert_eq!(singular.word, "zogur");
+        // A lost diaeresis
+        assert_eq!(
+            first(&dictionary, "zinguino"),
+            ("zingüino".into(), "zingüino".into())
+        );
+        assert!(dictionary.is_known("zinguino"));
+        // The error names the ending the word needs
+        let error = (dictionary.with_words([("zogurt", "yogur")])).unwrap_err();
+        assert!(
+            error.to_string().contains("needs the ending \"ur\""),
+            "{error}"
+        );
     }
 
     #[test]

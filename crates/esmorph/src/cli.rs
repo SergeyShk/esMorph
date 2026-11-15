@@ -307,10 +307,12 @@ fn execute(
     {
         report(match &output_path {
             Some(path) => format!(
-                "{}: the output file is an input file or the dictionary",
+                "{}: the output file is an input file, the dictionary or a file of own words",
                 path.display()
             ),
-            None => "the standard output is an input file or the dictionary".into(),
+            None => {
+                "the standard output is an input file, the dictionary or a file of own words".into()
+            }
         });
         return 1;
     }
@@ -1826,7 +1828,9 @@ mod tests {
             let (code, _, err) = command(&args, b"");
             assert_eq!(code, 1, "{args:?}");
             assert!(
-                err.ends_with("the output file is an input file or the dictionary\n"),
+                err.ends_with(
+                    "the output file is an input file, the dictionary or a file of own words\n"
+                ),
                 "{err}"
             );
         }
