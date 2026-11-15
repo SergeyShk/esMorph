@@ -67,7 +67,11 @@ def _analysis(
 ) -> Analysis:
     """Restores an analysis from pickle"""
 
-def _analyzer(path: str | PathLike[str] | None = None, verify: bool = False) -> Analyzer:
+def _analyzer(
+    path: str | PathLike[str] | None = None,
+    verify: bool = False,
+    words: Mapping[str, str | tuple[str, str]] | None = None,
+) -> Analyzer:
     """Restores an analyzer from pickle"""
 
 def _analyses_analyzer(path: str | PathLike[str] | None = None, verify: bool = False) -> Analyzer:
