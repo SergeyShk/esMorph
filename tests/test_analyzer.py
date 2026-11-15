@@ -764,6 +764,54 @@ def test_analyze_sentence(morph):
     assert probabilities(long[:256]) != probabilities(long[4096:4352])
 
 
+@pytest.mark.parametrize(
+    ("words", "at", "expected"),
+    [
+        # An article before a finite verb is the clitic, after a preposition it stays an article
+        ("No la descubras .", 1, ("él", "PRON")),
+        ("¿ Dónde las has puesto ?", 2, ("él", "PRON")),
+        ("Vio la casa .", 1, ("el", "DET")),
+        # An infinitive after a verb is no noun, after a copula a noun stays one
+        ("Eso puede ser verdad .", 2, ("ser", "AUX")),
+        ("Será titular en el partido .", 1, ("titular", "NOUN")),
+        # A form of ser and ir is ir after a reflexive clitic, before the goal of a and before a
+        # gerund, and ser before a predicate
+        ("Los pájaros se fueron .", 3, ("ir", "VERB")),
+        ("Fue a casa .", 0, ("ir", "VERB")),
+        ("Fueron al cine .", 0, ("ir", "VERB")),
+        ("El conflicto fue escalando .", 2, ("ir", "VERB")),
+        ("Me fue imposible .", 1, ("ser", "AUX")),
+        ("La casa fue construida .", 2, ("ser", "AUX")),
+        ("Nos fuimos temprano .", 1, ("ir", "VERB")),
+        # A word after a clitic is a verb
+        ("Quiero que te vayas .", 3, ("ir", "VERB")),
+        # An imperative opening a sentence is no name, a name stays one
+        ("Indique si desea factura .", 0, ("indicar", "VERB")),
+        ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
+    ],
+)
+def test_constraints_of_the_context(morph, words, at, expected):
+    analysis = morph.analyze_sentence(words.split())[at][0]
+    assert (analysis.lemma, analysis.pos) == expected
+
+
+def test_constraint_keeps_the_probabilities_of_the_model(morph):
+    # The chosen analysis goes first, the probabilities stay those of the model
+    words = ["No", "la", "descubras", "."]
+    found = morph.analyze_sentence(words)[1]
+    assert found[0].pos == "PRON"
+    assert abs(sum(analysis.prob for analysis in found) - 1) < 1e-6
+
+
+def test_old_spellings_and_imperatives_with_se(morph):
+    # An old spelling of a verb keeps no table of its own: fuimos is no form of fuir
+    assert {analysis.lemma for analysis in morph.analyze("fuimos")} == {"ir", "ser"}
+    # The imperative of dar with se written without an accent
+    dese, dense = morph.analyze("dese")[0], morph.analyze("dense")[0]
+    assert (dese.lemma, dese.words) == ("dar", ("dé", "se"))
+    assert (dense.lemma, dense.words) == ("dar", ("den", "se"))
+
+
 def test_model_as_trained(morph):
     # Sentences of AnCora dev with the probabilities of the quantized model of the training: the
     # analyzer computes the input of the model and its layers as the training does. The model does

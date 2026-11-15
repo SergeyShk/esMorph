@@ -914,6 +914,12 @@ pub(crate) mod tests {
         dictionary.ud_tag(analysis.ud).unwrap().pos()
     }
 
+    /// Analyses of a sentence in the order of the model alone, without the constraints
+    fn ranked(dictionary: &Dictionary, words: &[&str]) -> Vec<Vec<Analysis>> {
+        let analyses = words.iter().map(|word| dictionary.analyze(word)).collect();
+        dictionary.context().unwrap().rank(words, analyses, true)
+    }
+
     #[test]
     fn training_sources() {
         let data = weights(&[("P=PRON", 0.0)]);
@@ -955,12 +961,12 @@ pub(crate) mod tests {
         // The tag of the part of speech, features and words together outweighs the pronoun
         let article = "C=DET|Definite=Def|Gender=Fem|Number=Sing|PronType=Art|1";
         let dictionary = dictionary(Some(weights(&[("P=PRON", 2.0), (article, 3.0)])));
-        let sentence = dictionary.analyze_sentence(&["la", "vio"]).unwrap();
+        let sentence = ranked(&dictionary, &["la", "vio"]);
         assert_eq!(pos(&dictionary, &sentence[0][0]), "DET");
         // A tag of two words does not fit a token of one
         let two = "C=DET|Definite=Def|Gender=Fem|Number=Sing|PronType=Art|2";
         let dictionary = super::tests::dictionary(Some(weights(&[("P=PRON", 2.0), (two, 3.0)])));
-        let sentence = dictionary.analyze_sentence(&["la", "vio"]).unwrap();
+        let sentence = ranked(&dictionary, &["la", "vio"]);
         assert_eq!(pos(&dictionary, &sentence[0][0]), "PRON");
     }
 
