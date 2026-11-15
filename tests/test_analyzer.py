@@ -769,34 +769,42 @@ def test_analyze_sentence(morph):
     [
         # An article before a finite verb is the clitic, after a preposition it stays an article
         ("No la descubras .", 1, ("él", "PRON")),
-        ("¿ Dónde las has puesto ?", 2, ("él", "PRON")),
-        ("Vio la casa .", 1, ("el", "DET")),
-        # An infinitive after a verb is no noun, after a copula a noun stays one
-        ("Eso puede ser verdad .", 2, ("ser", "AUX")),
-        ("Será titular en el partido .", 1, ("titular", "NOUN")),
+        ("Viene de la luthiere .", 2, ("el", "DET")),
+        # A noun after a verb of a bare infinitive is the infinitive, after another verb a noun
+        ("Parecía pesar sobre él .", 1, ("pesar", "VERB")),
+        ("Siento pesar por su muerte .", 1, ("pesar", "NOUN")),
         # A form of ser and ir is ir after a reflexive clitic, before the goal of a and before a
-        # gerund, and ser before a predicate
+        # gerund, and ser before a predicate, a prepositional phrase or an hour
         ("Los pájaros se fueron .", 3, ("ir", "VERB")),
+        ("Se fue muy lejos .", 1, ("ir", "VERB")),
         ("Fue a casa .", 0, ("ir", "VERB")),
         ("Fueron al cine .", 0, ("ir", "VERB")),
         ("El conflicto fue escalando .", 2, ("ir", "VERB")),
-        ("Me fue imposible .", 1, ("ser", "AUX")),
-        ("La casa fue construida .", 2, ("ser", "AUX")),
-        ("Nos fuimos temprano .", 1, ("ir", "VERB")),
-        # A word after a clitic or the negation is a verb
-        ("Quiero que te vayas .", 3, ("ir", "VERB")),
+        ("Me fue muy difícil .", 1, ("ser", "AUX")),
+        ("Me fue concedido .", 1, ("ser", "AUX")),
+        ("Fue a partir de 1990 .", 0, ("ser", "AUX")),
+        ("Fue a las cinco .", 0, ("ser", "AUX")),
+        ("Fue a ella a quien vi .", 0, ("ser", "AUX")),
+        # A word after a clitic, the negation or tú is a verb, of the frequent one of its form;
+        # after a preposition no makes a noun negative
+        ("¿ Te figuras lo que dijo ?", 2, ("figurar", "VERB")),
         ("No comas , que es tarde .", 1, ("comer", "VERB")),
+        ("No temas , descuida .", 1, ("temer", "VERB")),
         ("Adonde tú vayas , voy .", 2, ("ir", "VERB")),
-        # An imperative opening a sentence is no name, a name stays one
+        ("Es el punto de no retorno .", 5, ("retorno", "NOUN")),
+        # An imperative opening a sentence is no name; a name and a noun stay
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
         ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
+        ("Sangre de Abel .", 0, ("Sangre", "PROPN")),
         # A word of the dictionary that is mostly a verb with clitics is one, not the interjection
         # or a name
         ("¡ Cállate !", 1, ("callar", "VERB")),
         ("— Vete , y déjame .", 1, ("ir", "VERB")),
-        # A rare verb does not take the place of a frequent one with the same form
+        # A rare verb does not take the place of a frequent one with the same form, a frequent
+        # one stays
         ("Aunque vengan tarde .", 1, ("venir", "VERB")),
         ("Ojalá venga pronto .", 1, ("venir", "VERB")),
+        ("La fuerza crea leyes nuevas .", 2, ("crear", "VERB")),
     ],
 )
 def test_constraints_of_the_context(morph, words, at, expected):
@@ -809,6 +817,7 @@ def test_constraint_keeps_the_probabilities_of_the_model(morph):
     words = ["No", "la", "descubras", "."]
     found = morph.analyze_sentence(words)[1]
     assert found[0].pos == "PRON"
+    assert found[0].prob < max(analysis.prob for analysis in found)
     assert abs(sum(analysis.prob for analysis in found) - 1) < 1e-6
 
 

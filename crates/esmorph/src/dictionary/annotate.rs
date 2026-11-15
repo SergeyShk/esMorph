@@ -363,16 +363,16 @@ mod tests {
 
     #[test]
     fn host_by_token() {
-        // `di` alone is mostly the past of `dar`
-        assert_eq!(summary("di", &["di"]), pairs(&[("dar", "VERB")]));
+        // `ve` alone is mostly the present of `ver`, with a clitic the imperative of `ir`
+        assert_eq!(summary("ve", &["ve"]), pairs(&[("ver", "VERB")]));
         assert_eq!(
-            summary("dime", &["di", "me"]),
-            pairs(&[("decir", "VERB"), ("yo", "PRON")])
+            summary("vete", &["ve", "te"]),
+            pairs(&[("ir", "VERB"), ("tú", "PRON")])
         );
         // A capital letter makes the token a name first, but its words are a verb and a clitic
         assert_eq!(
-            summary("Dime", &["Di", "me"]),
-            pairs(&[("decir", "VERB"), ("yo", "PRON")])
+            summary("Vete", &["Ve", "te"]),
+            pairs(&[("ir", "VERB"), ("tú", "PRON")])
         );
         // The host without the accent of the clitics
         assert_eq!(

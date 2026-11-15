@@ -14,7 +14,7 @@ const SUFFIX: usize = 3;
 const PRIOR: f64 = 1.0;
 /// Weight of the frequency of a verb in all its forms against its counts in a form: a few counts
 /// of a rare verb, often wrong, do not outweigh a frequent one (`vengo` is `venir`, not `vengar`)
-const LEXEME_PRIOR: f64 = 10.0;
+const LEXEME_PRIOR: f64 = 30.0;
 
 /// An analysis of a form
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -30,8 +30,8 @@ pub struct Row<'a> {
 #[derive(Debug, PartialEq)]
 pub struct Ranked<'a> {
     pub rows: Vec<Row<'a>>,
-    /// Probabilities of the rows; `None` if the treebanks did not see the form, nor the lemmas of
-    /// a part of speech it shares
+    /// Probabilities of the rows; `None` if the treebanks saw neither the form nor, for a form of
+    /// several verbs, those verbs in other forms
     pub probabilities: Option<Vec<f64>>,
 }
 

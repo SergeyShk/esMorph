@@ -1,10 +1,4 @@
-//! Constraints of Spanish on the analyses the context model chooses: an article before a finite
-//! verb is a pronoun (`no la descubras`), an infinitive after a verb is no noun (`puede ser`), a
-//! form of `ser` and `ir` is `ir` where only `ir` fits (`se fue`, `fue a casa`, `fue cayendo`), an
-//! imperative opening a sentence is no name (`Indique si desea`), a word after a clitic or the
-//! negation is a verb (`que te vayas`, `no vayas`), a word that is mostly a verb with clitics is
-//! one (`¡Cállate!`) and a rare verb does not take the place of a frequent one with the same form
-//! (`venga` is `venir`, not `vengar`)
+//! Constraints of Spanish on the analyses the context model chooses in a sentence
 
 use super::{Analysis, Dictionary, Source};
 use crate::clitics;
@@ -35,15 +29,56 @@ const SER_IR: [&str; 19] = [
     "fueres",
     "fueren",
 ];
-/// Parts of speech of a word that heads the goal of `ir a`: `fue a casa`, `fue a ver`
-const GOAL: [&str; 6] = ["DET", "NOUN", "PROPN", "PRON", "NUM", "VERB"];
+/// Parts of speech of a word that heads the goal of `ir a`: `fue a casa`, `fue a ver`; a pronoun
+/// after `fue a` is mostly a cleft (`fue a ella a quien`)
+const GOAL: [&str; 5] = ["DET", "NOUN", "PROPN", "NUM", "VERB"];
+/// Words of the prepositional phrases `a ... de`, which are no goal: `fue a partir de 1990`, `fue
+/// a finales de mayo`
+const LOCUTIONS: [&str; 18] = [
+    "base",
+    "cambio",
+    "cargo",
+    "causa",
+    "consecuencia",
+    "costa",
+    "excepción",
+    "falta",
+    "favor",
+    "finales",
+    "fuerza",
+    "mediados",
+    "partir",
+    "pesar",
+    "petición",
+    "principios",
+    "raíz",
+    "través",
+];
 /// Words a verb follows, not a noun without a determiner: the negation and the subject `tú`
 const BEFORE_VERB: [&str; 2] = ["no", "tú"];
-/// Lemmas of the copulas, whose predicate is a noun (`será titular`)
-const COPULAS: [&str; 2] = ["ser", "estar"];
+/// Lemmas of the verbs followed by a bare infinitive: `puede ser`, `suele parecer`, but `tiene
+/// poder`, `siento pesar`
+const BEFORE_INFINITIVE: [&str; 16] = [
+    "conseguir",
+    "deber",
+    "decidir",
+    "desear",
+    "esperar",
+    "intentar",
+    "lograr",
+    "necesitar",
+    "parecer",
+    "pensar",
+    "poder",
+    "preferir",
+    "pretender",
+    "querer",
+    "saber",
+    "soler",
+];
 /// Shares of the verbs of a form in the counts of the dictionary: the model, which sees no lemma,
 /// does not choose a verb below RARE where another is above FREQUENT
-const RARE: f64 = 0.3;
+const RARE: f64 = 0.2;
 const FREQUENT: f64 = 0.6;
 /// Parts of speech of the word after an imperative opening a sentence, not after a name:
 /// `Indique si`, `Diga usted`, `Señale el`, but `Defensa quiere`, `Hacienda ya`
@@ -68,9 +103,12 @@ impl Dictionary {
                 .or_else(|| self.infinitive(sentence, at))
                 .or_else(|| self.ser_ir(&lower, sentence, at))
                 .or_else(|| self.verb_after(&lower, sentence, at))
-                .or_else(|| self.opening_word(words, sentence, at, start))
-                .or_else(|| self.frequent_lemma(&sentence[at], &shares[at]));
+                .or_else(|| self.opening_word(words, sentence, at, start));
             if let Some(index) = chosen {
+                promote(&mut sentence[at], index);
+            }
+            // Also of the verb a rule chose: `no temas` is `temer`, not `temar`
+            if let Some(index) = self.frequent_lemma(&sentence[at], &shares[at]) {
                 promote(&mut sentence[at], index);
             }
         }
@@ -127,8 +165,8 @@ impl Dictionary {
             .position(|analysis| self.pos(analysis) == "PRON")
     }
 
-    /// A word the model reads as a common noun right after a verb other than a copula is its
-    /// infinitive: `puede ser`, `suele parecer`, but `será titular`
+    /// A word the model reads as a common noun right after a verb of BEFORE_INFINITIVE is its
+    /// infinitive: `puede ser`, `suele parecer`
     fn infinitive(&self, sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         let before = at
@@ -136,7 +174,7 @@ impl Dictionary {
             .and_then(|before| sentence[before].first())?;
         if self.pos(list.first()?) != "NOUN"
             || !matches!(self.pos(before), "VERB" | "AUX")
-            || COPULAS.contains(&before.lemma.as_str())
+            || !BEFORE_INFINITIVE.contains(&before.lemma.as_str())
         {
             return None;
         }
@@ -146,21 +184,29 @@ impl Dictionary {
     }
 
     /// A form of `ser` and `ir` is `ir` after a reflexive clitic but before a predicate (`se fue`,
-    /// `me fui de casa`, not `me fue útil`), before `a` and its goal (`fue a casa`, `fueron a ver`)
-    /// and before a gerund (`fue cayendo`)
+    /// `me fui de casa`, not `me fue muy útil`), before `a` and its goal (`fue a casa`, `fueron a
+    /// ver`, not `fue a partir de`, `fue a las cinco`) and before a gerund (`fue cayendo`)
     fn ser_ir(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         if !SER_IR.contains(&lower[at].as_str()) || list.first()?.lemma == "ir" {
             return None;
         }
-        let next = lower.get(at + 1).map_or("", String::as_str);
-        let next_pos = self.top_pos(sentence, at + 1);
+        let word = |at: usize| lower.get(at).map_or("", String::as_str);
+        let next = word(at + 1);
+        // The predicate after the adverbs before it: `me fue muy difícil`
+        let predicate = (at + 1..sentence.len())
+            .find(|&next| self.top_pos(sentence, next) != "ADV")
+            .unwrap_or(sentence.len());
         let after_clitic = at > 0
             && PROCLITICS.contains(&lower[at - 1].as_str())
             && next != "de"
-            && next_pos != "ADJ"
-            && !self.top_verb_form(sentence, at + 1, "Part");
+            && self.top_pos(sentence, predicate) != "ADJ"
+            && !self.top_verb_form(sentence, predicate, "Part");
+        let locution = LOCUTIONS.contains(&word(at + 2)) && word(at + 3) == "de";
+        let hour = matches!(word(at + 2), "la" | "las") && self.top_pos(sentence, at + 3) == "NUM";
         let goal = matches!(next, "a" | "al")
+            && !locution
+            && !hour
             && (next == "al" || GOAL.contains(&self.top_pos(sentence, at + 2)));
         let gerund = self.top_verb_form(sentence, at + 1, "Ger");
         if !(after_clitic || goal || gerund) {
@@ -176,9 +222,10 @@ impl Dictionary {
         let before = at.checked_sub(1)?;
         let clitic = PROCLITICS.contains(&lower[before].as_str())
             && self.top_pos(sentence, before) == "PRON";
-        if !(clitic || BEFORE_VERB.contains(&lower[before].as_str()))
-            || !matches!(self.pos(list.first()?), "NOUN" | "PROPN")
-        {
+        // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`
+        let negation = BEFORE_VERB.contains(&lower[before].as_str())
+            && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"));
+        if !(clitic || negation) || !matches!(self.pos(list.first()?), "NOUN" | "PROPN") {
             return None;
         }
         list.iter().position(|analysis| {
@@ -187,8 +234,9 @@ impl Dictionary {
     }
 
     /// A capitalized word opening a sentence that a rule reads as a name is its imperative when the
-    /// dictionary has one and a lowercase word of AFTER_IMPERATIVE follows: `Indique si desea`, not
-    /// `Tony`, `Lite - Brite` or `Defensa quiere`
+    /// dictionary has one, the model ranks it above the other words of the dictionary and a
+    /// lowercase word of AFTER_IMPERATIVE follows: `Indique si desea`, not `Tony`, `Defensa quiere`
+    /// or `Sangre de Abel`
     fn opening_word(
         &self,
         words: &[&str],
@@ -210,6 +258,13 @@ impl Dictionary {
         if !opening || list.first()?.source != Source::Rule || self.pos(&list[0]) != "PROPN" {
             return None;
         }
+        // A noun the model ranks above the verb is no imperative: `Sangre de Abel`
+        let known = list
+            .iter()
+            .find(|analysis| analysis.source == Source::Dictionary)?;
+        if self.pos(known) != "VERB" {
+            return None;
+        }
         list.iter().position(|analysis| {
             analysis.source == Source::Dictionary
                 && self.pos(analysis) == "VERB"
@@ -217,8 +272,8 @@ impl Dictionary {
         })
     }
 
-    /// Shares of the verbs of a word in the counts if it is the form of several (`venga` of `venir`
-    /// and `vengar`), empty otherwise
+    /// Shares of the verbs of a word in the counts, among its verbs, if it is the form of several
+    /// (`venga` of `venir` and `vengar`), empty otherwise
     pub(crate) fn verb_shares(&self, list: &[Analysis]) -> Vec<(String, f64)> {
         let verb = |analysis: &&Analysis| self.pos(analysis) == "VERB";
         let Some(first) = list.iter().find(verb) else {
@@ -241,11 +296,18 @@ impl Dictionary {
                 None => shares.push((analysis.lemma.clone(), analysis.prob)),
             }
         }
+        // Among the verbs alone: `temas` is mostly the noun, but of the verbs `temer`
+        let total: f64 = shares.iter().map(|(_, share)| share).sum();
+        if total > 0.0 {
+            for (_, share) in &mut shares {
+                *share /= total;
+            }
+        }
         shares
     }
 
-    /// The analysis of the frequent verb the model ranks highest when the model chose the form of a
-    /// rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`
+    /// The analysis of the frequent verb the model ranks highest when the model chose a finite form
+    /// of a rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`
     fn frequent_lemma(&self, list: &[Analysis], shares: &[(String, f64)]) -> Option<usize> {
         let top = list.first()?;
         let share = |lemma: &str| {
@@ -254,7 +316,9 @@ impl Dictionary {
                 .find(|(name, _)| name == lemma)
                 .map_or(0.0, |&(_, share)| share)
         };
-        if self.pos(top) != "VERB" || share(&top.lemma) >= RARE {
+        // A participle stands: the model reads it from its context (`había entrevisto`)
+        if self.pos(top) != "VERB" || self.has(top, "VerbForm", "Part") || share(&top.lemma) >= RARE
+        {
             return None;
         }
         list.iter().position(|analysis| {

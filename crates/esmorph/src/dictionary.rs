@@ -98,8 +98,8 @@ pub struct Analysis {
     pub lemma: String,
     /// Number of the UD tag for `Dictionary::ud_tag`
     pub ud: u16,
-    /// Share of the analysis among the analyses of the word: by the counts of treebanks, for a word
-    /// they did not see equal but for its verbs, weighed by their frequency; of
+    /// Share of the analysis among the analyses of the word: by the counts of treebanks; for a word
+    /// they did not see equal, unless it is a form of several verbs they saw in other forms; of
     /// `Dictionary::analyze_sentence` - the score of the context model in the sentence
     pub prob: f64,
     /// Where the analysis comes from
