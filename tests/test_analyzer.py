@@ -783,6 +783,7 @@ def test_analyze_sentence(morph):
         ("Me fue muy difícil .", 1, ("ser", "AUX")),
         ("Me fue concedido .", 1, ("ser", "AUX")),
         ("Fue a partir de 1990 .", 0, ("ser", "AUX")),
+        ("Fue a finales del siglo XIX .", 0, ("ser", "AUX")),
         ("Fue a las cinco .", 0, ("ser", "AUX")),
         ("Fue a ella a quien vi .", 0, ("ser", "AUX")),
         # A word after a clitic, the negation or tú is a verb, of the frequent one of its form;

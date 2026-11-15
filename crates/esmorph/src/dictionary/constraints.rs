@@ -33,7 +33,7 @@ const SER_IR: [&str; 19] = [
 /// after `fue a` is mostly a cleft (`fue a ella a quien`)
 const GOAL: [&str; 5] = ["DET", "NOUN", "PROPN", "NUM", "VERB"];
 /// Words of the prepositional phrases `a ... de`, which are no goal: `fue a partir de 1990`, `fue
-/// a finales de mayo`
+/// a finales del siglo`
 const LOCUTIONS: [&str; 18] = [
     "base",
     "cambio",
@@ -202,7 +202,7 @@ impl Dictionary {
             && next != "de"
             && self.top_pos(sentence, predicate) != "ADJ"
             && !self.top_verb_form(sentence, predicate, "Part");
-        let locution = LOCUTIONS.contains(&word(at + 2)) && word(at + 3) == "de";
+        let locution = LOCUTIONS.contains(&word(at + 2)) && matches!(word(at + 3), "de" | "del");
         let hour = matches!(word(at + 2), "la" | "las") && self.top_pos(sentence, at + 3) == "NUM";
         let goal = matches!(next, "a" | "al")
             && !locution
