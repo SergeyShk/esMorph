@@ -788,6 +788,10 @@ def test_analyze_sentence(morph):
         # An imperative opening a sentence is no name, a name stays one
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
         ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
+        # A word of the dictionary that is mostly a verb with clitics is one, not the interjection
+        # or a name
+        ("¡ Cállate !", 1, ("callar", "VERB")),
+        ("— Vete , y déjame .", 1, ("ir", "VERB")),
         # A rare verb does not take the place of a frequent one with the same form
         ("Aunque vengan tarde .", 1, ("venir", "VERB")),
         ("Ojalá venga pronto .", 1, ("venir", "VERB")),
@@ -1703,6 +1707,16 @@ def test_clitics_in_literary_writing(morph):
     assert morph.analyze("verte")[0].words == ("ver", "te")
     assert morph.analyze("verse")[0].words == ("ver", "se")
     assert morph.analyze("alientelo")[0].lemma == "alentar"
+    # A word of the dictionary that is mostly a verb with clitics keeps its own analysis after it
+    for word, words in [
+        ("dale", ("da", "le")),
+        ("cállate", ("calla", "te")),
+        ("dinos", ("di", "nos")),
+        ("buscarla", ("buscar", "la")),
+    ]:
+        analyses = morph.analyze(word)
+        assert analyses[0].words == words
+        assert any(analysis.words == (word,) for analysis in analyses[1:])
 
 
 def test_guessed_words(morph):

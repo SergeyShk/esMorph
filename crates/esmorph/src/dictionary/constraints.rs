@@ -2,10 +2,12 @@
 //! verb is a pronoun (`no la descubras`), an infinitive after a verb is no noun (`puede ser`), a
 //! form of `ser` and `ir` is `ir` where only `ir` fits (`se fue`, `fue a casa`, `fue cayendo`), an
 //! imperative opening a sentence is no name (`Indique si desea`), a word after a clitic is a
-//! verb (`que te vayas`) and a rare verb does not take the place of a frequent one with the same
-//! form (`venga` is `venir`, not `vengar`)
+//! verb (`que te vayas`), a word that is mostly a verb with clitics is one (`¡Cállate!`) and a
+//! rare verb does not take the place of a frequent one with the same form (`venga` is `venir`, not
+//! `vengar`)
 
 use super::{Analysis, Dictionary, Source};
+use crate::clitics;
 
 /// Clitic pronouns before a verb: a noun or an article cannot follow them
 const PROCLITICS: [&str; 5] = ["me", "te", "se", "nos", "os"];
@@ -59,8 +61,8 @@ impl Dictionary {
     ) {
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
         for at in 0..sentence.len() {
-            let chosen = self
-                .article_clitic(&lower, sentence, at)
+            let chosen = clitic_homonym(&lower[at], &sentence[at])
+                .or_else(|| self.article_clitic(&lower, sentence, at))
                 .or_else(|| self.infinitive(sentence, at))
                 .or_else(|| self.ser_ir(&lower, sentence, at))
                 .or_else(|| self.verb_after_clitic(&lower, sentence, at))
@@ -263,6 +265,17 @@ impl Dictionary {
                 && share(&analysis.lemma) > FREQUENT
         })
     }
+}
+
+/// A word of the dictionary that is mostly a verb with clitics is one in a sentence, though the
+/// model, which knows few imperatives, may read it as the word of the dictionary or a name:
+/// `¡Cállate!`, `—Vete, y déjame`
+fn clitic_homonym(lower: &str, list: &[Analysis]) -> Option<usize> {
+    if !clitics::homonym(lower) || list.first()?.source == Source::Clitics {
+        return None;
+    }
+    list.iter()
+        .position(|analysis| analysis.source == Source::Clitics)
 }
 
 /// Moves the analysis at `index` to the front; every analysis keeps the probability of the model

@@ -66,7 +66,7 @@ Los análisis van del más probable al menos probable. `prob` es la parte de un 
 
 ## Palabras con clíticos { #clitics }
 
-Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: `díjole` es `dijo` + `le`. `del` y `al` también tienen sus dos palabras, como las contracciones de `de` con un pronombre o un demostrativo en la escritura antigua: `desta` es `de` + `esta`. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`, aunque unas pocas suelen ser verbos con clíticos: `verse` es ante todo `ver` + `se`.
+Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y `words` da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: `díjole` es `dijo` + `le`. `del` y `al` también tienen sus dos palabras, como las contracciones de `de` con un pronombre o un demostrativo en la escritura antigua: `desta` es `de` + `esta`. Una palabra del diccionario no se divide: `comete` es una forma de `cometer`, aunque unas pocas suelen ser verbos con clíticos: `verse` es ante todo `ver` + `se`, `cállate` es `calla` + `te`, y en una oración siempre son esos verbos.
 
 === "Código"
 

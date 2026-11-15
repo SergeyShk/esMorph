@@ -66,7 +66,7 @@ Analyses go from the most probable to the least. `prob` is the share of an analy
 
 ## Words with clitics { #clitics }
 
-A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. In older and literary writing a finite form takes enclitics too, when the accent of the token marks it: `díjole` is `dijo` + `le`. `del` and `al` also have their two words, as do the contractions of `de` with a pronoun or a demonstrative in older writing: `desta` is `de` + `esta`. A word of the dictionary is not split: `comete` is a form of `cometer`, though a few are mostly verbs with clitics: `verse` is first of all `ver` + `se`.
+A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and `words` gives the words of the token, as Universal Dependencies has them. In older and literary writing a finite form takes enclitics too, when the accent of the token marks it: `díjole` is `dijo` + `le`. `del` and `al` also have their two words, as do the contractions of `de` with a pronoun or a demonstrative in older writing: `desta` is `de` + `esta`. A word of the dictionary is not split: `comete` is a form of `cometer`, though a few are mostly verbs with clitics: `verse` is first of all `ver` + `se`, `cállate` is `calla` + `te`, and in a sentence they are always such verbs.
 
 === "Code"
 
