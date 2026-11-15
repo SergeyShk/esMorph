@@ -31,6 +31,14 @@ pub(crate) fn standard(word: &str) -> impl Iterator<Item = String> + '_ {
     endings.chain(starts)
 }
 
+/// Whether a word ends as a participle without its `d` that has an accent: `perdío`, `metíos`
+pub(crate) fn is_participle(word: &str) -> bool {
+    ["ío", "íos"].iter().any(|ending| {
+        word.strip_suffix(ending)
+            .is_some_and(|stem| !stem.is_empty())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -52,6 +60,12 @@ mod tests {
         assert_eq!(spellings("juera"), ["fuera", "huera"]);
         assert_eq!(spellings("ajuera"), ["afuera"]);
         assert_eq!(spellings("jugao"), ["jugado", "fugao"]);
+    }
+
+    #[test]
+    fn participles_with_an_accent() {
+        assert!(is_participle("perdío") && is_participle("metíos"));
+        assert!(!is_participle("ío") && !is_participle("trabajao") && !is_participle("perdió"));
     }
 
     #[test]

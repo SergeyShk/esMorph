@@ -669,11 +669,10 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
 ///     spelled as in the dictionary gives the analyses of that spelling; a word absent as written
 ///     is looked for without its accents and with a lost diaeresis. A word absent from the
 ///     dictionary may be a verb with clitics (`dámelo`) or, in lower case, a colloquial spelling of
-///     a word of the dictionary (`trabajao`, `caridá`, `juera`); other tokens get the analyses of
-///     rules
-///     (punctuation, symbols, numbers, Roman numerals and names), and other lowercase words are
-///     guessed. The dictionary is loaded once when the analyzer is created; an analyzer can be
-///     used from several threads
+///     a word of the dictionary (`trabajao`, `caridá`, `juera`; `perdío` is `perdido`, not
+///     `perdió`); other tokens get the analyses of rules (punctuation, symbols, numbers, Roman
+///     numerals and names), and other lowercase words are guessed. The dictionary is loaded once
+///     when the analyzer is created; an analyzer can be used from several threads
 ///
 /// Arguments:
 ///     path (str | os.PathLike | None): Path to a dictionary file; by default the dictionary of the

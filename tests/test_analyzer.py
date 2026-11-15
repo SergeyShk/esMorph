@@ -127,6 +127,9 @@ def test_word_absent_as_written_looks_through_accents(morph):
     [
         ("trabajao", "trabajado", "trabajar"),
         ("venío", "venido", "venir"),
+        # Not the preterite `perdió` nor the name `Mario`
+        ("perdío", "perdido", "perder"),
+        ("marío", "marido", "marido"),
         ("caridá", "caridad", "caridad"),
         ("juerza", "fuerza", "fuerza"),
         ("ajuera", "afuera", "afuera"),

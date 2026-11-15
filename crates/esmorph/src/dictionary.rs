@@ -443,7 +443,8 @@ impl Dictionary {
     /// gives the analyses of that spelling; a word absent as written is a verb with clitics
     /// (`dámelo`) or is looked for without its accents and with a lost diaeresis; a lowercase word
     /// that is neither may be a colloquial spelling of a word of the dictionary (`trabajao`,
-    /// `caridá`, `juera`). A token that is none of these gets the analyses of the rules:
+    /// `caridá`, `juera`), as a participle without its `d` is before other accents (`perdío` is
+    /// `perdido`, not `perdió`). A token that is none of these gets the analyses of the rules:
     /// punctuation, a symbol, a number, an ordinal number in digits, a Roman numeral, a name with a
     /// capital letter, an address, an abbreviation. A lowercase word that is none of these is
     /// guessed: by its last part after a hyphen, by the word without a known prefix, as a verb with
@@ -510,8 +511,15 @@ impl Dictionary {
                 analysis.prob /= total;
             }
         }
-        if analyses.is_empty() && !word.chars().any(char::is_uppercase) {
-            analyses = self.colloquial(&word);
+        // The accent of a participle without its `d` is no lost one: `perdío` is `perdido`, not
+        // `perdió`, `marío` is `marido`, not `Mario`
+        if !word.chars().any(char::is_uppercase)
+            && (analyses.is_empty() || (!exact && colloquial::is_participle(&word)))
+        {
+            let standard = self.colloquial(&word);
+            if !standard.is_empty() {
+                analyses = standard;
+            }
         }
         if analyses.is_empty() {
             let ruled = self.ruled(&word);
@@ -1998,6 +2006,13 @@ pub(crate) mod tests {
         let forms = [
             ("trabajar", "VERB", "trabajado", participle),
             ("caer", "VERB", "caído", participle),
+            ("perder", "VERB", "perdido", participle),
+            (
+                "perder",
+                "VERB",
+                "perdió",
+                "Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin",
+            ),
             ("verdad", "NOUN", "verdad", "Gender=Fem|Number=Sing"),
             ("fuera", "ADV", "fuera", ""),
             ("huero", "ADJ", "huera", "Gender=Fem|Number=Sing"),
@@ -2036,6 +2051,8 @@ pub(crate) mod tests {
         assert_eq!(first("juevo"), standard("huevo", "huevo"));
         // The standard word gets its accents back
         assert_eq!(first("caío"), standard("caído", "caer"));
+        // A participle goes before a word with other accents
+        assert_eq!(first("perdío"), standard("perdido", "perder"));
         // The first rule with a word of the dictionary
         assert_eq!(first("juera"), standard("fuera", "fuera"));
         assert_eq!(dictionary.analyze("juera").len(), 1);
