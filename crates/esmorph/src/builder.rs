@@ -236,7 +236,9 @@ impl Builder {
         feats: &str,
     ) -> Result<(), Error> {
         let feats = normalized(feats)?;
-        self.form(lemma, pos, form, feats)?.kind = VARIANT;
+        let added = self.form(lemma, pos, form, feats)?;
+        added.kind = VARIANT;
+        added.standard = None;
         Ok(())
     }
 
@@ -402,7 +404,7 @@ impl Builder {
             for row in &rows {
                 let mut cell = row.flags | u32::from(row.ud);
                 // The analysis of a spoken spelling is the form it stands for
-                if let Some(standard) = row.standard {
+                if let Some(standard) = row.standard.filter(|_| row.flags & SPOKEN != 0) {
                     let at = (rows.iter())
                         .position(|other| {
                             other.word == standard
@@ -800,6 +802,9 @@ mod tests {
         );
         spoken(&mut builder, "Number=Sing", "nada").unwrap();
         assert!(builder.build().is_ok());
+        // A variant is no spoken spelling any more
+        builder.mark_variant("nada", "PRON", "na", "Number=Sing").unwrap();
+        crate::Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
     }
 
     #[test]

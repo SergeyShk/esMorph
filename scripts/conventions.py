@@ -108,9 +108,13 @@ def spoken(
     gone: set[Row] = set()
     result: dict[Row, str] = {}
 
+    # The lexemes of the spoken rows of a form: its rows in them give way
+    added: dict[str, set[tuple[str, str]]] = {}
+
     def add(analyses: list[Row], form: str, standard: str) -> None:
         for lemma, part, _, feats in analyses:
             result.setdefault((lemma, part, form, feats), standard)
+            added.setdefault(form, set()).add((lemma, part))
 
     for spelling, pos, standard, forms in sorted(pairs, key=lambda pair: pair[:3]):
         analyses = spoken_analyses(of_form.get(standard, []), pos)
@@ -141,13 +145,14 @@ def spoken(
                     candidates,
                     key=lambda row: (common_end(row[2], form), common_start(row[2], standard)),
                 )
-                result.setdefault((row[0], row[1], form, row[3]), row[2])
+                add([row], form, row[2])
                 replaced.add(form)
+        # A row of another lexeme stays: `dejá` of `dejao` is also `dejar`
         for form in replaced:
             gone |= {
                 row
                 for row in of_form.get(form, [])
-                if (row[0], row[1]) in lexemes
+                if (row[0], row[1]) in added[form]
                 or (forms is not None and (row[0], row[1]) == (spelling, pos))
             }
     for spelling, standard in sorted(table):

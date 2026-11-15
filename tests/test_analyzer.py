@@ -181,6 +181,9 @@ def test_spoken_spelling_keeps_other_words(morph):
     assert {(a.word, a.lemma) for a in morph.analyze("tos")} >= {("tos", "tos"), ("todos", "todo")}
     assert "nadar" not in {a.lemma for a in morph.analyze("na")}
     assert "PROPN" not in {a.pos for a in morph.analyze("güeno")}
+    # A form of the lexeme of a spelling keeps the analyses of other lexemes: the voseo of `dejar`
+    assert ("dejá", "dejar") in {(a.word, a.lemma) for a in morph.analyze("dejá")}
+    assert morph.analyze("dejés")[0].inflect(Mood="Ind") == "dejás"
     # A spelling with a capital letter is no name restored to its accents
     assert [morph.analyze(token)[0].word for token in ("Er", "Na")] == ["el", "nada"]
     assert morph.analyze("dejao")[0].lemma in ("dejar", "dejado")

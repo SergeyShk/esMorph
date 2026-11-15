@@ -29,6 +29,7 @@ pub(crate) const SPOKEN: u32 = 1 << 18;
 /// The first bit of the place in its table of the form that a spoken spelling stands for
 pub(crate) const SPOKEN_FORM_SHIFT: u32 = 19;
 /// The most places of a table that a spoken spelling refers to
+#[cfg(any(test, feature = "build"))]
 pub(crate) const MAX_SPOKEN_FORM: usize = (1 << (32 - SPOKEN_FORM_SHIFT)) - 1;
 /// Bits of the UD tag in a form of a table
 pub(crate) const UD_BITS: u32 = 0xFFFF;
