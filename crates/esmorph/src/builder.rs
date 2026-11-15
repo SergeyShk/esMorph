@@ -6,8 +6,9 @@ use fst::MapBuilder;
 use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
-    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE,
-    SPOKEN, Sections, VARIANT, WIDE_SPELLINGS, WordValue, pack_spelling,
+    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, MAX_SPOKEN_FORM,
+    PROBABILITY_SCALE, SPOKEN, SPOKEN_FORM_SHIFT, Sections, VARIANT, WIDE_SPELLINGS, WordValue,
+    pack_spelling,
 };
 
 /// Parts of speech whose forms guess unknown words: the closed classes are in the dictionary
@@ -48,12 +49,14 @@ struct Place {
     probability: Option<u32>,
 }
 
-/// An added form: its place among the analyses of its word, its kind (`VARIANT`, `SPOKEN`), how
-/// often texts have it and its place in the table of its source
-#[derive(Clone, Copy, Default)]
+/// An added form: its place among the analyses of its word, its kind (`VARIANT`, `SPOKEN`) and the
+/// form a spoken spelling stands for, how often texts have it and its place in the table of its
+/// source
+#[derive(Clone, Default)]
 struct Form {
     place: Place,
     kind: u32,
+    standard: Option<String>,
     count: u32,
     rank: Option<u32>,
 }
@@ -65,6 +68,8 @@ struct Row<'a> {
     ud: u16,
     place: Place,
     flags: u32,
+    /// The form that a spoken spelling stands for
+    standard: Option<&'a str>,
     count: u32,
     rank: Option<u32>,
 }
@@ -235,18 +240,21 @@ impl Builder {
         Ok(())
     }
 
-    /// Marks an added form as a spoken spelling of the form of its lexeme with the same features:
-    /// `na` of `nada`, `güeno` of `bueno`. An analysis of the spelling is that form, and inflection
-    /// and the forms of the lexeme do not take it; the lexeme must have the form
+    /// Marks an added form as a spoken spelling of the form `standard` of its lexeme with the same
+    /// features: `mu` of `muy`, `güeno` of `bueno`. An analysis of the spelling is that form, and
+    /// inflection and the forms of the lexeme do not take it; the lexeme must have the form
     pub fn mark_spoken(
         &mut self,
         lemma: &str,
         pos: &str,
         form: &str,
         feats: &str,
+        standard: &str,
     ) -> Result<(), Error> {
         let feats = normalized(feats)?;
-        self.form(lemma, pos, form, feats)?.kind = SPOKEN;
+        let added = self.form(lemma, pos, form, feats)?;
+        added.kind = SPOKEN;
+        added.standard = Some(standard.to_owned());
         Ok(())
     }
 
@@ -352,19 +360,10 @@ impl Builder {
                     ud: tags.number((pos.clone(), feats.clone()), "UD tags", u16::MAX)? as u16,
                     place: info.place,
                     flags: info.kind,
+                    standard: info.standard.as_deref(),
                     count: info.count,
                     rank: info.rank,
                 });
-            }
-            // The analysis of a spoken spelling is the form of its features
-            if let Some(row) = rows.iter().find(|row| {
-                row.flags & SPOKEN != 0
-                    && !(rows.iter()).any(|other| other.flags & SPOKEN == 0 && other.ud == row.ud)
-            }) {
-                return Err(Error::Build(format!(
-                    "spoken form {:?} of lexeme {lemma:?} {pos} has no form with its features",
-                    row.word
-                )));
             }
             rows.sort_by(|a, b| a.order().cmp(&b.order()));
             frequent_first(&mut rows);
@@ -383,6 +382,7 @@ impl Builder {
                         ud: tags.number((pos.clone(), String::new()), "UD tags", u16::MAX)? as u16,
                         place: Place::default(),
                         flags: LEMMA_ONLY,
+                        standard: None,
                         count: 0,
                         rank: None,
                     },
@@ -398,10 +398,29 @@ impl Builder {
                 paradigm.push(suffixes.number(suffix, "suffixes", u32::MAX)?);
             }
             let paradigm = paradigms.number(paradigm, "paradigms", u32::MAX)?;
-            let cells = rows
-                .iter()
-                .map(|row| row.flags | u32::from(row.ud))
-                .collect();
+            let mut cells = Vec::with_capacity(rows.len());
+            for row in &rows {
+                let mut cell = row.flags | u32::from(row.ud);
+                // The analysis of a spoken spelling is the form it stands for
+                if let Some(standard) = row.standard {
+                    let at = (rows.iter())
+                        .position(|other| {
+                            other.word == standard
+                                && other.ud == row.ud
+                                && other.flags & (SPOKEN | LEMMA_ONLY) == 0
+                        })
+                        .filter(|&at| at <= MAX_SPOKEN_FORM)
+                        .ok_or_else(|| {
+                            Error::Build(format!(
+                                "spoken form {:?} of lexeme {lemma:?} {pos} has no form {standard:?} \
+                                 with its features in the first {MAX_SPOKEN_FORM} forms",
+                                row.word
+                            ))
+                        })?;
+                    cell |= (at as u32) << SPOKEN_FORM_SHIFT;
+                }
+                cells.push(cell);
+            }
             let table = tables.number((paradigm, cells), "inflection tables", u16::MAX)?;
             *lexemes_of.entry(table).or_default() += 1;
             for (form, row) in rows.iter().enumerate() {
@@ -758,7 +777,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_spoken_spelling_needs_a_form_of_its_features() {
+    fn a_spoken_spelling_needs_its_form() {
         let mut builder = Builder::new();
         builder
             .add_form("nada", "PRON", "nada", "Number=Sing")
@@ -769,20 +788,18 @@ mod tests {
         builder
             .add_form("nada", "PRON", "nadas", "Number=Plur")
             .unwrap();
-        assert!(
-            builder
-                .mark_spoken("nada", "PRON", "nadas", "Number=Sing")
-                .is_err()
-        );
-        builder
-            .mark_spoken("nada", "PRON", "na", "Number=Sing")
-            .unwrap();
-        assert!(builder.build().is_ok());
-        builder
-            .mark_spoken("nada", "PRON", "nadas", "Number=Plur")
-            .unwrap();
+        let spoken = |builder: &mut Builder, feats, standard| {
+            builder.mark_spoken("nada", "PRON", "na", feats, standard)
+        };
+        assert!(spoken(&mut builder, "Number=Plur", "nada").is_err());
+        spoken(&mut builder, "Number=Sing", "nadas").unwrap();
         let err = builder.build().unwrap_err().to_string();
-        assert!(err.contains("spoken form \"nadas\""), "{err}");
+        assert!(
+            err.contains("spoken form \"na\"") && err.contains("\"nadas\""),
+            "{err}"
+        );
+        spoken(&mut builder, "Number=Sing", "nada").unwrap();
+        assert!(builder.build().is_ok());
     }
 
     #[test]

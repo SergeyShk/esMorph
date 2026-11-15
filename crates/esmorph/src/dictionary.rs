@@ -10,7 +10,8 @@ use crate::Error;
 use crate::alphabet::{Alphabet, Key};
 use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE,
-    SPOKEN, Slice, Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS, WordValue, unpack_spelling,
+    SPOKEN, SPOKEN_FORM_SHIFT, Slice, Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS,
+    WordValue, unpack_spelling,
 };
 use crate::rules::{
     self, CAPS_NAME, CLITICS_NAME, INITIAL_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule,
@@ -542,7 +543,7 @@ impl Dictionary {
             let rules = [(Rule::Roman, number), (Rule::Name, name)];
             self.add_rules(&word, &rules, &mut analyses);
         } else if word.chars().any(char::is_uppercase) {
-            self.add_capital_name(&word, &mut analyses);
+            self.add_capital_name(&word, &mut analyses, exact);
         } else {
             self.lower_names(&mut analyses);
         }
@@ -592,14 +593,16 @@ impl Dictionary {
     /// that the dictionary has only with them (`Angel`, `Perez`) are mostly names, another word only
     /// sometimes (`Estados`, `Comisión`), so its name usually goes after the analyses of the
     /// dictionary
-    fn add_capital_name(&self, token: &str, analyses: &mut Vec<Analysis>) {
+    fn add_capital_name(&self, token: &str, analyses: &mut Vec<Analysis>, exact: bool) {
         let written = |analysis: &Analysis| lower_eq(token, &analysis.word);
         if (analyses.iter()).any(|analysis| written(analysis) && self.is_name(analysis)) {
             return;
         }
+        // A spoken spelling is written as the dictionary has it, though its analysis is another
+        // word: `Er` is `el`
         let restored = !(token.chars().flat_map(char::to_lowercase))
             .any(|c| c != clitics::without_acute(c) || c == 'ü')
-            && !analyses.iter().any(written);
+            && !exact;
         let mut letters = token.chars();
         let initial = letters.next().is_some_and(char::is_uppercase) && letters.as_str() == ".";
         let share = if initial {
@@ -1373,11 +1376,21 @@ impl Dictionary {
             let Some(cells) = tables.get(start + 1..start + 1 + count) else {
                 return invalid("an inflection table is truncated");
             };
-            if cells.iter().any(|&cell| {
-                cell & !(UD_BITS | VARIANT | LEMMA_ONLY | SPOKEN) != 0
-                    || (cell & UD_BITS) as usize >= self.ud.len()
-            }) {
+            // A spoken spelling keeps the place of its form in the upper bits
+            let flags = |cell: u32| match cell & SPOKEN {
+                0 => cell & !(UD_BITS | VARIANT | LEMMA_ONLY),
+                _ => cell & !(UD_BITS | VARIANT | SPOKEN) & ((1 << SPOKEN_FORM_SHIFT) - 1),
+            };
+            if cells
+                .iter()
+                .any(|&cell| flags(cell) != 0 || (cell & UD_BITS) as usize >= self.ud.len())
+            {
                 return invalid("a table refers to a missing UD tag or has unknown flags");
+            }
+            if (cells.iter())
+                .any(|&cell| cell & SPOKEN != 0 && standard_form(cells, cell).is_none())
+            {
+                return invalid("a spoken spelling refers to no form of its features");
             }
             starts.push(start as u32);
             start += 1 + count;
@@ -1537,15 +1550,14 @@ fn name_lemma(token: &str, lemma: &str) -> String {
     }
 }
 
-/// The form of a table that a spoken spelling of the tag `cell` stands for: the first main form of
-/// the tag, else its first variant
+/// The form of a table that the spoken spelling of the cell `cell` stands for: the place it keeps,
+/// if that form has its tag
 fn standard_form(cells: &[u32], cell: u32) -> Option<usize> {
-    let of = |kind: u32| {
-        cells.iter().position(|&other| {
-            other & UD_BITS == cell & UD_BITS && other & (VARIANT | LEMMA_ONLY | SPOKEN) == kind
-        })
-    };
-    of(0).or_else(|| of(VARIANT))
+    let at = (cell >> SPOKEN_FORM_SHIFT) as usize;
+    cells
+        .get(at)
+        .filter(|&&other| other & UD_BITS == cell & UD_BITS && other & (LEMMA_ONLY | SPOKEN) == 0)
+        .map(|_| at)
 }
 
 /// Whether a token in lower case is `lower`
@@ -2103,16 +2115,23 @@ pub(crate) mod tests {
             ("tos", "NOUN", "tos", fem),
             ("todo", "PRON", "todos", "Number=Plur"),
             ("todo", "PRON", "tos", "Number=Plur"),
+            // Two forms of one tag: the spelling stands for the second
+            ("mucho", "ADV", "mucho", ""),
+            ("mucho", "ADV", "muy", ""),
+            ("mucho", "ADV", "mu", ""),
         ];
         for (lemma, pos, form, feats) in forms {
             builder.add_form(lemma, pos, form, feats).unwrap();
         }
-        for (lemma, pos, form, feats) in [
-            ("bueno", "ADJ", "güeno", masc),
-            ("bueno", "ADJ", "güena", fem),
-            ("todo", "PRON", "tos", "Number=Plur"),
+        for (lemma, pos, form, feats, standard) in [
+            ("bueno", "ADJ", "güeno", masc, "bueno"),
+            ("bueno", "ADJ", "güena", fem, "buena"),
+            ("todo", "PRON", "tos", "Number=Plur", "todos"),
+            ("mucho", "ADV", "mu", "", "muy"),
         ] {
-            builder.mark_spoken(lemma, pos, form, feats).unwrap();
+            builder
+                .mark_spoken(lemma, pos, form, feats, standard)
+                .unwrap();
         }
         let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
         dictionary.verify().unwrap();
@@ -2122,6 +2141,7 @@ pub(crate) mod tests {
             ("buena", "bueno")
         );
         assert_eq!(analysis, dictionary.analyze("buena").remove(0));
+        assert_eq!(dictionary.analyze("mu")[0].word, "muy");
         // The forms and inflection give no spoken spelling
         let forms: Vec<String> = (dictionary.forms(&analysis).into_iter())
             .map(|form| form.word)
@@ -2138,6 +2158,8 @@ pub(crate) mod tests {
         assert_eq!(words.len(), 2);
         assert!(words.contains(&("tos".into(), "tos".into())));
         assert!(words.contains(&("todos".into(), "todo".into())));
+        // A spelling with a capital letter is no restored name
+        assert_eq!(dictionary.analyze("Güena")[0].word, "buena");
     }
 
     #[test]

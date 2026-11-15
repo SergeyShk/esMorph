@@ -686,7 +686,7 @@ def normalized_lemma(lemma: str, pos: str, participles: dict[str, str]) -> str:
 def rows(
     path: Path,
 ) -> tuple[
-    set[conventions.Row], set[Variant], dict[conventions.Row, int], set[tuple[str, str, str, bool]]
+    set[conventions.Row], set[Variant], dict[conventions.Row, int], set[conventions.Spoken]
 ]:
     """
     Rows of the table, the variants among them, their places in the tables of their lexemes and
@@ -705,12 +705,11 @@ def rows(
         path (Path): File of the snapshot
 
     Returns:
-        tuple[set[conventions.Row], set[Variant], dict[conventions.Row, int], set[tuple[str, str,
-        str, bool]]]: Lemma, part of speech, form, features in CoNLL-U notation; lemma, part of
-        speech, form and features of the variants, `None` for any lemma and features; the places
-        of the rows by their lemmas of the conventions; words whose entries of a part of speech
-        spell another word as it sounds, the part of speech, that word and whether the entries
-        have no other sense
+        tuple[set[conventions.Row], set[Variant], dict[conventions.Row, int],
+        set[conventions.Spoken]]: Lemma, part of speech, form, features in CoNLL-U notation;
+        lemma, part of speech, form and features of the variants, `None` for any lemma and
+        features; the places of the rows by their lemmas of the conventions; the spellings of
+        words as they sound
     """
     entries = {entry["word"] for entry in snapshot_entries(path)}
     lower_entries = {word for word in entries if word == word.lower()}
@@ -771,8 +770,15 @@ def rows(
     table = {
         row for row in table if not (row[1] == "NOUN" and (row[0], row[2], row[3]) in gendered)
     }
+    # The forms of the own lexeme of a spelling that has no other sense
+    own: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    for lemma, pos, form, text in table:
+        if spoken.get((lemma, pos), (set(), False))[1]:
+            own.setdefault((lemma, pos), set()).add((form, text))
     pairs = {
-        (word, pos, target, only)
+        conventions.Spoken(
+            word, pos, target, frozenset(own.get((word, pos), ())) if only else None
+        )
         for (word, pos), (targets, only) in spoken.items()
         for target in targets
     }
@@ -783,7 +789,7 @@ def kind(
     row: conventions.Row,
     variants: set[Variant],
     closed: set[conventions.Row],
-    spoken: set[conventions.Row],
+    spoken: dict[conventions.Row, str],
 ) -> str:
     """
     Kind of a row of the export
@@ -792,15 +798,16 @@ def kind(
         row (conventions.Row): The row
         variants (set[Variant]): The variants of `rows`
         closed (set[conventions.Row]): Rows of the table of closed classes
-        spoken (set[conventions.Row]): Rows of the spoken spellings
+        spoken (dict[conventions.Row, str]): Rows of the spoken spellings and the forms they stand
+            for
 
     Returns:
-        str: `spoken`, `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative
+        str: `spoken:` and the form of a spoken spelling, `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative
         pronoun of the table with an accent is a variant of the one without, which the spelling of
         2010 prefers: `éste` of `este`
     """
     if row in spoken:
-        return "spoken"
+        return f"spoken:{spoken[row]}"
     lemma, pos, form, feats = row
     if pos == "PRON" and lemma in DEMONSTRATIVES and row in closed:
         return "variant" if set(form) & ACUTE else "_"
@@ -845,11 +852,11 @@ def export(output: Path) -> int:
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
             "\t".join((*row, kind(row, variants, closed, spoken), rank(row, ranks))) + "\n"
-            for row in sorted(table | spoken)
+            for row in sorted(table | spoken.keys())
         )
     meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}
     (output / "meta.json").write_text(json.dumps(meta, sort_keys=True), encoding="utf-8")
-    return len(table | spoken)
+    return len(table | spoken.keys())
 
 
 if __name__ == "__main__":

@@ -159,6 +159,12 @@ def test_colloquial_spelling_is_only_for_unknown_lowercase_words(morph):
         ("pos", "pues", "pues", "SCONJ"),
         ("po", "por", "por", "ADP"),
         ("tos", "todos", "todo", "PRON"),
+        # The form the spelling stands for, not the first one of its features
+        ("mu", "muy", "mucho", "ADV"),
+        ("esplicase", "explicase", "explicar", "VERB"),
+        # Forms of the lexeme of the spelling with fewer features
+        ("dejaos", "dejados", "dejado", "ADJ"),
+        ("úrtima", "última", "último", "ADJ"),
     ],
 )
 def test_spoken_spelling_has_the_analyses_of_the_standard_word(morph, token, word, lemma, pos):
@@ -174,6 +180,9 @@ def test_spoken_spelling_keeps_other_words(morph):
     # A cough, not only `todos`; a spelling with another sense keeps it
     assert {(a.word, a.lemma) for a in morph.analyze("tos")} >= {("tos", "tos"), ("todos", "todo")}
     assert "nadar" not in {a.lemma for a in morph.analyze("na")}
+    assert "PROPN" not in {a.pos for a in morph.analyze("güeno")}
+    # A spelling with a capital letter is no name restored to its accents
+    assert [morph.analyze(token)[0].word for token in ("Er", "Na")] == ["el", "nada"]
     assert morph.analyze("dejao")[0].lemma in ("dejar", "dejado")
 
 
