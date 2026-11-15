@@ -30,6 +30,7 @@ mod builder;
 #[doc(hidden)]
 pub mod cli;
 mod clitics;
+mod colloquial;
 mod dictionary;
 mod error;
 mod format;
