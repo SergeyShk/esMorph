@@ -1071,7 +1071,7 @@ impl Dictionary {
             return Vec::new();
         };
         (0..lexeme.cells.len())
-            .filter(|&form| lexeme.cells[form] & (LEMMA_ONLY | SPOKEN) == 0)
+            .filter(|&form| self.takes_form(&lexeme, form))
             .filter_map(|form| self.form(&lexeme, form, analysis.forms_source()))
             .map(|form| with_lemma(form, &analysis.lemma))
             .collect()
@@ -1173,7 +1173,7 @@ impl Dictionary {
             name.and_then(|name| tag.feat_value(name)).is_none()
         };
         let candidates = (0..lexeme.cells.len())
-            .filter(|&form| lexeme.cells[form] & (LEMMA_ONLY | SPOKEN) == 0)
+            .filter(|&form| self.takes_form(&lexeme, form))
             .filter_map(|form| {
                 let number = (lexeme.cells[form] & UD_BITS) as u16;
                 let tag = self.ud.get(number)?;

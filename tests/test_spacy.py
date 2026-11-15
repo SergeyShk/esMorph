@@ -256,7 +256,7 @@ def test_serialization(nlp):
 
 def test_own_words():
     nlp = spacy.blank("es")
-    words = {"tiktokear": "bloguear", "cajo": ["bajo", "NOUN"]}
+    words = {"tiktokear": "bloguear", "cajo": ("bajo", "NOUN")}
     nlp.add_pipe("esmorph", config={"words": words})
     doc = nlp("Tiktokeamos con los cajos.")
     assert [(token.lemma_, token.pos_) for token in doc][::3] == [
@@ -264,6 +264,8 @@ def test_own_words():
         ("cajo", "NOUN"),
     ]
     assert doc[0]._.esmorph.inflect(Tense="Past", Person="3", Number="Sing") == "tiktokeó"
+    # A document keeps a digest of the words, not the words
+    assert len(str(doc.user_data["esmorph"]["words"])) == 16
     # The pipeline and its documents keep the words
     restored = pickle.loads(pickle.dumps(nlp))
     assert restored("Tiktokeó.")[0].lemma_ == "tiktokear"
