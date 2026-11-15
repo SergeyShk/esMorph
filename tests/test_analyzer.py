@@ -788,6 +788,9 @@ def test_analyze_sentence(morph):
         # An imperative opening a sentence is no name, a name stays one
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
         ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
+        # A rare verb does not take the place of a frequent one with the same form
+        ("Aunque vengan tarde .", 1, ("venir", "VERB")),
+        ("Ojalá venga pronto .", 1, ("venir", "VERB")),
     ],
 )
 def test_constraints_of_the_context(morph, words, at, expected):
@@ -810,6 +813,11 @@ def test_old_spellings_and_imperatives_with_se(morph):
     dese, dense = morph.analyze("dese")[0], morph.analyze("dense")[0]
     assert (dese.lemma, dese.words) == ("dar", ("dé", "se"))
     assert (dense.lemma, dense.words) == ("dar", ("den", "se"))
+
+
+def test_frequent_verb_of_a_form_goes_first(morph):
+    # vengo is a form of venir and of the rare vengar
+    assert morph.analyze("vengo")[0].lemma == "venir"
 
 
 def test_model_as_trained(morph):

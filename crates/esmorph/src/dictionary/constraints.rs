@@ -1,8 +1,9 @@
 //! Constraints of Spanish on the analyses the context model chooses: an article before a finite
 //! verb is a pronoun (`no la descubras`), an infinitive after a verb is no noun (`puede ser`), a
 //! form of `ser` and `ir` is `ir` where only `ir` fits (`se fue`, `fue a casa`, `fue cayendo`), an
-//! imperative opening a sentence is no name (`Indique si desea`) and a word after a clitic is a
-//! verb (`que te vayas`)
+//! imperative opening a sentence is no name (`Indique si desea`), a word after a clitic is a
+//! verb (`que te vayas`) and a rare verb does not take the place of a frequent one with the same
+//! form (`venga` is `venir`, not `vengar`)
 
 use super::{Analysis, Dictionary, Source};
 
@@ -36,15 +37,26 @@ const SER_IR: [&str; 19] = [
 const GOAL: [&str; 6] = ["DET", "NOUN", "PROPN", "PRON", "NUM", "VERB"];
 /// Lemmas of the copulas, whose predicate is a noun (`será titular`)
 const COPULAS: [&str; 2] = ["ser", "estar"];
+/// Shares of the verbs of a form in the counts of the dictionary: the model, which sees no lemma,
+/// does not choose a verb below RARE where another is above FREQUENT
+const RARE: f64 = 0.3;
+const FREQUENT: f64 = 0.6;
 /// Parts of speech of the word after an imperative opening a sentence, not after a name:
 /// `Indique si`, `Diga usted`, `Señale el`, but `Defensa quiere`, `Hacienda ya`
 const AFTER_IMPERATIVE: [&str; 4] = ["SCONJ", "PRON", "DET", "ADP"];
 
 impl Dictionary {
     /// Applies the constraints to the analyses of the words of a sentence, ranked by the context
-    /// model; `start` - whether the words start the sentence. A constraint moves the analysis it
-    /// chooses to the front, and the probabilities stay those of the model
-    pub(crate) fn constrain(&self, words: &[&str], sentence: &mut [Vec<Analysis>], start: bool) {
+    /// model; `shares` - the shares of the verbs of every word by `verb_shares`, `start` - whether
+    /// the words start the sentence. A constraint moves the analysis it chooses to the front, and
+    /// the probabilities stay those of the model
+    pub(crate) fn constrain(
+        &self,
+        words: &[&str],
+        sentence: &mut [Vec<Analysis>],
+        shares: &[Vec<(String, f64)>],
+        start: bool,
+    ) {
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
         for at in 0..sentence.len() {
             let chosen = self
@@ -52,7 +64,8 @@ impl Dictionary {
                 .or_else(|| self.infinitive(sentence, at))
                 .or_else(|| self.ser_ir(&lower, sentence, at))
                 .or_else(|| self.verb_after_clitic(&lower, sentence, at))
-                .or_else(|| self.opening_word(words, sentence, at, start));
+                .or_else(|| self.opening_word(words, sentence, at, start))
+                .or_else(|| self.frequent_lemma(&sentence[at], &shares[at]));
             if let Some(index) = chosen {
                 promote(&mut sentence[at], index);
             }
@@ -201,6 +214,53 @@ impl Dictionary {
             analysis.source == Source::Dictionary
                 && self.pos(analysis) == "VERB"
                 && self.has(analysis, "Mood", "Imp")
+        })
+    }
+
+    /// Shares of the verbs of a word in the counts if it is the form of several (`venga` of `venir`
+    /// and `vengar`), empty otherwise
+    pub(crate) fn verb_shares(&self, list: &[Analysis]) -> Vec<(String, f64)> {
+        let verb = |analysis: &&Analysis| self.pos(analysis) == "VERB";
+        let Some(first) = list.iter().find(verb) else {
+            return Vec::new();
+        };
+        if !list
+            .iter()
+            .filter(verb)
+            .any(|analysis| analysis.lemma != first.lemma)
+        {
+            return Vec::new();
+        }
+        let mut shares: Vec<(String, f64)> = Vec::new();
+        for analysis in list.iter().filter(verb) {
+            match shares
+                .iter_mut()
+                .find(|(lemma, _)| *lemma == analysis.lemma)
+            {
+                Some((_, share)) => *share += analysis.prob,
+                None => shares.push((analysis.lemma.clone(), analysis.prob)),
+            }
+        }
+        shares
+    }
+
+    /// The analysis of the frequent verb the model ranks highest when the model chose the form of a
+    /// rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`
+    fn frequent_lemma(&self, list: &[Analysis], shares: &[(String, f64)]) -> Option<usize> {
+        let top = list.first()?;
+        let share = |lemma: &str| {
+            shares
+                .iter()
+                .find(|(name, _)| name == lemma)
+                .map_or(0.0, |&(_, share)| share)
+        };
+        if self.pos(top) != "VERB" || share(&top.lemma) >= RARE {
+            return None;
+        }
+        list.iter().position(|analysis| {
+            analysis.lemma != top.lemma
+                && self.pos(analysis) == "VERB"
+                && share(&analysis.lemma) > FREQUENT
         })
     }
 }

@@ -114,8 +114,8 @@ enum AnalysisTag {
 ///     pos (str): The part of speech of Universal Dependencies
 ///     feats (dict[str, str]): The Universal Dependencies features
 ///     prob (float): Share of the analysis among the analyses of the word, by the counts of
-///         treebanks; equal for a word they did not see; of analyze_sentence - the score of the
-///         context model in the sentence
+///         treebanks; for a word they did not see equal but for its verbs, weighed by their
+///         frequency; of analyze_sentence - the score of the context model in the sentence
 ///     words (tuple[str, ...]): Words of the token: a verb and its clitics, the words of a
 ///         contraction, or the word itself; the analysis describes the first of them
 ///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the

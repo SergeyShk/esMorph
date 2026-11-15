@@ -1,7 +1,8 @@
 //! Order and probabilities of the analyses of a word form by the counts of treebanks: the probability
 //! is P(part of speech | form) P(lemma | form, part of speech) P(features | form, part of speech,
 //! lemma). What the treebanks did not see of a form falls back on its last letters and on the
-//! features of its part of speech
+//! features of its part of speech; the lemmas of a verb form are also weighed by their frequency in
+//! all their forms
 
 use std::collections::{HashMap, HashSet};
 
@@ -11,6 +12,9 @@ use esmorph::Error;
 const SUFFIX: usize = 3;
 /// Weight of what the treebanks did not see against the counts of a form, as that many words
 const PRIOR: f64 = 1.0;
+/// Weight of the frequency of a verb in all its forms against its counts in a form: a few counts
+/// of a rare verb, often wrong, do not outweigh a frequent one (`vengo` is `venir`, not `vengar`)
+const LEXEME_PRIOR: f64 = 10.0;
 
 /// An analysis of a form
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -26,7 +30,8 @@ pub struct Row<'a> {
 #[derive(Debug, PartialEq)]
 pub struct Ranked<'a> {
     pub rows: Vec<Row<'a>>,
-    /// Probabilities of the rows; `None` if the treebanks did not see the form
+    /// Probabilities of the rows; `None` if the treebanks did not see the form, nor the lemmas of
+    /// a part of speech it shares
     pub probabilities: Option<Vec<f64>>,
 }
 
@@ -37,6 +42,8 @@ pub struct Counts {
     parts: HashMap<(String, String), u32>,
     /// Form, part of speech and lemma
     lemmas: HashMap<(String, String, String), u32>,
+    /// Part of speech and lemma: all its forms
+    lexemes: HashMap<(String, String), u32>,
     /// Form, part of speech, lemma and features
     analyses: HashMap<(String, String, String, String), u32>,
     /// End of a form and part of speech
@@ -93,6 +100,13 @@ impl Counts {
             add(
                 (counts.lemmas)
                     .entry((form.to_owned(), pos.to_owned(), lemma.to_owned()))
+                    .or_default(),
+                count,
+            )
+            .map_err(line_error)?;
+            add(
+                (counts.lexemes)
+                    .entry((pos.to_owned(), lemma.to_owned()))
                     .or_default(),
                 count,
             )
@@ -168,6 +182,11 @@ impl Counts {
         f64::from(self.lemmas.get(&key).copied().unwrap_or(0))
     }
 
+    fn lexeme(&self, pos: &str, lemma: &str) -> f64 {
+        let key = (pos.to_owned(), lemma.to_owned());
+        f64::from(self.lexemes.get(&key).copied().unwrap_or(0)) + 1.0
+    }
+
     fn analysis(&self, form: &str, row: Row) -> f64 {
         f64::from(self.count(form, row))
     }
@@ -205,20 +224,33 @@ impl Counts {
         let seen_pos: f64 = poses.iter().map(|pos| self.part(form, pos)).sum();
         let endings: f64 = poses.iter().map(|pos| ending(pos)).sum();
         let mut scored = Vec::with_capacity(rows.len());
+        // Verbs the treebanks saw in other forms tell the order of an unseen form
+        let mut seen_lexeme = false;
         for &pos in &poses {
             let of_pos: Vec<Row<'a>> = rows.iter().copied().filter(|r| r.pos == pos).collect();
             let prior = PRIOR * ending(pos) / endings;
             let p_pos = (self.part(form, pos) + prior) / (seen_pos + PRIOR);
             let lemmas = distinct(|row| row.lemma, &of_pos);
             let seen_lemma: f64 = lemmas.iter().map(|l| self.lemma(form, pos, l)).sum();
+            // The lemmas of a verb form are other verbs (`vengo` of `venir` and `vengar`), weighed by
+            // their frequency; those of other words are mostly variants of one word (`consejera`
+            // and `consejero`), equal
+            let verb = pos == "VERB";
+            let lexemes: f64 = lemmas.iter().map(|l| self.lexeme(pos, l)).sum();
+            seen_lexeme |= verb && lemmas.len() > 1 && lexemes > lemmas.len() as f64;
+            let weight = if verb { LEXEME_PRIOR } else { PRIOR };
             for &lemma in &lemmas {
                 let of_lemma: Vec<Row<'a>> = of_pos
                     .iter()
                     .copied()
                     .filter(|r| r.lemma == lemma)
                     .collect();
-                let prior = PRIOR / lemmas.len() as f64;
-                let p_lemma = (self.lemma(form, pos, lemma) + prior) / (seen_lemma + PRIOR);
+                let prior = if verb {
+                    weight * self.lexeme(pos, lemma) / lexemes
+                } else {
+                    weight / lemmas.len() as f64
+                };
+                let p_lemma = (self.lemma(form, pos, lemma) + prior) / (seen_lemma + weight);
                 let seen_tag: f64 = of_lemma.iter().map(|&r| self.analysis(form, r)).sum();
                 let tags: f64 = of_lemma.iter().map(|&r| self.tag(r)).sum();
                 for &row in &of_lemma {
@@ -241,7 +273,7 @@ impl Counts {
         let (rows, values) = scored.into_iter().unzip();
         Ranked {
             rows,
-            probabilities: (seen_pos > 0.0).then_some(values),
+            probabilities: (seen_pos > 0.0 || seen_lexeme).then_some(values),
         }
     }
 }
@@ -339,6 +371,29 @@ mod tests {
         let ranked = counts().rank("cosas", &rows);
         assert_eq!(ranked.rows[0].pos, "NOUN");
         assert_eq!(ranked.probabilities, None);
+    }
+
+    #[test]
+    fn the_frequency_of_a_verb_outweighs_a_few_counts_of_a_form() {
+        let analyses = "vengo\tVERB\tvengar\tMood=Ind\t1\n\
+                        viene\tVERB\tvenir\tMood=Ind\t40\n\
+                        vienen\tVERB\tvenir\tMood=Ind\t20\n";
+        let counts = Counts::read(analyses, "vengo\tVERB\t1\nviene\tVERB\t40\n").unwrap();
+        let rows = [
+            row("vengar", "VERB", "Mood=Ind"),
+            row("venir", "VERB", "Mood=Ind"),
+        ];
+        let ranked = counts.rank("vengo", &rows);
+        assert_eq!(ranked.rows[0].lemma, "venir");
+        // An unseen form of verbs seen in other forms has their probabilities
+        let ranked = counts.rank("vengas", &rows);
+        assert_eq!(ranked.rows[0].lemma, "venir");
+        assert!(ranked.probabilities.is_some());
+        // The lemmas of a noun are variants of one word: the frequent one does not win
+        let analyses = "consejero\tNOUN\tconsejero\t_\t40\n";
+        let counts = Counts::read(analyses, "").unwrap();
+        let rows = [row("consejero", "NOUN", "_"), row("consejera", "NOUN", "_")];
+        assert_eq!(counts.rank("consejera", &rows).rows[0].lemma, "consejera");
     }
 
     #[test]

@@ -50,7 +50,7 @@ If the part of speech of a word depends on context, the word has both analyses: 
 
 ## Order of analyses { #order }
 
-Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; for a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features, and a word goes before its older spelling with other accents: `á` is first of all `a`, `tambien` is `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) orders the same analyses by the sentence.
+Analyses go from the most probable to the least. `prob` is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; of the verbs of a form the one they have more often in all its forms has the larger share, even where a few counts of the form say otherwise: `vengo` is first of all `venir`, not `vengar`. For a word they have not seen, the shares are otherwise equal and the order is a guess by the ending of the word and the most common features, and a word goes before its older spelling with other accents: `á` is first of all `a`, `tambien` is `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) orders the same analyses by the sentence.
 
 === "Code"
 

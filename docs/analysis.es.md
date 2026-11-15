@@ -50,7 +50,7 @@ Si la categoría de una palabra depende del contexto, la palabra tiene ambos an�
 
 ## Orden de los análisis { #order }
 
-Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: `á` es ante todo `a`, `tambien` es `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) ordena los mismos análisis por la oración.
+Los análisis van del más probable al menos probable. `prob` es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; de los verbos de una forma, el que tienen más a menudo en todas sus formas tiene la parte mayor, aunque unos pocos casos de la forma digan otra cosa: `vengo` es ante todo `venir`, no `vengar`. Para una palabra que no han visto, las partes son por lo demás iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes, y una palabra va antes que su grafía antigua con otras tildes: `á` es ante todo `a`, `tambien` es `también`. [`analyze_sentence`](analyzer.md#analyze_sentence) ordena los mismos análisis por la oración.
 
 === "Código"
 
