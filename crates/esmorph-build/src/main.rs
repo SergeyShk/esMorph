@@ -1,9 +1,9 @@
 //! Builder of the dictionary of esMorph: `esmorph-build <export directory> <counts directory>
 //! <dictionary file> [<context model>]`. The export is `lexemes.tsv` (lemma, part of speech, form,
-//! features, `variant` or `_`, the place in the table of the source or `_`) and `meta.json`,
-//! written by `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and
-//! `sources.json`, written by `scripts/export_ud.py`; the context model is the file of weights of
-//! `scripts/train_context.py`
+//! features, `variant`, `spoken` or `_`, the place in the table of the source or `_`) and
+//! `meta.json`, written by `scripts/export_wiktionary.py`; the counts are `analyses.tsv`,
+//! `pos.tsv` and `sources.json`, written by `scripts/export_ud.py`; the context model is the file
+//! of weights of `scripts/train_context.py`
 
 mod frequencies;
 
@@ -255,9 +255,12 @@ fn build(
             "variant" => builder
                 .mark_variant(lemma, pos, form, plain(feats))
                 .map_err(at)?,
+            "spoken" => builder
+                .mark_spoken(lemma, pos, form, plain(feats))
+                .map_err(at)?,
             _ => {
                 return Err(at(Error::Build(format!(
-                    "the kind is `variant` or `_`, not {kind:?}"
+                    "the kind is `variant`, `spoken` or `_`, not {kind:?}"
                 ))));
             }
         }

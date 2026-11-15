@@ -16,6 +16,7 @@ Row = tuple[str, str, str, str]
 
 CLOSED_CLASSES = Path(__file__).resolve().parents[1] / "data" / "closed-classes.tsv"
 UNITS = Path(__file__).resolve().parents[1] / "data" / "units.tsv"
+SPELLINGS = Path(__file__).resolve().parents[1] / "data" / "spellings.tsv"
 # What the table answers for alone: a word of such a class out of the table with an analysis of
 # another class is no such word, as `hace` is no preposition
 CLOSED = {"ADP", "CCONJ", "DET", "PART", "PRON", "SCONJ"}
@@ -42,6 +43,98 @@ def closed_classes(path: Path = CLOSED_CLASSES) -> set[Row]:
             lemma, pos, form, feats = line.rstrip("\n").split("\t")
             rows.add((lemma, pos, form, feats))
     return rows
+
+
+def spellings(path: Path = SPELLINGS) -> set[tuple[str, str]]:
+    """
+    Spoken spellings of the table and their standard words: `pos` and `pues`
+
+    Arguments:
+        path (Path): File of the table
+
+    Returns:
+        set[tuple[str, str]]: The spellings and their standard words
+    """
+    with path.open(encoding="utf-8") as lines:
+        return {tuple(line.rstrip("\n").split("\t")) for line in lines}  # type: ignore[misc]
+
+
+def spoken(
+    rows: set[Row], pairs: set[tuple[str, str, str, bool]], table: set[tuple[str, str]]
+) -> tuple[set[Row], set[Row]]:
+    """
+    Rows with the spoken spellings of standard words
+
+    Description:
+        A spoken spelling is a form of every analysis of its standard word, with its features: the
+        treebanks give it the lemma and the features of that word and keep the spelling apart
+        (`Ortho=` of COSER). A spelling that is no verb takes no verb but a participle: `na` is no
+        form of `nadar`, `dejao` is `dejar`. The rows of a spelling of Wiktionary as a word sounds
+        (`güeno` of `bueno`, `er` of `el`) in the lexemes of that word give way to these; a
+        spelling that has no other sense loses its own lexeme: its forms of the features of the
+        spelling are the analyses of the standard word (`ná` of `na`), its other forms are the forms
+        of the lexemes of the standard word with their features (`güevos` of `huevos`). A spelling
+        of the table (`pos` of `pues`, `to` of `todo`) keeps its other analyses: `tos` is also a
+        noun. A spelling whose standard word the rows have not stays as it is
+
+    Arguments:
+        rows (set[Row]): The rows
+        pairs (set[tuple[str, str, str, bool]]): Spellings of Wiktionary as words sound, their
+            parts of speech, the words and whether the spelling has no other sense
+        table (set[tuple[str, str]]): Spellings of the table and their standard words
+
+    Returns:
+        tuple[set[Row], set[Row]]: The rows without what the spoken spellings replace and the rows
+        of the spoken spellings
+    """
+    of_form: dict[str, list[Row]] = {}
+    of_lexeme: dict[tuple[str, str], list[Row]] = {}
+    for row in rows:
+        of_form.setdefault(row[2], []).append(row)
+        of_lexeme.setdefault((row[0], row[1]), []).append(row)
+    gone: set[Row] = set()
+    result: set[Row] = set()
+    for spelling, pos, standard, only in sorted(pairs):
+        analyses = spoken_analyses(of_form.get(standard, []), pos)
+        if not analyses:
+            continue
+        result |= {(lemma, part, spelling, feats) for lemma, part, _, feats in analyses}
+        lexemes = {(lemma, part) for lemma, part, _, _ in analyses}
+        gone |= {row for row in of_form.get(spelling, []) if (row[0], row[1]) in lexemes}
+        own = of_lexeme.get((spelling, pos), []) if only else []
+        gone |= set(own)
+        heads = {feats for _, _, form, feats in own if form == spelling}
+        for _, _, form, feats in own:
+            if feats in heads:
+                result |= {(lemma, part, form, other) for lemma, part, _, other in analyses}
+                continue
+            result |= {
+                (lemma, part, form, feats)
+                for lemma, part in lexemes
+                if part == pos and any(row[3] == feats for row in of_lexeme[(lemma, part)])
+            }
+    for spelling, standard in sorted(table):
+        analyses = spoken_analyses(of_form[standard], None)
+        result |= {(lemma, part, spelling, feats) for lemma, part, _, feats in analyses}
+    rows = rows - gone
+    return rows, result - rows
+
+
+def spoken_analyses(rows: list[Row], pos: str | None) -> list[Row]:
+    """
+    Analyses of a standard word that its spoken spelling takes
+
+    Arguments:
+        rows (list[Row]): Rows of the standard word
+        pos (str | None): Part of speech of the spelling, `None` if unknown
+
+    Returns:
+        list[Row]: The rows; a verb only for a verb or as a participle
+    """
+    verb = pos in ("VERB", "AUX")
+    return [
+        row for row in rows if verb or row[1] not in ("VERB", "AUX") or "VerbForm=Part" in row[3]
+    ]
 
 
 def parse_features(text: str) -> dict[str, str]:

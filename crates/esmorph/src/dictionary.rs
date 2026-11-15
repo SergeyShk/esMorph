@@ -9,8 +9,8 @@ use fst::Map;
 use crate::Error;
 use crate::alphabet::{Alphabet, Key};
 use crate::format::{
-    self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE, Slice,
-    Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS, WordValue, unpack_spelling,
+    self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE,
+    SPOKEN, Slice, Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS, WordValue, unpack_spelling,
 };
 use crate::rules::{
     self, CAPS_NAME, CLITICS_NAME, INITIAL_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule,
@@ -1012,13 +1012,21 @@ impl Dictionary {
         })
     }
 
-    /// Analysis of a spelling by a form of a table
+    /// Analysis of a spelling by a form of a table; a spoken spelling is the form of its features
     fn analysis(&self, word: String, entry: Entry, prob: f64) -> Option<Analysis> {
         let lexeme = self.lexeme(entry, &word)?;
         let (lemma, ud) = (
             lexeme.spell(&self.suffixes, 0)?,
             lexeme.ud(usize::from(entry.form))?,
         );
+        let standard = (lexeme.cells.get(usize::from(entry.form)))
+            .filter(|&&cell| cell & SPOKEN != 0)
+            .and_then(|&cell| standard_form(lexeme.cells, cell))
+            .and_then(|form| Some((lexeme.spell(&self.suffixes, form)?, form as u16)));
+        let (word, entry) = match standard {
+            Some((word, form)) => (word, Entry { form, ..entry }),
+            None => (word, entry),
+        };
         Some(Analysis {
             word,
             lemma,
@@ -1045,7 +1053,7 @@ impl Dictionary {
             return Vec::new();
         };
         (0..lexeme.cells.len())
-            .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
+            .filter(|&form| lexeme.cells[form] & (LEMMA_ONLY | SPOKEN) == 0)
             .filter_map(|form| self.form(&lexeme, form, analysis.forms_source()))
             .map(|form| with_lemma(form, &analysis.lemma))
             .collect()
@@ -1147,7 +1155,7 @@ impl Dictionary {
             name.and_then(|name| tag.feat_value(name)).is_none()
         };
         let candidates = (0..lexeme.cells.len())
-            .filter(|&form| lexeme.cells[form] & LEMMA_ONLY == 0)
+            .filter(|&form| lexeme.cells[form] & (LEMMA_ONLY | SPOKEN) == 0)
             .filter_map(|form| {
                 let number = (lexeme.cells[form] & UD_BITS) as u16;
                 let tag = self.ud.get(number)?;
@@ -1366,7 +1374,7 @@ impl Dictionary {
                 return invalid("an inflection table is truncated");
             };
             if cells.iter().any(|&cell| {
-                cell & !(UD_BITS | VARIANT | LEMMA_ONLY) != 0
+                cell & !(UD_BITS | VARIANT | LEMMA_ONLY | SPOKEN) != 0
                     || (cell & UD_BITS) as usize >= self.ud.len()
             }) {
                 return invalid("a table refers to a missing UD tag or has unknown flags");
@@ -1527,6 +1535,17 @@ fn name_lemma(token: &str, lemma: &str) -> String {
         Some(first) => first.to_uppercase().chain(chars).collect(),
         None => String::new(),
     }
+}
+
+/// The form of a table that a spoken spelling of the tag `cell` stands for: the first main form of
+/// the tag, else its first variant
+fn standard_form(cells: &[u32], cell: u32) -> Option<usize> {
+    let of = |kind: u32| {
+        cells.iter().position(|&other| {
+            other & UD_BITS == cell & UD_BITS && other & (VARIANT | LEMMA_ONLY | SPOKEN) == kind
+        })
+    };
+    of(0).or_else(|| of(VARIANT))
 }
 
 /// Whether a token in lower case is `lower`
@@ -2069,6 +2088,56 @@ pub(crate) mod tests {
                 .iter()
                 .any(|a| a.source == Source::Dictionary)
         );
+    }
+
+    #[test]
+    fn a_spoken_spelling_is_its_standard_form() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let (masc, fem) = ("Gender=Masc|Number=Sing", "Gender=Fem|Number=Sing");
+        let forms = [
+            ("bueno", "ADJ", "bueno", masc),
+            ("bueno", "ADJ", "buena", fem),
+            ("bueno", "ADJ", "güeno", masc),
+            ("bueno", "ADJ", "güena", fem),
+            ("tos", "NOUN", "tos", fem),
+            ("todo", "PRON", "todos", "Number=Plur"),
+            ("todo", "PRON", "tos", "Number=Plur"),
+        ];
+        for (lemma, pos, form, feats) in forms {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        for (lemma, pos, form, feats) in [
+            ("bueno", "ADJ", "güeno", masc),
+            ("bueno", "ADJ", "güena", fem),
+            ("todo", "PRON", "tos", "Number=Plur"),
+        ] {
+            builder.mark_spoken(lemma, pos, form, feats).unwrap();
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        dictionary.verify().unwrap();
+        let analysis = dictionary.analyze("güena").remove(0);
+        assert_eq!(
+            (analysis.word.as_str(), analysis.lemma.as_str()),
+            ("buena", "bueno")
+        );
+        assert_eq!(analysis, dictionary.analyze("buena").remove(0));
+        // The forms and inflection give no spoken spelling
+        let forms: Vec<String> = (dictionary.forms(&analysis).into_iter())
+            .map(|form| form.word)
+            .collect();
+        assert_eq!(forms, ["bueno", "buena"]);
+        let masculine = dictionary
+            .inflect(&analysis, &[("Gender", "Masc")])
+            .unwrap();
+        assert_eq!(masculine.word, "bueno");
+        // A spelling of another word keeps its own analyses
+        let words: Vec<(String, String)> = (dictionary.analyze("tos").into_iter())
+            .map(|analysis| (analysis.word, analysis.lemma))
+            .collect();
+        assert_eq!(words.len(), 2);
+        assert!(words.contains(&("tos".into(), "tos".into())));
+        assert!(words.contains(&("todos".into(), "todo".into())));
     }
 
     #[test]

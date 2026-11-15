@@ -7,7 +7,7 @@ use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
     self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE,
-    Sections, VARIANT, WIDE_SPELLINGS, WordValue, pack_spelling,
+    SPOKEN, Sections, VARIANT, WIDE_SPELLINGS, WordValue, pack_spelling,
 };
 
 /// Parts of speech whose forms guess unknown words: the closed classes are in the dictionary
@@ -25,7 +25,8 @@ const MAX_GUESSES: usize = 10;
 /// its stem and the rest are the suffixes of a paradigm; lexemes with one paradigm and the same tags
 /// share an inflection table. The forms of a table go in the order of the paradigm: the lemma, then
 /// the main forms by their features (`VerbForm`, `Mood`, `Tense`, `Number`, `Person`, `Gender`...),
-/// then the variants in the same order. An analysis of a word form refers to a table and a form.
+/// then the variants and the spoken spellings in the same order. An analysis of a word form refers
+/// to a table and a form.
 /// The result depends only on the added forms, not on their order
 #[derive(Default)]
 pub struct Builder {
@@ -47,12 +48,12 @@ struct Place {
     probability: Option<u32>,
 }
 
-/// An added form: its place among the analyses of its word, whether it is a variant, how often
-/// texts have it and its place in the table of its source
+/// An added form: its place among the analyses of its word, its kind (`VARIANT`, `SPOKEN`), how
+/// often texts have it and its place in the table of its source
 #[derive(Clone, Copy, Default)]
 struct Form {
     place: Place,
-    variant: bool,
+    kind: u32,
     count: u32,
     rank: Option<u32>,
 }
@@ -230,7 +231,22 @@ impl Builder {
         feats: &str,
     ) -> Result<(), Error> {
         let feats = normalized(feats)?;
-        self.form(lemma, pos, form, feats)?.variant = true;
+        self.form(lemma, pos, form, feats)?.kind = VARIANT;
+        Ok(())
+    }
+
+    /// Marks an added form as a spoken spelling of the form of its lexeme with the same features:
+    /// `na` of `nada`, `güeno` of `bueno`. An analysis of the spelling is that form, and inflection
+    /// and the forms of the lexeme do not take it; the lexeme must have the form
+    pub fn mark_spoken(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: &str,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        self.form(lemma, pos, form, feats)?.kind = SPOKEN;
         Ok(())
     }
 
@@ -335,10 +351,20 @@ impl Builder {
                     feats,
                     ud: tags.number((pos.clone(), feats.clone()), "UD tags", u16::MAX)? as u16,
                     place: info.place,
-                    flags: if info.variant { VARIANT } else { 0 },
+                    flags: info.kind,
                     count: info.count,
                     rank: info.rank,
                 });
+            }
+            // The analysis of a spoken spelling is the form of its features
+            if let Some(row) = rows.iter().find(|row| {
+                row.flags & SPOKEN != 0
+                    && !(rows.iter()).any(|other| other.flags & SPOKEN == 0 && other.ud == row.ud)
+            }) {
+                return Err(Error::Build(format!(
+                    "spoken form {:?} of lexeme {lemma:?} {pos} has no form with its features",
+                    row.word
+                )));
             }
             rows.sort_by(|a, b| a.order().cmp(&b.order()));
             frequent_first(&mut rows);
@@ -384,7 +410,7 @@ impl Builder {
                         record: table << 16 | form as u32,
                         place: row.place,
                     });
-                    if row.flags & VARIANT == 0 && GUESSED.contains(&pos.as_str()) {
+                    if row.flags & (VARIANT | SPOKEN) == 0 && GUESSED.contains(&pos.as_str()) {
                         let key = (pos.clone(), row.feats.to_owned());
                         let weight = self.tag_frequencies.get(&key).copied().unwrap_or(0);
                         samples.push((row.word, table << 16 | form as u32, u64::from(weight) + 1));
@@ -730,6 +756,34 @@ fn build_error(err: fst::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_spoken_spelling_needs_a_form_of_its_features() {
+        let mut builder = Builder::new();
+        builder
+            .add_form("nada", "PRON", "nada", "Number=Sing")
+            .unwrap();
+        builder
+            .add_form("nada", "PRON", "na", "Number=Sing")
+            .unwrap();
+        builder
+            .add_form("nada", "PRON", "nadas", "Number=Plur")
+            .unwrap();
+        assert!(
+            builder
+                .mark_spoken("nada", "PRON", "nadas", "Number=Sing")
+                .is_err()
+        );
+        builder
+            .mark_spoken("nada", "PRON", "na", "Number=Sing")
+            .unwrap();
+        assert!(builder.build().is_ok());
+        builder
+            .mark_spoken("nada", "PRON", "nadas", "Number=Plur")
+            .unwrap();
+        let err = builder.build().unwrap_err().to_string();
+        assert!(err.contains("spoken form \"nadas\""), "{err}");
+    }
 
     #[test]
     fn checks_forms() {

@@ -22,13 +22,17 @@ pub(crate) const PROBABILITY_SCALE: u32 = 1_000_000;
 pub(crate) const VARIANT: u32 = 1 << 16;
 /// The flag of a form of a table: only the lemma, no word form of the dictionary
 pub(crate) const LEMMA_ONLY: u32 = 1 << 17;
+/// The flag of a form of a table: a spoken spelling of the form with the same features (`na` of
+/// `nada`, `güeno` of `bueno`), which is its analysis; inflection and the forms of the lexeme do not
+/// take it
+pub(crate) const SPOKEN: u32 = 1 << 18;
 /// Bits of the UD tag in a form of a table
 pub(crate) const UD_BITS: u32 = 0xFFFF;
 /// The longest ending in letters that guesses an unknown word
 pub(crate) const MAX_ENDING: usize = 5;
 /// Largest dictionary file: offsets into records and variants are of 32 bits
 pub(crate) const MAX_FILE: u64 = 1 << 31;
-const VERSION: u32 = 5;
+const VERSION: u32 = 6;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
 const SECTIONS: usize = 14;
@@ -52,7 +56,7 @@ pub(crate) struct Sections {
     /// Paradigms in a row: the numbers of the suffixes of their forms
     pub paradigms: Vec<u32>,
     /// Inflection tables in a row: the number of the paradigm, then the flags (`VARIANT`,
-    /// `LEMMA_ONLY`) and the UD tag of each of its forms; the first form is the lemma
+    /// `LEMMA_ONLY`, `SPOKEN`) and the UD tag of each of its forms; the first form is the lemma
     pub tables: Vec<u32>,
     /// Automaton "word form with plain vowels - `WordValue`"
     pub words: Vec<u8>,
