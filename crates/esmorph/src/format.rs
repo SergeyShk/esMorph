@@ -671,13 +671,13 @@ pub(crate) mod tests {
             assert!(layout(broken, true).is_err());
         }
         let mut other = data.clone();
-        other[8] = 4;
+        other[8] = 5;
         assert!(
             layout(&other, true)
                 .err()
                 .unwrap()
                 .to_string()
-                .contains("format version 4, supported 5: build the dictionary again")
+                .contains("format version 5, supported 6: build the dictionary again")
         );
         let mut foreign = data.clone();
         foreign[0] = b'X';

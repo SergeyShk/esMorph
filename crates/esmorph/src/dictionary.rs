@@ -2534,7 +2534,7 @@ pub(crate) mod tests {
         // The second form of the first table, `ambigúes` of `ambigú`: its UD tag and no flags
         let at = tables.start + 8;
         let mut damaged = clean.clone();
-        damaged[at + 2] |= 0x04;
+        damaged[at + 2] |= 0x08;
         let error = Dictionary::from_bytes(&with_checksum(damaged)).unwrap_err();
         assert!(error.to_string().contains("flags"), "{error}");
         let mut lemma_only = clean.clone();
