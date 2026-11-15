@@ -28,12 +28,14 @@ Example:
     [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
 """
 
+import hashlib
+import json
 import threading
 import unicodedata
 from collections import OrderedDict
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from spacy.language import Language
 from spacy.scorer import Scorer
@@ -48,9 +50,9 @@ __all__ = ["Component"]
 # line; a token of closing marks right after the end stays in the sentence
 SENTENCE_END = frozenset(".!?…")
 CLOSING = frozenset("»\"\u201d\u2019')]}")
-# The key of the dictionary of the component in `Doc.user_data`: `token._.esmorph` finds the
-# analyzer by it; the default dictionary is not written, as `Doc.from_docs`, `DocBin` and
-# `Span.as_doc` lose it
+# The key of the dictionary of the component in `Doc.user_data`, with its own words if it has them:
+# `token._.esmorph` finds the analyzer by it; the default dictionary is not written, as
+# `Doc.from_docs`, `DocBin` and `Span.as_doc` lose it
 SETTINGS = "esmorph"
 # Analyzers of different dictionaries in a process: at most this many
 CACHE_SIZE = 8
@@ -58,13 +60,19 @@ CACHE_SIZE = 8
 # the tokenizer of anySeg) is a space, the model does not see it
 SEPARATORS = frozenset("­​‌‍⁠﻿")
 
-_analyzers: OrderedDict[str | None, Analyzer] = OrderedDict()
+# Own words: a word and its sample, or its sample and the part of speech of the sample
+Words = dict[str, str | list[str] | tuple[str, str]]
+
+# Analyzers by the path of the dictionary and the digest of own words
+_analyzers: OrderedDict[tuple[str | None, str | None], Analyzer] = OrderedDict()
 _analyzers_lock = threading.Lock()
+# Own words of the components of the process by their digest: a document keeps the digest only
+_words: dict[str, Words] = {}
 
 
 @Language.factory(
     "esmorph",
-    default_config={"dictionary": None, "context": True},
+    default_config={"dictionary": None, "context": True, "words": None},
     assigns=["token.pos", "token.morph", "token.lemma"],
     default_score_weights={
         "pos_acc": 0.33,
@@ -74,7 +82,7 @@ _analyzers_lock = threading.Lock()
     },
 )
 def create_component(
-    nlp: Language, name: str, dictionary: str | None, context: bool
+    nlp: Language, name: str, dictionary: str | None, context: bool, words: Words | None
 ) -> "Component":
     """
     The component esmorph for a spaCy pipeline: `nlp.add_pipe("esmorph", config={...})`
@@ -85,11 +93,13 @@ def create_component(
         dictionary (str | None): The path of the dictionary, None - the dictionary of the package
         context (bool): Choose the analysis by the tokens around; False - the most probable
             analysis of a token without context, as `Analyzer.analyze` orders them
+        words (Words | None): Own words, as `Analyzer(words=...)` takes them; a pair of a sample
+            and a part of speech is a list in a config
 
     Returns:
         Component: The component
     """
-    return Component(dictionary, context)
+    return Component(dictionary, context, words)
 
 
 class Component:
@@ -100,25 +110,42 @@ class Component:
     Arguments:
         dictionary (str | None): The path of the dictionary, None - the dictionary of the package
         context (bool): Choose the analysis by the tokens around
+        words (Words | None): Own words, as `Analyzer(words=...)` takes them
     """
 
     dictionary: str | None
     context: bool
+    words: Words | None
+    digest: str | None
     analyzer: Analyzer
 
-    def __init__(self, dictionary: str | None = None, context: bool = True) -> None:
+    def __init__(
+        self, dictionary: str | None = None, context: bool = True, words: Words | None = None
+    ) -> None:
         # An absolute path: the analyzers are cached and documents keep it across directories
         self.dictionary = None if dictionary is None else str(Path(dictionary).absolute())
         self.context = context
-        self.analyzer = analyzer(self.dictionary)
+        # Lists, as a config keeps them
+        self.words = None
+        self.digest = None
+        if words:
+            self.words = {
+                word: sample if isinstance(sample, str) else list(sample)
+                for word, sample in words.items()
+            }
+            text = json.dumps(sorted(self.words.items()), ensure_ascii=False)
+            self.digest = hashlib.sha256(text.encode()).hexdigest()[:16]
+        if self.digest is not None and self.words is not None:
+            _words[self.digest] = self.words
+        self.analyzer = analyzer(self.dictionary, self.digest)
         if context:
             # A dictionary without a context model or with a damaged one fails here, not on the
             # first document
             self.analyzer.analyze_sentence([])
 
-    def __reduce__(self) -> tuple[type, tuple[str | None, bool]]:
-        # pickle keeps the path, not the dictionary
-        return Component, (self.dictionary, self.context)
+    def __reduce__(self) -> tuple[type, tuple[str | None, bool, Words | None]]:
+        # pickle keeps the path and the words, not the dictionary
+        return Component, (self.dictionary, self.context, self.words)
 
     def score(self, examples: Iterable[Example], **kwargs: Any) -> dict[str, Any]:
         """
@@ -190,7 +217,9 @@ class Component:
                 token.pos_ = "SPACE"
                 token.lemma_ = token.text
                 token.morph = MorphAnalysis(doc.vocab, "")
-        if self.dictionary is not None:
+        if self.words:
+            doc.user_data[SETTINGS] = {"dictionary": self.dictionary, "words": self.digest}
+        elif self.dictionary is not None:
             doc.user_data[SETTINGS] = self.dictionary
         else:
             doc.user_data.pop(SETTINGS, None)
@@ -213,26 +242,36 @@ def space(token: Token) -> bool:
     )
 
 
-def analyzer(dictionary: str | None) -> Analyzer:
+def analyzer(dictionary: str | None, digest: str | None = None) -> Analyzer:
     """
-    The analyzer of a dictionary: one per process for a dictionary, the long unused ones are
+    The analyzer of a dictionary and own words: one per process for them, the long unused ones are
     dropped
 
     Arguments:
         dictionary (str | None): The path of the dictionary, None - the dictionary of the package
+        digest (str | None): The digest of the own words of a component of the process; the words
+            of a component the process has not made are unknown, and the analyzer has none
 
     Returns:
         Analyzer: The analyzer
     """
+    if digest is not None and digest not in _words:
+        digest = None
+    key = (dictionary, digest)
     with _analyzers_lock:
-        found = _analyzers.get(dictionary)
+        found = _analyzers.get(key)
         if found is not None:
-            _analyzers.move_to_end(dictionary)
+            _analyzers.move_to_end(key)
             return found
-    created = Analyzer(dictionary)
+    # A pair of a wrong length gets to the analyzer, which tells of it
+    own = {
+        word: sample if isinstance(sample, str) else cast(tuple[str, str], tuple(sample))
+        for word, sample in (_words[digest] if digest is not None else {}).items()
+    }
+    created = Analyzer(dictionary, words=own or None)
     with _analyzers_lock:
-        _analyzers[dictionary] = created
-        _analyzers.move_to_end(dictionary)
+        _analyzers[key] = created
+        _analyzers.move_to_end(key)
         while len(_analyzers) > CACHE_SIZE:
             _analyzers.popitem(last=False)
     return created
@@ -252,7 +291,11 @@ def analysis(token: Token) -> Analysis | None:
     Returns:
         Analysis | None: The analysis or None if the word form has no such analysis
     """
-    found = analyzer(token.doc.user_data.get(SETTINGS))
+    settings = token.doc.user_data.get(SETTINGS)
+    if isinstance(settings, dict):
+        found = analyzer(settings.get("dictionary"), settings.get("words"))
+    else:
+        found = analyzer(settings)
     tag = (token.lemma_, token.pos_, token.morph.to_dict())
     candidates = found.analyze(token.text)
     parts = token._.anyseg_words if Token.has_extension("anyseg_words") else None

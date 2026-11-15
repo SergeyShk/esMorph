@@ -14,6 +14,8 @@ pub enum Error {
     Document(String),
     /// The dictionary has no context model for the analysis of a sentence
     Context(String),
+    /// An own word does not follow its sample
+    Word(String),
 }
 
 impl fmt::Display for Error {
@@ -25,7 +27,7 @@ impl fmt::Display for Error {
             Error::Document(msg) => {
                 write!(f, "the analyses are not written to the document: {msg}")
             }
-            Error::Context(msg) => write!(f, "{msg}"),
+            Error::Context(msg) | Error::Word(msg) => write!(f, "{msg}"),
         }
     }
 }

@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from os import PathLike
 from pathlib import Path
 from typing import Literal, Protocol, final
@@ -67,7 +67,11 @@ def _analysis(
 ) -> Analysis:
     """Restores an analysis from pickle"""
 
-def _analyzer(path: str | PathLike[str] | None = None, verify: bool = False) -> Analyzer:
+def _analyzer(
+    path: str | PathLike[str] | None = None,
+    verify: bool = False,
+    words: Mapping[str, str | tuple[str, str]] | None = None,
+) -> Analyzer:
     """Restores an analyzer from pickle"""
 
 def _analyses_analyzer(path: str | PathLike[str] | None = None, verify: bool = False) -> Analyzer:
@@ -104,7 +108,11 @@ class Analyzer:
     """Morphological analyzer of Spanish"""
 
     def __new__(
-        cls, path: str | PathLike[str] | None = None, *, verify: bool = False
+        cls,
+        path: str | PathLike[str] | None = None,
+        *,
+        verify: bool = False,
+        words: Mapping[str, str | tuple[str, str]] | None = None,
     ) -> Analyzer: ...
     @property
     def path(self) -> Path:

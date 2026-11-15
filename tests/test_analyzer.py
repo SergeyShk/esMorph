@@ -189,6 +189,52 @@ def test_spoken_spelling_keeps_other_words(morph):
     assert morph.analyze("dejao")[0].lemma in ("dejar", "dejado")
 
 
+def test_own_words():
+    morph = Analyzer(words={"tiktokear": "bloguear", "cajo": ("bajo", "NOUN")})
+    analysis = morph.analyze("tiktokeamos")[0]
+    assert (analysis.word, analysis.lemma, analysis.pos, analysis.source) == (
+        "tiktokeamos",
+        "tiktokear",
+        "VERB",
+        "dictionary",
+    )
+    assert analysis.inflect(Tense="Past", Person="3", Number="Sing") == "tiktokeó"
+    assert "tiktokeando" in {form.word for form in analysis.forms()}
+    assert morph.analyze("tiktokearlo")[0].words == ("tiktokear", "lo")
+    assert morph.lemmatize(["Tiktokeó", "los", "cajos"]) == ["tiktokear", "el", "cajo"]
+    assert morph.is_known("tiktokeó")
+    # Another analyzer does not have them
+    assert Analyzer().analyze("tiktokeó")[0].source == "guess"
+    # Pickle keeps the words of the analyzer; an analysis keeps its forms
+    restored = pickle.loads(pickle.dumps(morph))
+    assert restored.analyze("cajos")[0].lemma == "cajo"
+    analysis = pickle.loads(pickle.dumps(morph.analyze("tiktokeó")[0]))
+    assert analysis.inflect(Mood="Ind", Tense="Pres", Person="1") == "tiktokeo"
+
+
+def test_own_words_keep_the_forms_of_other_words():
+    plain, own = Analyzer(), Analyzer(words={"tiktokear": "bloguear"})
+    for word in ("buchás", "extremis", "yogur"):
+        forms = [[form.word for form in morph.analyze(word)[0].forms()] for morph in (plain, own)]
+        assert forms[0] == forms[1]
+
+
+@pytest.mark.parametrize(
+    ("words", "error", "message"),
+    [
+        ({"tiktokear": "qzxw"}, ValueError, "is not in the dictionary"),
+        ({"cajo": "bajo"}, ValueError, "lexemes of several parts of speech"),
+        ({"cajo": ("bajo", "VERB")}, ValueError, "has no lexemes of VERB"),
+        ({"tiktok ear": "bloguear"}, ValueError, "a space"),
+        ({"tiktokear": 1}, TypeError, "words must map"),
+        (["tiktokear"], TypeError, "words must map"),
+    ],
+)
+def test_wrong_own_words(words, error, message):
+    with pytest.raises(error, match=message):
+        Analyzer(words=words)
+
+
 def test_lost_diaeresis(morph):
     assert morph.analyze("pinguino")[0].word == "pingüino"
     assert morph.analyze("verguenza")[0].word == "vergüenza"

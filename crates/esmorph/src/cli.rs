@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use anyseg::{ConlluWriter, Document, Segmenter, Span, read_conllu};
 
 use crate::dictionary::{one_line, set_fields};
-use crate::{Analysis, Dictionary};
+use crate::{Analysis, Dictionary, Sample};
 
 const HELP: &str = "\
 esmorph - morphological analysis of Spanish text: lemmas, parts of speech and Universal
@@ -40,6 +40,9 @@ Options:
                              tokens - a token per line, a blank line between sentences
                              conllu - CoNLL-U: LEMMA, UPOS and FEATS are filled
   -d, --dictionary FILE    esMorph dictionary file (default: the dictionary of the package)
+  -w, --words FILE         own words: per line a word and its sample (a word of the dictionary in
+                           the same form) separated by a tab, and the part of speech if the
+                           sample has lexemes of several; the option may repeat
       --no-context         order the analyses of a word by the dictionary, not by the context
                            model: faster; for a list of words that do not make a sentence
   -o, --output FILE        write the result to a file
@@ -128,6 +131,7 @@ enum Command {
         input: Input,
         context: bool,
         dictionary: Option<PathBuf>,
+        words: Vec<PathBuf>,
         output: Option<PathBuf>,
         files: Vec<OsString>,
     },
@@ -137,7 +141,7 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
     let (mut format, mut input, mut dictionary, mut output) =
         (Format::Lemmas, Input::Text, None, None);
     let mut context = true;
-    let mut files = Vec::new();
+    let (mut words, mut files) = (Vec::new(), Vec::new());
     let mut options = true;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -191,6 +195,7 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 }
             }
             "-d" | "--dictionary" => dictionary = Some(PathBuf::from(value()?)),
+            "-w" | "--words" => words.push(PathBuf::from(value()?)),
             "-o" | "--output" => {
                 output = Some(value()?)
                     .filter(|value| value != "-")
@@ -204,6 +209,7 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
         input,
         context,
         dictionary,
+        words,
         output,
         files,
     })
@@ -232,15 +238,16 @@ fn execute(
 ) -> u8 {
     // A message to stderr: if it is closed too, there is no one to tell
     let mut report = |message: String| drop(writeln!(stderr, "esmorph: {message}"));
-    let (format, input, context, dictionary, output_path, files) = match parse(args) {
+    let (format, input, context, dictionary, words, output_path, files) = match parse(args) {
         Ok(Command::Run {
             format,
             input,
             context,
             dictionary,
+            words,
             output,
             files,
-        }) => (format, input, context, dictionary, output, files),
+        }) => (format, input, context, dictionary, words, output, files),
         Ok(Command::Help | Command::Version) if closed => {
             report("the standard output is closed".to_owned());
             return 1;
@@ -262,7 +269,8 @@ fn execute(
     };
     let dictionary_path = dictionary.as_deref().or(default);
     // A dictionary given by the user may come from anywhere: its automata are checked
-    let dictionary = match load(dictionary_path, dictionary.is_some(), context) {
+    let loaded = load(dictionary_path, dictionary.is_some(), context);
+    let dictionary = match loaded.and_then(|dictionary| add_words(dictionary, &words)) {
         Ok(dictionary) => dictionary,
         Err(message) => {
             report(message);
@@ -287,6 +295,7 @@ fn execute(
             false => Some(Stream::Path(Path::new(file))),
         })
         .chain(dictionary_path.map(Stream::Path))
+        .chain(words.iter().map(|path| Stream::Path(path)))
         .collect();
     let target = match &output_path {
         Some(path) => Some(Stream::Path(path)),
@@ -298,10 +307,12 @@ fn execute(
     {
         report(match &output_path {
             Some(path) => format!(
-                "{}: the output file is an input file or the dictionary",
+                "{}: the output file is an input file, the dictionary or a file of own words",
                 path.display()
             ),
-            None => "the standard output is an input file or the dictionary".into(),
+            None => {
+                "the standard output is an input file, the dictionary or a file of own words".into()
+            }
         });
         return 1;
     }
@@ -432,6 +443,38 @@ fn load(path: Option<&Path>, verify: bool, context: bool) -> Result<Dictionary, 
             crate::Error::Context(message) => format!("{name}{message}: run with --no-context"),
             err => format!("{name}{err}"),
         });
+    }
+    Ok(dictionary)
+}
+
+/// The dictionary with the own words of the files `paths`: per line a word, its sample and, if
+/// needed, the part of speech, separated by tabs; blank lines and lines of `#` are skipped
+fn add_words(mut dictionary: Dictionary, paths: &[PathBuf]) -> Result<Dictionary, String> {
+    for path in paths {
+        let name = path.display();
+        let bytes =
+            std::fs::read(path).map_err(|err| format!("{name}: {}", open_error(path, &err)))?;
+        let text = String::from_utf8(bytes).map_err(|err| {
+            let valid = &err.as_bytes()[..err.utf8_error().valid_up_to()];
+            let line = valid.iter().filter(|&&byte| byte == b'\n').count() + 1;
+            format!("{name}: line {line}: not UTF-8")
+        })?;
+        let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+        for (number, line) in text.lines().enumerate() {
+            if line.trim().is_empty() || line.trim_start().starts_with('#') {
+                continue;
+            }
+            let at =
+                |message: &dyn std::fmt::Display| format!("{name}: line {}: {message}", number + 1);
+            // Spaces around the fields align the columns; an empty part of speech is none
+            let fields: Vec<&str> = line.split('\t').map(str::trim).collect();
+            let word = match *fields.as_slice() {
+                [word, like] | [word, like, ""] => (word, Sample::from(like)),
+                [word, like, pos] => (word, Sample::from((like, pos))),
+                _ => return Err(at(&"a word and its sample separated by a tab are needed")),
+            };
+            dictionary = dictionary.with_words([word]).map_err(|err| at(&err))?;
+        }
     }
     Ok(dictionary)
 }
@@ -1639,6 +1682,9 @@ mod tests {
                 "--no-context",
                 "-d",
                 "es.dict",
+                "-w",
+                "a.tsv",
+                "--words=b.tsv",
                 "-o",
                 "-",
                 "--",
@@ -1656,6 +1702,7 @@ mod tests {
                 input: Input::Tokens,
                 context: false,
                 dictionary: Some(PathBuf::from("es.dict")),
+                words: vec![PathBuf::from("a.tsv"), PathBuf::from("b.tsv")],
                 output: None,
                 files: vec!["-f".into(), "a.txt".into()],
             })
@@ -1781,7 +1828,9 @@ mod tests {
             let (code, _, err) = command(&args, b"");
             assert_eq!(code, 1, "{args:?}");
             assert!(
-                err.ends_with("the output file is an input file or the dictionary\n"),
+                err.ends_with(
+                    "the output file is an input file, the dictionary or a file of own words\n"
+                ),
                 "{err}"
             );
         }

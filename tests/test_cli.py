@@ -97,6 +97,25 @@ def test_dictionary_option(tmp_path):
     assert run("-d", str(path), text=TEXT).stdout == "decir yo el verdad de el caso .\n"
 
 
+def test_words_option(tmp_path):
+    words = tmp_path / "words.tsv"
+    words.write_text("# own words\ntiktokear\tbloguear\n\ncajo\tbajo\tNOUN\n", encoding="utf-8")
+    result = run("-w", str(words), text="Tiktokeamos con los cajos.")
+    assert (result.returncode, result.stderr) == (0, "")
+    assert result.stdout == "tiktokear con el cajo .\n"
+    words.write_text("cajo\tbajo\n", encoding="utf-8")
+    result = run("--words", str(words), text="Cajos.")
+    assert result.returncode == 1
+    assert 'words.tsv: line 1: the sample "bajo" has lexemes of several parts' in result.stderr
+    words.write_text("tiktokear\n", encoding="utf-8")
+    assert "line 1: a word and its sample separated by a tab" in run("-w", str(words)).stderr
+    # The output does not overwrite a file of own words
+    words.write_text("tiktokear\tbloguear\n", encoding="utf-8")
+    result = run("-w", str(words), "-o", str(words), text="Tiktokeamos.")
+    assert result.returncode == 1
+    assert words.read_text(encoding="utf-8") == "tiktokear\tbloguear\n"
+
+
 def test_closed_pipe(tmp_path):
     path = tmp_path / "text.txt"
     path.write_text(TEXT * 20_000, encoding="utf-8")
@@ -204,7 +223,7 @@ def test_output_file_and_encoding(tmp_path):
                 check=False,
             )
         assert result.returncode == 1
-        assert result.stderr.endswith(b"is an input file or the dictionary\n")
+        assert result.stderr.endswith(b"is an input file, the dictionary or a file of own words\n")
     assert path.read_text(encoding="utf-8") == TEXT
     assert dictionary.read_bytes() == Path(Analyzer().path).read_bytes()
     # A file in cp1252 with ASCII at the start (subtitles) is not analyzed, not even in part

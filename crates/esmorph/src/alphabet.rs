@@ -162,6 +162,29 @@ impl Alphabet {
         keys
     }
 
+    /// Gives the letters of `word` that the alphabet has not free bytes: the letters of own words
+    /// of a copy of a dictionary, which its automaton has not; `false` if no byte is free
+    pub fn extend(&mut self, word: &str) -> bool {
+        for letter in word.chars().flat_map(char::to_lowercase) {
+            let letter = plain(letter).unwrap_or(letter);
+            if self.code(letter).is_some() {
+                continue;
+            }
+            let Some(code) = (1..=u8::MAX).find(|&code| self.letters[usize::from(code)] == '\0')
+            else {
+                return false;
+            };
+            self.letters[usize::from(code)] = letter;
+            if letter.is_ascii() {
+                self.ascii[letter as usize] = code;
+            } else {
+                let at = (self.other).partition_point(|&(known, _)| known < letter);
+                self.other.insert(at, (letter, code));
+            }
+        }
+        true
+    }
+
     /// Spelling of a key with accents on the places of `marks`
     pub fn spelling(&self, key: &Key, marks: u64) -> String {
         self.decode(key.bytes(), marks)
@@ -241,6 +264,27 @@ mod tests {
 
     fn alphabet() -> Alphabet {
         Alphabet::new("-.aceginoqrstuñü").unwrap()
+    }
+
+    #[test]
+    fn letters_out_of_the_alphabet_take_free_bytes() {
+        let mut letters = alphabet();
+        assert!(letters.input_key("øzé").is_none());
+        assert!(letters.extend("ØZÉ"));
+        let key = letters.input_key("øzé").unwrap();
+        assert_eq!(
+            (letters.spelling(&key, key.marks), key.marks),
+            ("øzé".to_owned(), 0b100)
+        );
+        // The letters of the dictionary keep their bytes, the new ones sort among the others
+        assert_eq!(
+            letters.input_key("ñ").unwrap().bytes(),
+            alphabet().input_key("ñ").unwrap().bytes()
+        );
+        assert!(letters.input_key("ü").is_some() && letters.input_key("Ø").is_some());
+        // No byte is free for more than 255 letters
+        let many: String = ('\u{4e00}'..).take(255).collect();
+        assert!(!letters.extend(&many));
     }
 
     #[test]

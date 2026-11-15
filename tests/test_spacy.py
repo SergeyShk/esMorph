@@ -254,6 +254,27 @@ def test_serialization(nlp):
     assert annotation(pickle.loads(pickle.dumps(nlp))("Ella la vio del balcón")) == annotation(doc)
 
 
+def test_own_words():
+    nlp = spacy.blank("es")
+    words = {"tiktokear": "bloguear", "cajo": ("bajo", "NOUN")}
+    nlp.add_pipe("esmorph", config={"words": words})
+    doc = nlp("Tiktokeamos con los cajos.")
+    assert [(token.lemma_, token.pos_) for token in doc][::3] == [
+        ("tiktokear", "VERB"),
+        ("cajo", "NOUN"),
+    ]
+    assert doc[0]._.esmorph.inflect(Tense="Past", Person="3", Number="Sing") == "tiktokeó"
+    # A document keeps a digest of the words, not the words
+    assert len(str(doc.user_data["esmorph"]["words"])) == 16
+    # The pipeline and its documents keep the words
+    restored = pickle.loads(pickle.dumps(nlp))
+    assert restored("Tiktokeó.")[0].lemma_ == "tiktokear"
+    doc = spacy.tokens.DocBin(docs=[doc], store_user_data=True).get_docs(nlp.vocab)
+    assert next(doc)[0]._.esmorph.lemma == "tiktokear"
+    with pytest.raises(ValueError, match="several parts of speech"):
+        spacy.blank("es").add_pipe("esmorph", config={"words": {"cajo": "bajo"}})
+
+
 def test_pickle_in_new_process():
     nlp = spacy.blank("es")
     nlp.add_pipe("esmorph", config={"dictionary": dictionary_path()})
