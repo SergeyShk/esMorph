@@ -148,6 +148,47 @@ def test_colloquial_spelling_is_only_for_unknown_lowercase_words(morph):
     assert morph.analyze("Julita")[0].pos == "PROPN"
 
 
+@pytest.mark.parametrize(
+    ("token", "word", "lemma", "pos"),
+    [
+        ("na", "nada", "nada", "PRON"),
+        ("er", "el", "el", "DET"),
+        ("güeno", "bueno", "buen", "ADJ"),
+        ("tié", "tiene", "tener", "VERB"),
+        ("güevos", "huevos", "huevo", "NOUN"),
+        ("pos", "pues", "pues", "SCONJ"),
+        ("po", "por", "por", "ADP"),
+        ("tos", "todos", "todo", "PRON"),
+        # The form the spelling stands for, not the first one of its features
+        ("mu", "muy", "mucho", "ADV"),
+        ("esplicase", "explicase", "explicar", "VERB"),
+        # Forms of the lexeme of the spelling with fewer features
+        ("dejaos", "dejados", "dejado", "ADJ"),
+        ("úrtima", "última", "último", "ADJ"),
+    ],
+)
+def test_spoken_spelling_has_the_analyses_of_the_standard_word(morph, token, word, lemma, pos):
+    analyses = morph.analyze(token)
+    analysis = next(a for a in analyses if a.pos == pos and a.lemma == lemma)
+    assert (analysis.word, analysis.source) == (word, "dictionary")
+    # It is the analysis of the standard word, whose forms and inflection have no such spelling
+    assert analysis in morph.analyze(word)
+    assert token not in {form.word for form in analysis.forms()}
+
+
+def test_spoken_spelling_keeps_other_words(morph):
+    # A cough, not only `todos`; a spelling with another sense keeps it
+    assert {(a.word, a.lemma) for a in morph.analyze("tos")} >= {("tos", "tos"), ("todos", "todo")}
+    assert "nadar" not in {a.lemma for a in morph.analyze("na")}
+    assert "PROPN" not in {a.pos for a in morph.analyze("güeno")}
+    # A form of the lexeme of a spelling keeps the analyses of other lexemes: the voseo of `dejar`
+    assert ("dejá", "dejar") in {(a.word, a.lemma) for a in morph.analyze("dejá")}
+    assert morph.analyze("dejés")[0].inflect(Mood="Ind") == "dejás"
+    # A spelling with a capital letter is no name restored to its accents
+    assert [morph.analyze(token)[0].word for token in ("Er", "Na")] == ["el", "nada"]
+    assert morph.analyze("dejao")[0].lemma in ("dejar", "dejado")
+
+
 def test_lost_diaeresis(morph):
     assert morph.analyze("pinguino")[0].word == "pingüino"
     assert morph.analyze("verguenza")[0].word == "vergüenza"
@@ -1470,13 +1511,17 @@ def test_conventions_of_the_dictionary(morph):
     assert morph.lemmatize(["usté", "güeno", "á", "tambien"]) == ["tú", "buen", "a", "también"]
     # Such a spelling has the features of the table and is a variant
     assert len(morph.analyze("uds.")) == 1
-    assert morph.analyze("ozté")[0].inflect(Number="Plur") == "oztedes"
+    assert morph.analyze("usté")[0].inflect(Number="Plur") == "ustés"
+    # A spelling as a word sounds is that word
+    ozte = morph.analyze("ozté")[0]
+    assert (ozte.word, ozte.lemma, ozte.inflect(Number="Plur")) == ("usted", "tú", "ustedes")
     buen = morph.analyze("buen")[0]
     forms = [form.word for form in buen.forms()]
     assert forms[:5] == ["buen", "bueno", "buena", "buenos", "buenas"]
     # A variant takes a main form closer in spelling than its variants
     assert (buen.inflect(Number="Plur"), buen.inflect(Gender="Fem")) == ("buenos", "buena")
-    assert morph.analyze("weno")[0].inflect(Gender="Fem") == "wena"
+    assert morph.analyze("güena")[0].inflect(Number="Plur") == "güenas"
+    assert morph.analyze("weno")[0].inflect(Gender="Fem") == "buena"
     # A verb has its infinitive among its forms
     assert morph.analyze("acepillo")[0].inflect(VerbForm="Inf") == "acepillar"
     # Older contractions, initials and symbols of units
