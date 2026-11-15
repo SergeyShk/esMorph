@@ -1070,8 +1070,9 @@ impl Dictionary {
         let Some(lexeme) = self.lexeme_of(analysis) else {
             return Vec::new();
         };
+        let own = self.is_own_analysis(analysis);
         (0..lexeme.cells.len())
-            .filter(|&form| self.takes_form(&lexeme, form))
+            .filter(|&form| self.takes_form(&lexeme, form, own))
             .filter_map(|form| self.form(&lexeme, form, analysis.forms_source()))
             .map(|form| with_lemma(form, &analysis.lemma))
             .collect()
@@ -1172,8 +1173,9 @@ impl Dictionary {
         let lacks = |tag: UdTag<'_>, name: Option<u16>| {
             name.and_then(|name| tag.feat_value(name)).is_none()
         };
+        let own_word = self.is_own_analysis(analysis);
         let candidates = (0..lexeme.cells.len())
-            .filter(|&form| self.takes_form(&lexeme, form))
+            .filter(|&form| self.takes_form(&lexeme, form, own_word))
             .filter_map(|form| {
                 let number = (lexeme.cells[form] & UD_BITS) as u16;
                 let tag = self.ud.get(number)?;

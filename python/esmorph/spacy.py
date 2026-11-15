@@ -63,9 +63,8 @@ SEPARATORS = frozenset("­​‌‍⁠﻿")
 # Own words: a word and its sample, or its sample and the part of speech of the sample
 Words = dict[str, str | list[str] | tuple[str, str]]
 
-_analyzers: OrderedDict[
-    tuple[str | None, tuple[tuple[str, str | tuple[str, ...]], ...]], Analyzer
-] = OrderedDict()
+# Analyzers by the path of the dictionary and the digest of own words
+_analyzers: OrderedDict[tuple[str | None, str | None], Analyzer] = OrderedDict()
 _analyzers_lock = threading.Lock()
 # Own words of the components of the process by their digest: a document keeps the digest only
 _words: dict[str, Words] = {}
@@ -136,9 +135,9 @@ class Component:
             }
             text = json.dumps(sorted(self.words.items()), ensure_ascii=False)
             self.digest = hashlib.sha256(text.encode()).hexdigest()[:16]
-        self.analyzer = analyzer(self.dictionary, self.words)
         if self.digest is not None and self.words is not None:
             _words[self.digest] = self.words
+        self.analyzer = analyzer(self.dictionary, self.digest)
         if context:
             # A dictionary without a context model or with a damaged one fails here, not on the
             # first document
@@ -243,29 +242,32 @@ def space(token: Token) -> bool:
     )
 
 
-def analyzer(dictionary: str | None, words: Words | None = None) -> Analyzer:
+def analyzer(dictionary: str | None, digest: str | None = None) -> Analyzer:
     """
     The analyzer of a dictionary and own words: one per process for them, the long unused ones are
     dropped
 
     Arguments:
         dictionary (str | None): The path of the dictionary, None - the dictionary of the package
-        words (Words | None): Own words
+        digest (str | None): The digest of the own words of a component of the process; the words
+            of a component the process has not made are unknown, and the analyzer has none
 
     Returns:
         Analyzer: The analyzer
     """
-    # A pair of a wrong length gets to the analyzer, which tells of it
-    own = {
-        word: sample if isinstance(sample, str) else cast(tuple[str, str], tuple(sample))
-        for word, sample in (words or {}).items()
-    }
-    key = (dictionary, tuple(sorted(own.items())))
+    if digest is not None and digest not in _words:
+        digest = None
+    key = (dictionary, digest)
     with _analyzers_lock:
         found = _analyzers.get(key)
         if found is not None:
             _analyzers.move_to_end(key)
             return found
+    # A pair of a wrong length gets to the analyzer, which tells of it
+    own = {
+        word: sample if isinstance(sample, str) else cast(tuple[str, str], tuple(sample))
+        for word, sample in (_words[digest] if digest is not None else {}).items()
+    }
     created = Analyzer(dictionary, words=own or None)
     with _analyzers_lock:
         _analyzers[key] = created
@@ -291,8 +293,7 @@ def analysis(token: Token) -> Analysis | None:
     """
     settings = token.doc.user_data.get(SETTINGS)
     if isinstance(settings, dict):
-        # Own words of a component the process has not made are unknown: the analyzer has none
-        found = analyzer(settings.get("dictionary"), _words.get(settings.get("words", "")))
+        found = analyzer(settings.get("dictionary"), settings.get("words"))
     else:
         found = analyzer(settings)
     tag = (token.lemma_, token.pos_, token.morph.to_dict())

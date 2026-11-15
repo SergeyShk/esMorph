@@ -212,6 +212,13 @@ def test_own_words():
     assert analysis.inflect(Mood="Ind", Tense="Pres", Person="1") == "tiktokeo"
 
 
+def test_own_words_keep_the_forms_of_other_words():
+    plain, own = Analyzer(), Analyzer(words={"tiktokear": "bloguear"})
+    for word in ("buchás", "extremis", "yogur"):
+        forms = [[form.word for form in morph.analyze(word)[0].forms()] for morph in (plain, own)]
+        assert forms[0] == forms[1]
+
+
 @pytest.mark.parametrize(
     ("words", "error", "message"),
     [

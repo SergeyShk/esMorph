@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Arc;
 
-use super::{Analysis, Dictionary, Entry, Lexeme, analyses_at, normalized};
+use super::{Analysis, Dictionary, Entry, Lexeme, Source, analyses_at, normalized};
 use crate::Error;
 use crate::alphabet::{Key, MAX_KEY};
 use crate::format::{LEMMA_ONLY, SPOKEN, VARIANT};
@@ -329,30 +329,47 @@ impl Dictionary {
     }
 
     /// Whether a form of a table is a form of its lexeme for `forms` and `inflect`: no lemma only and
-    /// no spoken spelling; with own words, a variant only if the dictionary or the own words have
-    /// it, as an own word that is no verb takes no variants of its sample (`yoghurt` of `yogur`)
-    pub(super) fn takes_form(&self, lexeme: &Lexeme<'_>, form: usize) -> bool {
+    /// no spoken spelling; of the lexeme of an own word (`own`), a variant only if the dictionary
+    /// or the own words have it, as an own word that is no verb takes no variants of its sample
+    /// (`yoghurt` of `yogur`)
+    pub(super) fn takes_form(&self, lexeme: &Lexeme<'_>, form: usize, own: bool) -> bool {
         let cell = lexeme.cells[form];
         if cell & (LEMMA_ONLY | SPOKEN) != 0 {
             return false;
         }
-        if self.own_words.is_empty() || cell & VARIANT == 0 {
+        if !own || cell & VARIANT == 0 {
             return true;
         }
         let entry = Entry {
             table: lexeme.table,
             form: form as u16,
         };
-        lexeme
-            .spell(&self.suffixes, form)
-            .is_some_and(|spelling| self.recorded(&spelling, entry))
+        lexeme.spell(&self.suffixes, form).is_some_and(|spelling| {
+            self.in_automaton(&spelling, entry) || self.in_own_words(&spelling, entry)
+        })
     }
 
-    /// Whether the dictionary or the own words have the form `entry` spelled exactly as `spelling`
-    fn recorded(&self, spelling: &str, entry: Entry) -> bool {
+    /// Whether an analysis is of an own word: of the dictionary or of a verb with clitics, its form
+    /// is no record of the automaton but one of the own words
+    pub(super) fn is_own_analysis(&self, analysis: &Analysis) -> bool {
+        if self.own_words.is_empty() {
+            return false;
+        }
+        let word = match analysis.source {
+            Source::Dictionary => Some(&analysis.word),
+            Source::Clitics => analysis.words.first(),
+            _ => None,
+        };
+        let (Some(word), Some(entry)) = (word, analysis.entry) else {
+            return false;
+        };
+        !self.in_automaton(word, entry) && self.in_own_words(word, entry)
+    }
+
+    /// Whether the automaton has the form `entry` spelled exactly as `spelling`
+    fn in_automaton(&self, spelling: &str, entry: Entry) -> bool {
         let packed = (u32::from(entry.table) << 16) | u32::from(entry.form);
-        let in_automaton = self
-            .lookup(spelling)
+        self.lookup(spelling)
             .is_some_and(|(key, spellings, as_written)| {
                 as_written
                     && spellings.iter().any(|(marks, records, _)| {
@@ -360,14 +377,15 @@ impl Dictionary {
                             && analyses_at(self.records(), records)
                                 .is_some_and(|(records, _)| records.contains(&packed))
                     })
-            });
-        in_automaton
-            || self
-                .own_forms(spelling)
-                .is_some_and(|(key, forms, as_written)| {
-                    as_written
-                        && (forms.iter()).any(|own| own.marks == key.marks && own.entry == entry)
-                })
+            })
+    }
+
+    /// Whether the own words have the form `entry` spelled exactly as `spelling`
+    fn in_own_words(&self, spelling: &str, entry: Entry) -> bool {
+        self.own_forms(spelling)
+            .is_some_and(|(key, forms, as_written)| {
+                as_written && (forms.iter()).any(|own| own.marks == key.marks && own.entry == entry)
+            })
     }
 
     /// Whether an own word is spelled as `word` with any accents or with a lost diaeresis
