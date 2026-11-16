@@ -6,11 +6,11 @@ Se requiere Python 3.11 o superior.
 pip install esmorph
 ```
 
-El paquete instala también el [comando `esmorph`](cli.md). El extra `spacy` instala spaCy para el [componente `esmorph`](spacy.md): `pip install "esmorph[spacy]"`.
+El paquete instala también el [comando `esmorph`](cli.md). El extra `spacy` instala spaCy para el [componente `esmorph`](spacy.md): `pip install "esmorph[spacy]"`; spaCy no tiene paquetes precompilados para Python sin GIL (3.14t, 3.15t).
 
 ## Paquetes precompilados
 
-PyPI tiene paquetes precompilados para Linux (x86_64 y aarch64, manylinux y musllinux), macOS (Intel y Apple Silicon) y Windows (x64 y arm64). Un mismo paquete sirve para todas las versiones de Python a partir de la 3.11, y Python 3.14t sin GIL tiene el suyo propio; para instalarlos no hace falta Rust. El diccionario forma parte del paquete y no requiere una instalación aparte. Python 3.13 sin GIL no es compatible: las compilaciones sin GIL empiezan en la 3.14.
+PyPI tiene paquetes precompilados para Linux (x86_64 y aarch64, manylinux y musllinux), macOS (Intel y Apple Silicon) y Windows (x64 y arm64). Un mismo paquete sirve para todas las versiones de Python a partir de la 3.11, y Python 3.14t y 3.15t sin GIL tienen los suyos propios; para instalarlos no hace falta Rust. El diccionario forma parte del paquete y no requiere una instalación aparte. Python 3.13 sin GIL no es compatible: las compilaciones sin GIL empiezan en la 3.14.
 
 Las versiones preliminares `X.Y.Z.devN` se publican solo en TestPyPI:
 
@@ -26,7 +26,7 @@ uv pip install --extra-index-url https://test.pypi.org/simple/ --index-strategy 
 
 ## Compilación desde el código fuente
 
-En otras plataformas y en las compilaciones sin GIL posteriores a la 3.14, pip compila el paquete desde el código fuente, lo que requiere [Rust](https://www.rust-lang.org/tools/install) 1.88 o superior:
+En otras plataformas y en las compilaciones sin GIL posteriores a la 3.15, pip compila el paquete desde el código fuente, lo que requiere [Rust](https://www.rust-lang.org/tools/install) 1.88 o superior:
 
 ``` bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

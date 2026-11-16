@@ -103,8 +103,8 @@ jobs:
           path: python/esmorph/data/es.dict
           if-no-files-found: error
 
-  # Every job builds an abi3 wheel for Python 3.11+ and a wheel for the free-threaded Python 3.14t,
-  # which abi3 does not cover
+  # Every job builds an abi3 wheel for Python 3.11+ and wheels for the free-threaded Python 3.14t and
+  # 3.15t, which abi3 does not cover
   wheels:
     name: wheels (${{ matrix.platform }})
     needs: dictionary
@@ -166,6 +166,13 @@ jobs:
         with:
           python-version: "3.14t"
           architecture: ${{ matrix.architecture }}
+      - name: Setup Python 3.15t (Windows)
+        id: python-free-threaded-next
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15t"
+          architecture: ${{ matrix.architecture }}
       - name: Setup Rust (Windows arm64)
         if: matrix.os == 'windows-11-arm'
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
@@ -177,7 +184,7 @@ jobs:
         with:
           maturin-version: v1.15.0
           target: ${{ matrix.target }}
-          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t
+          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t python3.15t
           manylinux: ${{ matrix.manylinux }}
       - name: Build wheels (Windows)
         if: runner.os == 'Windows'
@@ -188,20 +195,21 @@ jobs:
           args: >-
             --release --locked --compatibility pypi --out dist
             -i ${{ steps.python-abi3.outputs.python-path }} ${{ steps.python-free-threaded.outputs.python-path }}
+            ${{ steps.python-free-threaded-next.outputs.python-path }}
       - name: Build wheels (macOS x86_64)
         if: runner.os == 'macOS'
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.15.0
           target: x86_64
-          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t
+          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t python3.15t
       - name: Build wheels (macOS aarch64)
         if: runner.os == 'macOS'
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           maturin-version: v1.15.0
           target: aarch64
-          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t
+          args: --release --locked --compatibility pypi --out dist -i python3.11 python3.14t python3.15t
       - name: Upload wheels
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -243,7 +251,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest, windows-11-arm]
-        python-version: ["3.11", "3.14", "3.15", "3.14t"]
+        python-version: ["3.11", "3.14", "3.14t", "3.15", "3.15t"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -291,7 +299,7 @@ jobs:
           echo "esmorph-dict-es: $size bytes"
           [ "$size" -lt 10485760 ] || { echo "esmorph-dict-es exceeds the crates.io limit of 10 MiB"; exit 1; }
 
-  # The musllinux wheels are checked in the musllinux image: it has Python 3.11 and 3.14t
+  # The musllinux wheels are checked in the musllinux image: it has Python 3.11, 3.14t and 3.15t
   smoke-musl:
     name: smoke (musllinux, ${{ matrix.arch }})
     needs: wheels
@@ -320,7 +328,7 @@ jobs:
           VERSION: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
           docker run --rm -v "$PWD:/w" -w /w -e VERSION "$IMAGE" sh -ec '
-            for python in python3.11 python3.14t; do
+            for python in python3.11 python3.14t python3.15t; do
               "$python" -m venv "/tmp/$python"
               "/tmp/$python/bin/pip" install --quiet --no-index --find-links dist esmorph
               "/tmp/$python/bin/python" scripts/smoke.py $VERSION
