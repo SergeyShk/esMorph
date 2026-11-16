@@ -110,7 +110,12 @@ El diccionario tiene además grafías de palabras tal como suenan y formas abrev
 === "Código"
 
     ``` python
-    [(analysis.word, analysis.lemma) for analysis in (morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"])]
+    [
+        (analysis.word, analysis.lemma)
+        for analysis in (
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+        )
+    ]
     ```
 
 === "Resultado"

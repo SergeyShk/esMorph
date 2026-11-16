@@ -110,7 +110,12 @@ The dictionary also has spellings of words as they sound and common shortened fo
 === "Code"
 
     ``` python
-    [(analysis.word, analysis.lemma) for analysis in (morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"])]
+    [
+        (analysis.word, analysis.lemma)
+        for analysis in (
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+        )
+    ]
     ```
 
 === "Result"

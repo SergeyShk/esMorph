@@ -315,7 +315,10 @@ El parámetro `words` añade palabras que el diccionario no tiene. Cada palabra 
 
     ``` python
     own = Analyzer(words={"tiktokear": "bloguear", "cajo": ("bajo", "NOUN")})
-    [(analysis.lemma, analysis.pos) for analysis in (own.analyze(word)[0] for word in ["tiktokeó", "cajos"])]
+    [
+        (analysis.lemma, analysis.pos)
+        for analysis in (own.analyze(word)[0] for word in ["tiktokeó", "cajos"])
+    ]
     ```
 
 === "Resultado"
