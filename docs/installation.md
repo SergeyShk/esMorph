@@ -6,7 +6,7 @@ Python 3.11 or newer is required.
 pip install esmorph
 ```
 
-The package also installs the [`esmorph` command](cli.md). The extra `spacy` installs spaCy for the [`esmorph` component](spacy.md): `pip install "esmorph[spacy]"`.
+The package also installs the [`esmorph` command](cli.md). The extra `spacy` installs spaCy for the [`esmorph` component](spacy.md): `pip install "esmorph[spacy]"`; spaCy has no prebuilt wheels for the free-threaded Python (3.14t, 3.15t).
 
 ## Prebuilt wheels
 

@@ -6,7 +6,7 @@ El componente `esmorph` incorpora esMorph a una cadena de [spaCy](https://spacy.
 pip install "esmorph[spacy]"
 ```
 
-El componente se registra en spaCy al instalar el paquete y se añade por su nombre, sin importar esmorph. spaCy no tiene ruedas precompiladas para Python 3.14t y 3.15t sin GIL.
+El componente se registra en spaCy al instalar el paquete y se añade por su nombre, sin importar esmorph. spaCy no tiene ruedas precompiladas para Python sin GIL (3.14t, 3.15t).
 
 === "Código"
 

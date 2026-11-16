@@ -6,7 +6,7 @@ The `esmorph` component plugs esMorph into a [spaCy](https://spacy.io/) pipeline
 pip install "esmorph[spacy]"
 ```
 
-The component registers with spaCy when the package is installed and is added by name, without importing esmorph. spaCy has no prebuilt wheels for Python 3.14t and 3.15t without the GIL.
+The component registers with spaCy when the package is installed and is added by name, without importing esmorph. spaCy has no prebuilt wheels for Python without the GIL (3.14t, 3.15t).
 
 === "Code"
 
