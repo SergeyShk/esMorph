@@ -6,8 +6,9 @@ Description:
     checked by SHA-256. Every entry and every form of its table become rows "lemma, part of speech,
     form, features, kind, place" in the terms of Universal Dependencies; the builder joins the rows
     of one lemma and part of speech into a lexeme. The kind is `variant` for a variant of another
-    form with the same features (an old or regional spelling, a form of `vos`) and `_` for a main
-    form; the place is the number of the row in the table of its lexeme, `_` for a row that only
+    form with the same features (an old or regional spelling, a form of `vos`), `old` for an old or
+    nonstandard form of a verb (`trujo` of `traer`), `spoken:` with the standard form of a spelling
+    as the word sounds (`mu` of `muy`) and `_` for a main form; the place is the number of the row in the table of its lexeme, `_` for a row that only
     another entry gives. Only the standard library is needed.
 
 Example:
@@ -686,7 +687,7 @@ def without_acute(word: str) -> str:
     Returns:
         str: The word
     """
-    return unicodedata.normalize("NFC", unicodedata.normalize("NFD", word).replace("́", ""))
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFD", word).replace("\u0301", ""))
 
 
 def old_form_rows(table: set[conventions.Row], old: list[OldForm]) -> set[conventions.Row]:
@@ -788,11 +789,15 @@ def normalized_lemma(lemma: str, pos: str, participles: dict[str, str]) -> str:
 def rows(
     path: Path,
 ) -> tuple[
-    set[conventions.Row], set[Variant], dict[conventions.Row, int], set[conventions.Spoken]
+    set[conventions.Row],
+    set[Variant],
+    dict[conventions.Row, int],
+    set[conventions.Spoken],
+    set[str],
 ]:
     """
-    Rows of the table, the variants among them, their places in the tables of their lexemes and
-    the spellings of words as they sound
+    Rows of the table, the variants among them, their places in the tables of their lexemes, the
+    spellings of words as they sound and the old forms of verbs
 
     Description:
         A row is a variant if the table of its lexeme says so, or, without such a table, if all
@@ -808,10 +813,10 @@ def rows(
 
     Returns:
         tuple[set[conventions.Row], set[Variant], dict[conventions.Row, int],
-        set[conventions.Spoken]]: Lemma, part of speech, form, features in CoNLL-U notation;
-        lemma, part of speech, form and features of the variants, `None` for any lemma and
-        features; the places of the rows by their lemmas of the conventions; the spellings of
-        words as they sound
+        set[conventions.Spoken], set[str]]: Lemma, part of speech, form, features in CoNLL-U
+        notation; lemma, part of speech, form and features of the variants, `None` for any lemma
+        and features; the places of the rows by their lemmas of the conventions; the spellings of
+        words as they sound; the old and nonstandard forms of verbs of `old_form_rows`
     """
     entries = {entry["word"] for entry in snapshot_entries(path)}
     lower_entries = {word for word in entries if word == word.lower()}
@@ -850,9 +855,8 @@ def rows(
                     places[row] = min(place, places.get(row, place))
                 if pos == "VERB" and text == MASCULINE_PARTICIPLE and lemma != form:
                     participles.setdefault(form, lemma)
-    for row in old_form_rows(table, old):
-        table.add(row)
-        kinds.setdefault(row, set()).add((True, False))
+    old_rows = old_form_rows(table, old)
+    table |= old_rows
     # Variants and places by the lemmas of the conventions: a verb without `-se`
     merged: dict[Variant, set[tuple[bool, bool]]] = {}
     ranks: dict[conventions.Row, int] = {}
@@ -889,7 +893,7 @@ def rows(
         for (word, pos), (targets, only) in spoken.items()
         for target in targets
     }
-    return table, variants, ranks, pairs
+    return table, variants, ranks, pairs, {form for _, _, form, _ in old_rows}
 
 
 def kind(
@@ -897,6 +901,7 @@ def kind(
     variants: set[Variant],
     closed: set[conventions.Row],
     spoken: dict[conventions.Row, str],
+    old: set[str],
 ) -> str:
     """
     Kind of a row of the export
@@ -907,11 +912,13 @@ def kind(
         closed (set[conventions.Row]): Rows of the table of closed classes
         spoken (dict[conventions.Row, str]): Rows of the spoken spellings and the forms they stand
             for
+        old (set[str]): The old and nonstandard forms of verbs
 
     Returns:
-        str: `spoken:` and the form of a spoken spelling, `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative
-        pronoun of the table with an accent is a variant of the one without, which the spelling of
-        2010 prefers: `éste` of `este`
+        str: `spoken:` and the form of a spoken spelling, `old` for an old form of a verb,
+        `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative pronoun of the
+        table with an accent is a variant of the one without, which the spelling of 2010 prefers:
+        `éste` of `este`
     """
     if row in spoken:
         return f"spoken:{spoken[row]}"
@@ -919,6 +926,8 @@ def kind(
     if pos == "PRON" and lemma in DEMONSTRATIVES and row in closed:
         return "variant" if set(form) & ACUTE else "_"
     pos = "VERB" if pos == "AUX" else pos
+    if pos == "VERB" and form in old:
+        return "old"
     return "variant" if {(lemma, pos, form, feats), (None, pos, form, None)} & variants else "_"
 
 
@@ -950,7 +959,7 @@ def export(output: Path) -> int:
         int: Number of rows
     """
     name, url, digest = SNAPSHOT
-    table, variants, ranks, pairs = rows(download(url, output / "raw" / name, digest))
+    table, variants, ranks, pairs, old = rows(download(url, output / "raw" / name, digest))
     closed = conventions.closed_classes()
     table, spellings = conventions.apply(table, closed)
     # A spelling of a word of the table that the table has not is a variant: `güeno` of `bueno`
@@ -958,7 +967,7 @@ def export(output: Path) -> int:
     table, spoken = conventions.spoken(table, pairs, conventions.spellings())
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
-            "\t".join((*row, kind(row, variants, closed, spoken), rank(row, ranks))) + "\n"
+            "\t".join((*row, kind(row, variants, closed, spoken, old), rank(row, ranks))) + "\n"
             for row in sorted(table | spoken.keys())
         )
     meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}

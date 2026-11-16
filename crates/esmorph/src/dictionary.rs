@@ -9,7 +9,7 @@ use fst::Map;
 use crate::Error;
 use crate::alphabet::{Alphabet, Key};
 use crate::format::{
-    self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, PROBABILITY_SCALE,
+    self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, OLD, PROBABILITY_SCALE,
     SPOKEN, SPOKEN_FORM_SHIFT, Slice, Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS,
     WordValue, unpack_spelling,
 };
@@ -1223,13 +1223,12 @@ impl Dictionary {
                     .filter(|&name| nominal && !either(Some(name)))
                     .filter(|&name| wanted.iter().all(|&(known, _)| known != Some(name)))
                     .count();
-                let variant = (lexeme.cells[form] ^ own) & VARIANT != 0;
                 let key = (
                     missed,
                     contradicted,
                     extra,
                     absent,
-                    variant,
+                    variety(lexeme.cells[form], own),
                     lexeme.cells[form] != own,
                     group(form),
                     Reverse(closeness(form)),
@@ -1238,10 +1237,10 @@ impl Dictionary {
                 );
                 Some((key, form))
             });
-        // The best form and the best of the other kind, a main form for a variant
+        // The best form and the best main form for a variant
         let (mut best, mut other) = (None, None);
         for candidate in candidates {
-            if candidate.0.4 && other.is_none_or(|known| candidate < known) {
+            if candidate.0.4 == MAIN_FORM && other.is_none_or(|known| candidate < known) {
                 other = Some(candidate);
             }
             if best.is_none_or(|known| candidate < known) {
@@ -1254,7 +1253,7 @@ impl Dictionary {
         if let Some((main_key, main)) = other
             && own & VARIANT != 0
             && NOMINAL.contains(&tag.pos())
-            && !key.4
+            && key.4 == SAME_KIND
             && (main_key.0, main_key.1, main_key.2, main_key.3) == (key.0, key.1, key.2, key.3)
             && common_prefix(main) > common_prefix(best)
         {
@@ -1398,9 +1397,11 @@ impl Dictionary {
             let Some(cells) = tables.get(start + 1..start + 1 + count) else {
                 return invalid("an inflection table is truncated");
             };
-            // A spoken spelling keeps the place of its form in the upper bits
+            // A spoken spelling keeps the place of its form in the upper bits; an old form is a
+            // variant
             let flags = |cell: u32| match cell & SPOKEN {
-                0 => cell & !(UD_BITS | VARIANT | LEMMA_ONLY),
+                0 if cell & (OLD | VARIANT) == OLD => OLD,
+                0 => cell & !(UD_BITS | VARIANT | LEMMA_ONLY | OLD),
                 _ => cell & !(UD_BITS | VARIANT | SPOKEN) & ((1 << SPOKEN_FORM_SHIFT) - 1),
             };
             if cells
@@ -1569,6 +1570,25 @@ fn name_lemma(token: &str, lemma: &str) -> String {
     match chars.next() {
         Some(first) => first.to_uppercase().chain(chars).collect(),
         None => String::new(),
+    }
+}
+
+/// Kinds of a form of a table for inflection from another one: of the same kind, a main form, a
+/// form of another kind
+const SAME_KIND: u8 = 0;
+const MAIN_FORM: u8 = 1;
+const OTHER_KIND: u8 = 2;
+
+/// Kind of the form `cell` for inflection from the form `own`: a variant of the standard language
+/// (`hablás`) and an old form (`trujo`) give forms of their kind, then main ones
+fn variety(cell: u32, own: u32) -> u8 {
+    let kind = |cell: u32| cell & (VARIANT | OLD);
+    if kind(cell) == kind(own) {
+        SAME_KIND
+    } else if kind(cell) == 0 {
+        MAIN_FORM
+    } else {
+        OTHER_KIND
     }
 }
 
@@ -2334,6 +2354,8 @@ pub(crate) mod tests {
             ("hablá", fin("Imp", "", "2", "Sing")),
             ("hablad", fin("Imp", "", "2", "Plur")),
             ("fablar", "VerbForm=Inf".to_owned()),
+            ("fablo", fin("Ind", "Pres", "1", "Sing")),
+            ("fablas", fin("Ind", "Pres", "2", "Sing")),
         ];
         for (form, feats) in &verb {
             builder.add_form("hablar", "VERB", form, feats).unwrap();
@@ -2346,6 +2368,12 @@ pub(crate) mod tests {
             builder
                 .mark_variant("hablar", "VERB", form, &feats)
                 .unwrap();
+        }
+        for (form, feats) in [
+            ("fablo", fin("Ind", "Pres", "1", "Sing")),
+            ("fablas", fin("Ind", "Pres", "2", "Sing")),
+        ] {
+            builder.mark_old("hablar", "VERB", form, &feats).unwrap();
         }
         for (form, feats) in [
             ("gatos", "Gender=Masc|Number=Plur"),
@@ -2395,7 +2423,7 @@ pub(crate) mod tests {
             [
                 "hablar", "hablando", "hablado", "habladas", "hablo", "hablas", "habla",
                 "hablamos", "hablé", "habló", "hablara", "hablase", "hablara", "hablase", "habla",
-                "hablad", "fablar", "hablás", "hablá"
+                "hablad", "fablar", "hablás", "hablá", "fablo", "fablas"
             ]
         );
         let gato = dictionary.forms(&dictionary.analyze("gatas")[0]);
@@ -2578,8 +2606,13 @@ pub(crate) mod tests {
         // The second form of the first table, `ambigúes` of `ambigú`: its UD tag and no flags
         let at = tables.start + 8;
         let mut damaged = clean.clone();
-        damaged[at + 2] |= 0x08;
+        damaged[at + 2] |= 0x10;
         let error = Dictionary::from_bytes(&with_checksum(damaged)).unwrap_err();
+        assert!(error.to_string().contains("flags"), "{error}");
+        // An old form is a variant
+        let mut old = clean.clone();
+        old[at + 2] |= 0x08;
+        let error = Dictionary::from_bytes(&with_checksum(old)).unwrap_err();
         assert!(error.to_string().contains("flags"), "{error}");
         let mut lemma_only = clean.clone();
         lemma_only[at + 2] |= 0x02;
@@ -2692,6 +2725,11 @@ pub(crate) mod tests {
         assert_eq!(inflected(&dictionary, &main, &[("Mood", "Imp")]), "habla");
         assert_eq!(inflected(&dictionary, vos, &[("Mood", "Imp")]), "hablá");
         assert_eq!(inflected(&dictionary, vos, &[("Person", "1")]), "hablo");
+        // An old form gives old forms, a form of `vos` and a main form never give them
+        let old = &dictionary.analyze("fablas")[0];
+        assert_eq!(inflected(&dictionary, old, &[("Person", "1")]), "fablo");
+        assert_eq!(inflected(&dictionary, old, &[("Mood", "Imp")]), "habla");
+        assert_eq!(inflected(&dictionary, &main, &[("Person", "1")]), "hablo");
         assert_eq!(
             inflected(&dictionary, &dictionary.analyze("fablar")[0], &[]),
             "fablar"

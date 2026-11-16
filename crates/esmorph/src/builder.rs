@@ -6,7 +6,7 @@ use fst::MapBuilder;
 use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
-    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, MAX_SPOKEN_FORM,
+    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, MAX_SPOKEN_FORM, OLD,
     PROBABILITY_SCALE, SPOKEN, SPOKEN_FORM_SHIFT, Sections, VARIANT, WIDE_SPELLINGS, WordValue,
     pack_spelling,
 };
@@ -49,9 +49,9 @@ struct Place {
     probability: Option<u32>,
 }
 
-/// An added form: its place among the analyses of its word, its kind (`VARIANT`, `SPOKEN`) and the
-/// form a spoken spelling stands for, how often texts have it and its place in the table of its
-/// source
+/// An added form: its place among the analyses of its word, its kind (`VARIANT`, `OLD`, `SPOKEN`)
+/// and the form a spoken spelling stands for, how often texts have it and its place in the table of
+/// its source
 #[derive(Clone, Default)]
 struct Form {
     place: Place,
@@ -238,6 +238,24 @@ impl Builder {
         let feats = normalized(feats)?;
         let added = self.form(lemma, pos, form, feats)?;
         added.kind = VARIANT;
+        added.standard = None;
+        Ok(())
+    }
+
+    /// Marks an added form as an old or a nonstandard variant of another form with the same
+    /// features: `trujo` of `trajo`, `habemos` of `hemos`. The analyses of the form stay the same,
+    /// while inflection gives such a form only from such a form: `podés` in the plural is
+    /// `podéis`, not the old `podedes`
+    pub fn mark_old(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: &str,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        let added = self.form(lemma, pos, form, feats)?;
+        added.kind = VARIANT | OLD;
         added.standard = None;
         Ok(())
     }

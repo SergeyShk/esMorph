@@ -847,11 +847,23 @@ def test_old_forms_of_verbs(morph, token, lemma, feats):
 
 
 def test_old_forms_of_verbs_are_variants(morph):
-    # The standard paradigm keeps its forms, an old form gives old ones
+    # An old form follows the standard paradigm and gives old forms; a main form and a form of vos
+    # never give them
+    words = [form.word for form in verb(morph, "traer").forms()]
+    assert words.index("trujo") > words.index("traigan")
     assert verb(morph, "trajeron").inflect(Number="Sing") == "trajo"
     assert verb(morph, "trujo").inflect(Number="Plur") == "trujeron"
+    assert verb(morph, "podés").inflect(Number="Plur") == "podéis"
+    assert verb(morph, "sabés").inflect(Person="1") == "sé"
     # A form that only differs in accents is found under them: fué is fue
     assert morph.analyze("fué")[0].word == "fue"
+
+
+def test_own_verb_takes_no_old_forms_of_its_sample():
+    own = Analyzer(words={"chuntraer": "traer"})
+    assert own.analyze("chuntrajo")[0].lemma == "chuntraer"
+    assert own.analyze("chuntraés")[0].lemma == "chuntraer"
+    assert own.analyze("chuntrujo")[0].source == "guess"
 
 
 def test_frequent_verb_of_a_form_goes_first(morph):
