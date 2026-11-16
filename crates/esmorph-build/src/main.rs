@@ -1,7 +1,8 @@
 //! Builder of the dictionary of esMorph: `esmorph-build <export directory> <counts directory>
 //! <dictionary file> [<context model>]`. The export is `lexemes.tsv` (lemma, part of speech, form,
 //! features, `variant`, `old` for an old or nonstandard variant, `spoken:` with the form a spoken
-//! spelling stands for or `_`, the place in the table of the source or `_`) and `meta.json`,
+//! spelling stands for, `extra` or `extra-variant` for a form of the extra source or `_`, the place
+//! in the table of the source or `_`) and `meta.json`,
 //! written by `scripts/export_wiktionary.py`; the counts are `analyses.tsv`,
 //! `pos.tsv` and `sources.json`, written by `scripts/export_ud.py`; the context model is the file
 //! of weights of `scripts/train_context.py`
@@ -259,13 +260,28 @@ fn build(
             "old" => builder
                 .mark_old(lemma, pos, form, plain(feats))
                 .map_err(at)?,
+            "extra" => {
+                main.insert((lemma, pos));
+                builder
+                    .mark_extra(lemma, pos, form, plain(feats))
+                    .map_err(at)?;
+            }
+            "extra-variant" => {
+                builder
+                    .mark_variant(lemma, pos, form, plain(feats))
+                    .map_err(at)?;
+                builder
+                    .mark_extra(lemma, pos, form, plain(feats))
+                    .map_err(at)?;
+            }
             _ => match kind.strip_prefix("spoken:") {
                 Some(standard) => builder
                     .mark_spoken(lemma, pos, form, plain(feats), standard)
                     .map_err(at)?,
                 None => {
                     return Err(at(Error::Build(format!(
-                        "the kind is `variant`, `old`, `spoken:<form>` or `_`, not {kind:?}"
+                        "the kind is `variant`, `old`, `spoken:<form>`, `extra`, `extra-variant` \
+                         or `_`, not {kind:?}"
                     ))));
                 }
             },

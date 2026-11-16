@@ -9,13 +9,13 @@ use fst::Map;
 use crate::Error;
 use crate::alphabet::{Alphabet, Key};
 use crate::format::{
-    self, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, OLD, PROBABILITY_SCALE,
-    SPOKEN, SPOKEN_FORM_SHIFT, Slice, Storage, Strings, UD_BITS, VARIANT, WIDE_SPELLINGS,
-    WordValue, unpack_spelling,
+    self, EXTRA, HAS_PROBABILITIES, LEMMA_ONLY, Layout, MAX_LIST, MAX_SPELLINGS, OLD,
+    PROBABILITY_SCALE, SPOKEN, SPOKEN_FORM_SHIFT, Slice, Storage, Strings, UD_BITS, VARIANT,
+    WIDE_SPELLINGS, WordValue, unpack_spelling,
 };
 use crate::rules::{
-    self, CAPS_NAME, CLITICS_NAME, INITIAL_NAME, LOWER_NAME, RESTORED_NAME, ROMAN_LETTER, Rule,
-    RuleTags, SHORT_CAPS,
+    self, CAPS_NAME, CLITICS_NAME, EXTRA_NAME, INITIAL_NAME, LOWER_NAME, RESTORED_NAME,
+    ROMAN_LETTER, Rule, RuleTags, SHORT_CAPS,
 };
 use crate::ud::{UdTag, UdTags};
 use crate::{clitics, colloquial};
@@ -519,9 +519,12 @@ impl Dictionary {
             }
         }
         // The accent of a participle without its `d` is no lost one: `perdío` is `perdido`, not
-        // `perdió`, `marío` is `marido`, not `Mario`
+        // `perdió`, `marío` is `marido`, not `Mario`; a word of only the extra source is no
+        // colloquial spelling of a word of the main one only if it has none: `juera` is `fuera`
         if !word.chars().any(char::is_uppercase)
-            && (analyses.is_empty() || (!exact && colloquial::is_participle(&word)))
+            && (analyses.is_empty()
+                || (!exact && colloquial::is_participle(&word))
+                || (colloquial::may_be_spelling(&word) && self.extra_only(&analyses)))
         {
             let standard = self.colloquial(&word);
             if !standard.is_empty() {
@@ -571,6 +574,20 @@ impl Dictionary {
             .unwrap_or_default()
     }
 
+    /// Whether analyses of a word are only those of the extra source of the dictionary
+    fn extra_only(&self, analyses: &[Analysis]) -> bool {
+        !analyses.is_empty()
+            && analyses.iter().all(|analysis| {
+                analysis.source == Source::Dictionary
+                    && (self.lexeme_of(analysis))
+                        .zip(analysis.entry)
+                        .and_then(|(lexeme, entry)| {
+                            lexeme.cells.get(usize::from(entry.form)).copied()
+                        })
+                        .is_some_and(|cell| cell & EXTRA != 0)
+            })
+    }
+
     fn is_name(&self, analysis: &Analysis) -> bool {
         self.names
             .get(usize::from(analysis.ud))
@@ -595,10 +612,10 @@ impl Dictionary {
     }
 
     /// Adds the analysis of a name to the analyses of a word with a capital letter that the
-    /// dictionary knows without a name of its spelling: an initial (`D.`) and a word without accents
-    /// that the dictionary has only with them (`Angel`, `Perez`) are mostly names, another word only
-    /// sometimes (`Estados`, `Comisión`), so its name usually goes after the analyses of the
-    /// dictionary
+    /// dictionary knows without a name of its spelling: an initial (`D.`), a word without accents
+    /// that the dictionary has only with them (`Angel`, `Perez`) and a word of only its extra source
+    /// (`Navas`) are mostly names, another word only sometimes (`Estados`, `Comisión`), so its name
+    /// usually goes after the analyses of the dictionary
     fn add_capital_name(&self, token: &str, analyses: &mut Vec<Analysis>, exact: bool) {
         let written = |analysis: &Analysis| lower_eq(token, &analysis.word);
         if (analyses.iter()).any(|analysis| written(analysis) && self.is_name(analysis)) {
@@ -615,6 +632,8 @@ impl Dictionary {
             INITIAL_NAME
         } else if restored {
             RESTORED_NAME
+        } else if self.extra_only(analyses) {
+            EXTRA_NAME
         } else {
             CAPS_NAME[2]
         };
@@ -661,10 +680,10 @@ impl Dictionary {
     }
 
     /// Adds the analysis of a name to the analyses of a word in capitals that has none, by its
-    /// share: a short word is mostly an acronym, so its name usually goes first, while a longer
-    /// word and a word of a closed class are mostly words of a headline, so their name usually
-    /// goes after the analyses of the dictionary. A Roman numeral in `I` of an open class gets the
-    /// analyses of a numeral instead: `VI`, `XI`
+    /// share: a short word and a word of only the extra source are mostly an acronym or a name, so
+    /// their name usually goes first, while a longer word and a word of a closed class are mostly
+    /// words of a headline, so their name usually goes after the analyses of the dictionary. A
+    /// Roman numeral in `I` of an open class gets the analyses of a numeral instead: `VI`, `XI`
     fn add_name(&self, token: &str, analyses: &mut Vec<Analysis>) {
         let pos = |analysis: &Analysis| self.ud.get(analysis.ud).map(|tag| tag.pos());
         if analyses
@@ -680,11 +699,15 @@ impl Dictionary {
             )
         });
         let letters = token.chars().filter(|c| c.is_alphabetic()).count();
-        let share = CAPS_NAME[if closed {
-            2
+        let share = if self.extra_only(analyses) {
+            EXTRA_NAME
         } else {
-            usize::from(letters > SHORT_CAPS)
-        }];
+            CAPS_NAME[if closed {
+                2
+            } else {
+                usize::from(letters > SHORT_CAPS)
+            }]
+        };
         if !closed && token.ends_with('I') && rules::roman(token) {
             let (number, name) = rules::roman_shares(token);
             let rules = [(Rule::Roman, share * number), (Rule::Name, share * name)];
@@ -1401,7 +1424,7 @@ impl Dictionary {
             // variant
             let flags = |cell: u32| match cell & SPOKEN {
                 0 if cell & (OLD | VARIANT) == OLD => OLD,
-                0 => cell & !(UD_BITS | VARIANT | LEMMA_ONLY | OLD),
+                0 => cell & !(UD_BITS | VARIANT | LEMMA_ONLY | OLD | EXTRA),
                 _ => cell & !(UD_BITS | VARIANT | SPOKEN) & ((1 << SPOKEN_FORM_SHIFT) - 1),
             };
             if cells
@@ -2606,7 +2629,7 @@ pub(crate) mod tests {
         // The second form of the first table, `ambigúes` of `ambigú`: its UD tag and no flags
         let at = tables.start + 8;
         let mut damaged = clean.clone();
-        damaged[at + 2] |= 0x10;
+        damaged[at + 2] |= 0x20;
         let error = Dictionary::from_bytes(&with_checksum(damaged)).unwrap_err();
         assert!(error.to_string().contains("flags"), "{error}");
         // An old form is a variant
@@ -3125,6 +3148,46 @@ pub(crate) mod tests {
         assert_eq!(dictionary.analyze("Rosa").len(), 2);
         // A lowercase word is a name rarely
         assert_eq!(summary(&dictionary, "rosa")[0].2, "NOUN");
+    }
+
+    #[test]
+    fn words_of_the_extra_source_give_way() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        for (lemma, pos, form, feats, extra) in [
+            ("fuera", "ADV", "fuera", "", false),
+            ("juera", "INTJ", "juera", "", true),
+            ("nava", "NOUN", "nava", "Gender=Fem|Number=Sing", true),
+            ("nava", "NOUN", "navas", "Gender=Fem|Number=Plur", true),
+        ] {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+            if extra {
+                builder.mark_extra(lemma, pos, form, feats).unwrap();
+            }
+        }
+        for lemma in ["erisipela", "carapela", "sopela", "tomapela"] {
+            for (form, feats) in [
+                (lemma.to_owned(), "Gender=Fem|Number=Sing"),
+                (format!("{lemma}s"), "Gender=Fem|Number=Plur"),
+            ] {
+                builder.add_form(lemma, "NOUN", &form, feats).unwrap();
+                builder.mark_extra(lemma, "NOUN", &form, feats).unwrap();
+            }
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        assert_eq!(lemmas(&dictionary, "navas"), ["nava"]);
+        // A colloquial spelling of a word of the main source goes first: `juera` is `fuera`
+        assert_eq!(lemmas(&dictionary, "juera"), ["fuera"]);
+        // With a capital letter a word of only the extra source is mostly a name, a word of the
+        // main source is not
+        for token in ["Navas", "NAVAS"] {
+            let found = summary(&dictionary, token);
+            assert_eq!((found[0].1.as_str(), found[0].2.as_str()), (token, "PROPN"));
+            assert_eq!(found[1].1, "nava");
+        }
+        assert_eq!(summary(&dictionary, "Fuera")[0].2, "ADV");
+        // A form of the extra source guesses no unknown word
+        assert!((dictionary.analyze("trapela").iter()).all(|analysis| analysis.lemma != "trapela"));
     }
 
     #[test]

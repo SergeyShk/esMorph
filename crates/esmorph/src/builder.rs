@@ -6,9 +6,9 @@ use fst::MapBuilder;
 use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
-    self, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS, MAX_SPOKEN_FORM, OLD,
-    PROBABILITY_SCALE, SPOKEN, SPOKEN_FORM_SHIFT, Sections, VARIANT, WIDE_SPELLINGS, WordValue,
-    pack_spelling,
+    self, EXTRA, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS,
+    MAX_SPOKEN_FORM, OLD, PROBABILITY_SCALE, SPOKEN, SPOKEN_FORM_SHIFT, Sections, VARIANT,
+    WIDE_SPELLINGS, WordValue, pack_spelling,
 };
 
 /// Parts of speech whose forms guess unknown words: the closed classes are in the dictionary
@@ -87,7 +87,7 @@ impl<'a> Row<'a> {
         &'a str,
     ) {
         (
-            self.flags,
+            self.flags & !EXTRA,
             paradigm_key(self.feats),
             Reverse(self.rank.is_some()),
             self.rank.unwrap_or(0),
@@ -97,7 +97,7 @@ impl<'a> Row<'a> {
 
     /// Whether two rows are one cell of a table: the same features and kind
     fn same_cell(&self, other: &Row) -> bool {
-        self.flags == other.flags && self.feats == other.feats
+        self.flags & !EXTRA == other.flags & !EXTRA && self.feats == other.feats
     }
 }
 
@@ -257,6 +257,23 @@ impl Builder {
         let added = self.form(lemma, pos, form, feats)?;
         added.kind = VARIANT | OLD;
         added.standard = None;
+        Ok(())
+    }
+
+    /// Marks an added form as one of the extra source, the Spanish edition of Wiktionary, keeping its
+    /// kind: a word that the main source has not (`erisipela`) or a new form of its lexeme
+    /// (`difterias` of `difteria`). Such a form does not guess unknown words; a colloquial spelling
+    /// of a word of the main source goes before it, and a word with a capital letter that only it
+    /// has is mostly a name
+    pub fn mark_extra(
+        &mut self,
+        lemma: &str,
+        pos: &str,
+        form: &str,
+        feats: &str,
+    ) -> Result<(), Error> {
+        let feats = normalized(feats)?;
+        self.form(lemma, pos, form, feats)?.kind |= EXTRA;
         Ok(())
     }
 
@@ -449,7 +466,9 @@ impl Builder {
                         record: table << 16 | form as u32,
                         place: row.place,
                     });
-                    if row.flags & (VARIANT | SPOKEN) == 0 && GUESSED.contains(&pos.as_str()) {
+                    if row.flags & (VARIANT | SPOKEN | EXTRA) == 0
+                        && GUESSED.contains(&pos.as_str())
+                    {
                         let key = (pos.clone(), row.feats.to_owned());
                         let weight = self.tag_frequencies.get(&key).copied().unwrap_or(0);
                         samples.push((row.word, table << 16 | form as u32, u64::from(weight) + 1));

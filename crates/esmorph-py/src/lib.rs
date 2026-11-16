@@ -1306,15 +1306,15 @@ impl Analyzer {
     /// Description of the dictionary
     ///
     /// Description:
-    ///     The source of the dictionary and its snapshot with its SHA-256, the license, the
-    ///     release of Universal Dependencies and the treebanks of the counts of analyses with their
-    ///     licenses, as far as the dictionary describes them; for a dictionary with a context
-    ///     model, its release and treebanks in context; and always the number of word forms and
-    ///     the checksum of the file
+    ///     The source of the dictionary and its main snapshot with its SHA-256, the snapshots of
+    ///     all its sources with theirs, the license, the release of Universal Dependencies and the
+    ///     treebanks of the counts of analyses with their licenses, as far as the dictionary
+    ///     describes them; for a dictionary with a context model, its release and treebanks in
+    ///     context; and always the number of word forms and the checksum of the file
     ///
     /// Returns:
-    ///     dict: The keys source, snapshot, sha256, license, ud_release, treebanks, context,
-    ///     word_forms and checksum; every access returns a new dict
+    ///     dict: The keys source, snapshot, sha256, snapshots, license, ud_release, treebanks,
+    ///     context, word_forms and checksum; every access returns a new dict
     ///
     /// Example:
     ///     >>> from esmorph import Analyzer
@@ -1358,6 +1358,12 @@ impl Analyzer {
                 {
                     info.set_item(key, value)?;
                 }
+            }
+            if let Some(snapshots) = meta.get_item("snapshots")?
+                && let Ok(snapshots) = snapshots.cast::<PyDict>()
+                && (snapshots.iter()).all(|(name, digest)| text(&name) && text(&digest))
+            {
+                info.set_item("snapshots", snapshots)?;
             }
             if let Some(counts) = meta.get_item("counts")? {
                 sources(&info, &counts)?;

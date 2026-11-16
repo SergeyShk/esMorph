@@ -4,6 +4,11 @@ The dictionary of esMorph (es.dict) is built from:
   contributors, from the dump of 2026-10-01 as extracted by wiktextract (https://kaikki.org;
   snapshot: https://huggingface.co/datasets/SergeyShk/esmorph-wiktionary), licensed under the
   Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0);
+- the words and forms that only the Spanish Wiktionary (https://es.wiktionary.org) has, by the
+  Wiktionary contributors, from the dump of 2026-11-01 as extracted by wiktextract
+  (https://kaikki.org; snapshot: https://huggingface.co/datasets/SergeyShk/esmorph-wiktionary),
+  licensed under the Creative Commons Attribution-ShareAlike 4.0 International License
+  (CC BY-SA 4.0);
 - the table of closed classes (data/closed-classes.tsv), reviewed after UD Spanish AnCora, and the
   counts of analyses from its training part (https://github.com/UniversalDependencies/UD_Spanish-AnCora),
   release 2.18, licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0);

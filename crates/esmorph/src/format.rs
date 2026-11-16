@@ -30,8 +30,12 @@ pub(crate) const SPOKEN: u32 = 1 << 18;
 /// inflection gives only from such a form, while a variant of the standard language (`hablás`)
 /// gives another one or a main form
 pub(crate) const OLD: u32 = 1 << 19;
+/// The flag of a form of a table from the extra source, the Spanish edition of Wiktionary: a word
+/// of the main source does not have its spelling, a colloquial spelling of a word of the main
+/// source goes before it, and with a capital letter it is mostly a name
+pub(crate) const EXTRA: u32 = 1 << 20;
 /// The first bit of the place in its table of the form that a spoken spelling stands for
-pub(crate) const SPOKEN_FORM_SHIFT: u32 = 20;
+pub(crate) const SPOKEN_FORM_SHIFT: u32 = 21;
 /// The most places of a table that a spoken spelling refers to
 #[cfg(any(test, feature = "build"))]
 pub(crate) const MAX_SPOKEN_FORM: usize = (1 << (32 - SPOKEN_FORM_SHIFT)) - 1;
@@ -41,7 +45,7 @@ pub(crate) const UD_BITS: u32 = 0xFFFF;
 pub(crate) const MAX_ENDING: usize = 5;
 /// Largest dictionary file: offsets into records and variants are of 32 bits
 pub(crate) const MAX_FILE: u64 = 1 << 31;
-const VERSION: u32 = 7;
+const VERSION: u32 = 8;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
 const SECTIONS: usize = 14;
@@ -681,13 +685,13 @@ pub(crate) mod tests {
             assert!(layout(broken, true).is_err());
         }
         let mut other = data.clone();
-        other[8] = 6;
+        other[8] = 7;
         assert!(
             layout(&other, true)
                 .err()
                 .unwrap()
                 .to_string()
-                .contains("format version 6, supported 7: build the dictionary again")
+                .contains("format version 7, supported 8: build the dictionary again")
         );
         let mut foreign = data.clone();
         foreign[0] = b'X';
