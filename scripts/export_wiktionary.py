@@ -2,14 +2,17 @@
 Export of the Spanish entries of Wiktionary into the text table for the `esmorph-build` builder
 
 Description:
-    The snapshot of the entries (`wiktionary_snapshot.py`) lies in a dataset on Hugging Face and is
-    checked by SHA-256. Every entry and every form of its table become rows "lemma, part of speech,
-    form, features, kind, place" in the terms of Universal Dependencies; the builder joins the rows
-    of one lemma and part of speech into a lexeme. The kind is `variant` for a variant of another
-    form with the same features (an old or regional spelling, a form of `vos`), `old` for an old or
-    nonstandard form of a verb (`trujo` of `traer`), `spoken:` with the standard form of a spelling
-    as the word sounds (`mu` of `muy`) and `_` for a main form; the place is the number of the row in the table of its lexeme, `_` for a row that only
-    another entry gives. Only the standard library is needed.
+    The snapshots of the entries of the English and the Spanish edition (`wiktionary_snapshot.py`)
+    lie in a dataset on Hugging Face and are checked by SHA-256. Every entry and every form of its
+    table become rows "lemma, part of speech, form, features, kind, place" in the terms of
+    Universal Dependencies; the builder joins the rows of one lemma and part of speech into a
+    lexeme. The English edition is the main source, the Spanish one (`eswiktionary.py`) adds the
+    words and forms that it has not. The kind is `variant` for a variant of another form with the
+    same features (an old or regional spelling, a form of `vos`), `old` for an old or nonstandard
+    form of a verb (`trujo` of `traer`), `spoken:` with the standard form of a spelling as the word
+    sounds (`mu` of `muy`), `extra` and `extra-variant` for a main form and a variant of the
+    Spanish edition and `_` for a main form; the place is the number of the row in the table of its
+    lexeme, `_` for a row that only another entry gives. Only the standard library is needed.
 
 Example:
     uv run python scripts/export_wiktionary.py target/wiktionary
@@ -25,11 +28,12 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from itertools import product
 from pathlib import Path
 
 import conventions
+import eswiktionary
 
 SourceRow = tuple[str, str, str, dict[str, str], bool, int | None]
 
@@ -122,6 +126,10 @@ VARIANT_TAGS = {
     "vos-form",
     "with-voseo",
 }
+# Parts of speech of the words of their own that the Spanish edition adds
+EXTRA_LEXEMES = {"ADJ", "ADV", "INTJ", "NOUN"}
+# A Roman numeral, which the analyzer reads by a rule: `xix` is no noun
+ROMAN = re.compile(r"^(?=[ivxlcdm])m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$")
 # Tags of a spelling that shows how a word sounds: `güeno` of `bueno`, `er` of `el`
 SPOKEN_TAGS = {"eye-dialect", "pronunciation-spelling"}
 # Tags of a verb form of an older or a nonstandard language: `trujo` of `traer`, `vido` of `vio`
@@ -713,24 +721,13 @@ def old_form_rows(table: set[conventions.Row], old: list[OldForm]) -> set[conven
         if without_acute(form) in spelled:
             continue
         analyses = {
-            (lemma, feature_text(feats)) for name, feats in found if (lemma := clean(name))
+            (lemma, conventions.format_features(feats))
+            for name, feats in found
+            if (lemma := clean(name))
         }
         for lemma, text in analyses | verb_forms.get(target or "", set()):
             rows.add((lemma, "VERB", form, text))
     return rows
-
-
-def feature_text(feats: dict[str, str]) -> str:
-    """
-    Features in CoNLL-U notation
-
-    Arguments:
-        feats (dict[str, str]): The features
-
-    Returns:
-        str: The features sorted by name, `_` for none
-    """
-    return "|".join(f"{name}={feats[name]}" for name in sorted(feats, key=str.lower)) or "_"
 
 
 def snapshot_entries(path: Path) -> Iterator[dict]:
@@ -787,7 +784,7 @@ def normalized_lemma(lemma: str, pos: str, participles: dict[str, str]) -> str:
 
 
 def rows(
-    path: Path,
+    source: Callable[[], Iterable[dict]],
 ) -> tuple[
     set[conventions.Row],
     set[Variant],
@@ -809,7 +806,7 @@ def rows(
         gives, `friego` before `frego`
 
     Arguments:
-        path (Path): File of the snapshot
+        source (Callable[[], Iterable[dict]]): The entries of a snapshot, read twice
 
     Returns:
         tuple[set[conventions.Row], set[Variant], dict[conventions.Row, int],
@@ -818,7 +815,7 @@ def rows(
         and features; the places of the rows by their lemmas of the conventions; the spellings of
         words as they sound; the old and nonstandard forms of verbs of `old_form_rows`
     """
-    entries = {entry["word"] for entry in snapshot_entries(path)}
+    entries = {entry["word"] for entry in source()}
     lower_entries = {word for word in entries if word == word.lower()}
     table = set()
     kinds: dict[conventions.Row, set[tuple[bool, bool]]] = {}
@@ -832,7 +829,7 @@ def rows(
     # have no other sense
     spoken: dict[tuple[str, str], tuple[set[str], bool]] = {}
     old: list[OldForm] = []
-    for entry in snapshot_entries(path):
+    for entry in source():
         headword = (entry["word"], entry["pos"])
         etymology = etymologies.get(headword, 0)
         etymologies[headword] = etymology + 1
@@ -847,7 +844,7 @@ def rows(
                 place += etymology * TABLE_ROWS
             lemma, form = clean(lemma), clean(form)
             if lemma and form:
-                text = feature_text(feats)
+                text = conventions.format_features(feats)
                 row = (lemma, pos, form, text)
                 table.add(row)
                 kinds.setdefault(row, set()).add((variant, place is not None))
@@ -948,9 +945,73 @@ def rank(row: conventions.Row, ranks: dict[conventions.Row, int]) -> str:
     return "_" if place is None else str(place)
 
 
+def without_marks(word: str) -> str:
+    """
+    A word without its acute accents and diaeresis, as the dictionary finds it under other ones
+
+    Arguments:
+        word (str): The word
+
+    Returns:
+        str: The word
+    """
+    plain = unicodedata.normalize("NFD", word).replace("\u0301", "").replace("\u0308", "")
+    return unicodedata.normalize("NFC", plain)
+
+
+def extra_rows(
+    path: Path, main: dict[conventions.Row, str], closed: set[conventions.Row]
+) -> dict[conventions.Row, str]:
+    """
+    Rows of the Spanish edition: the words and the forms that the English one has not
+
+    Description:
+        The Spanish edition adds nouns, adjectives, adverbs and interjections of its own and new
+        forms of the lexemes of the English one (`difterias` of `difteria`), but no names and no
+        verbs of its own: a word of only this edition is often the spelling of a name in lower
+        case (`navas` of `Navas`). A row is taken only for a spelling that no row of the English
+        edition has, even under other accents: the Spanish edition gives words of their own to
+        what the English one has as other words (`y` as an adverb, `años` as a lemma). A lexeme
+        that the English edition has only as a spelling of another word gets no new forms: the
+        forms of `cognocer` are written as those of `conocer`. A Roman numeral is left to the rule
+        of the analyzer
+
+    Arguments:
+        path (Path): File of the snapshot of the Spanish edition
+        main (dict[conventions.Row, str]): Rows of the English edition in the conventions and
+            their kinds
+        closed (set[conventions.Row]): Rows of the table of closed classes
+
+    Returns:
+        dict[conventions.Row, str]: The rows in the conventions and their kinds: `extra` or
+        `extra-variant`
+    """
+    table, variants, *_ = rows(lambda: eswiktionary.entries(path))
+    table, _ = conventions.apply(table, closed)
+    # An entry of a form may not name the gender that the table of its word names
+    gendered = set()
+    for lemma, pos, form, text in table:
+        feats = conventions.parse_features(text)
+        if pos in ("ADJ", "NOUN") and feats.pop("Gender", None):
+            gendered.add((lemma, pos, form, conventions.format_features(feats)))
+    table -= gendered
+    spelled = {without_marks(form) for _, _, form, _ in main}
+    lexemes = {(lemma, pos) for (lemma, pos, _, _), kind in main.items() if kind == "_"}
+    known = {(lemma, pos) for lemma, pos, _, _ in main}
+    found = {}
+    for row in table:
+        lemma, pos, form, _ = row
+        if without_marks(form) in spelled or ROMAN.match(form):
+            continue
+        if (lemma, pos) in lexemes or ((lemma, pos) not in known and pos in EXTRA_LEXEMES):
+            variant = kind(row, variants, closed, {}, set()) == "variant"
+            found[row] = "extra-variant" if variant else "extra"
+    return found
+
+
 def export(output: Path) -> int:
     """
-    Writing the table and the description of its source
+    Writing the table and the description of its sources
 
     Arguments:
         output (Path): Directory of the export
@@ -959,20 +1020,31 @@ def export(output: Path) -> int:
         int: Number of rows
     """
     name, url, digest = SNAPSHOT
-    table, variants, ranks, pairs, old = rows(download(url, output / "raw" / name, digest))
+    path = download(url, output / "raw" / name, digest)
+    table, variants, ranks, pairs, old = rows(lambda: snapshot_entries(path))
     closed = conventions.closed_classes()
     table, spellings = conventions.apply(table, closed)
     # A spelling of a word of the table that the table has not is a variant: `güeno` of `bueno`
     variants |= {(None, pos, form, None) for pos, form in spellings}
     table, spoken = conventions.spoken(table, pairs, conventions.spellings())
+    kinds = {row: kind(row, variants, closed, spoken, old) for row in table | spoken.keys()}
+    extra_name, extra_url, extra_digest = eswiktionary.SNAPSHOT
+    kinds |= extra_rows(
+        download(extra_url, output / "raw" / extra_name, extra_digest), kinds, closed
+    )
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
-            "\t".join((*row, kind(row, variants, closed, spoken, old), rank(row, ranks))) + "\n"
-            for row in sorted(table | spoken.keys())
+            "\t".join((*row, kinds[row], rank(row, ranks))) + "\n" for row in sorted(kinds)
         )
-    meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}
+    meta = {
+        "source": "Wiktionary",
+        "snapshot": name,
+        "sha256": digest,
+        "snapshots": {name: digest, extra_name: extra_digest},
+        "license": LICENSE,
+    }
     (output / "meta.json").write_text(json.dumps(meta, sort_keys=True), encoding="utf-8")
-    return len(table | spoken.keys())
+    return len(kinds)
 
 
 if __name__ == "__main__":

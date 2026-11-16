@@ -846,6 +846,39 @@ def test_old_forms_of_verbs(morph, token, lemma, feats):
     assert feats.items() <= analysis.feats.items()
 
 
+@pytest.mark.parametrize(
+    ("token", "lemma", "pos"),
+    [
+        # A word and a form that only the Spanish edition of Wiktionary has
+        ("erisipela", "erisipela", "NOUN"),
+        ("difterias", "difteria", "NOUN"),
+        # A word of the dictionary is no verb with clitics: not figura + les
+        ("figurales", "figural", "ADJ"),
+    ],
+)
+def test_words_of_the_extra_source(morph, token, lemma, pos):
+    analysis = morph.analyze(token)[0]
+    assert (analysis.lemma, analysis.pos, analysis.source) == (lemma, pos, "dictionary")
+    assert morph.is_known(token)
+
+
+@pytest.mark.parametrize(
+    ("token", "lemma", "pos", "source"),
+    [
+        # A colloquial spelling of a word of the main source goes first
+        ("juera", "fuera", "ADV", "dictionary"),
+        # With a capital letter a word of only the extra source is mostly a name
+        ("Navas", "Navas", "PROPN", "rule"),
+        ("NAVAS", "NAVAS", "PROPN", "rule"),
+        # A Roman numeral stays a numeral
+        ("XIX", "XIX", "NUM", "rule"),
+    ],
+)
+def test_extra_source_gives_way(morph, token, lemma, pos, source):
+    analysis = morph.analyze(token)[0]
+    assert (analysis.lemma, analysis.pos, analysis.source) == (lemma, pos, source)
+
+
 def test_old_forms_of_verbs_are_variants(morph):
     # An old form follows the standard paradigm and gives old forms; a main form and a form of vos
     # never give them
@@ -1060,6 +1093,7 @@ def test_dictionary_description(morph):
         "source",
         "snapshot",
         "sha256",
+        "snapshots",
         "license",
         "ud_release",
         "treebanks",
@@ -1076,6 +1110,8 @@ def test_dictionary_description(morph):
     assert info["context"] == {"ud_release": "r2.18", "treebanks": info["treebanks"]}
     assert info["license"] == "CC BY-SA 4.0"
     assert info["snapshot"].endswith(".jsonl.xz") and len(info["sha256"]) == 64
+    # The English edition and the Spanish one
+    assert len(info["snapshots"]) == 2 and info["snapshots"][info["snapshot"]] == info["sha256"]
     assert info["word_forms"] > 600_000 and 0 <= info["checksum"] < 2**32
     # A new dictionary every time
     info["source"] = "x"
@@ -1094,7 +1130,7 @@ def test_dictionary_description_of_another_builder(morph, tmp_path):
         path.write_bytes(data[:12] + zlib.crc32(body).to_bytes(4, "little") + body)
         return Analyzer(path)
 
-    meta = b'{"source": 1, "license": ["a"], "sha256": "x", "counts": {"release": 2, "treebanks": {"a": 1}}, "context": []}'
+    meta = b'{"source": 1, "license": ["a"], "sha256": "x", "snapshots": {"a": 1}, "counts": {"release": 2, "treebanks": {"a": 1}}, "context": []}'
     info = described(meta).dictionary_info
     assert set(info) == {"sha256", "context", "word_forms", "checksum"}
     assert info["context"] == {}
@@ -1563,7 +1599,7 @@ def test_roman_numerals(morph):
 
 
 def test_names(morph):
-    for token in ["Josep", "CiU", "W.", "TV-3", "Macapagal-Arroyo"]:
+    for token in ["Josep", "EUiA", "W.", "TV-3", "Macapagal-Arroyo"]:
         assert summary(morph, token) == [(token, token, "PROPN", {}, "rule")], token
     assert morph.lemmatize(["Clinton", "clinton"]) == ["Clinton", "clinton"]
     # The rules give analyses, not words of the dictionary
@@ -1794,7 +1830,7 @@ def test_guessed_words(morph):
         ("antimundialización", "antimundialización", "NOUN"),
         ("palestino-israelíes", "palestino-israelí", "NOUN"),
         ("ciencia-ficción", "ciencia-ficción", "NOUN"),
-        ("decretorios", "decretorio", "NOUN"),
+        ("eurofuncionarios", "eurofuncionario", "NOUN"),
     ],
 )
 def test_guessed_by_parts_and_endings(morph, word, lemma, pos):
