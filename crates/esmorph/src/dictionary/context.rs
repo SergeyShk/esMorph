@@ -46,6 +46,7 @@ impl Matrix {
     }
 
     /// `out = self · input`
+    #[inline(always)]
     fn apply(&self, input: &[f32], out: &mut [f32]) {
         for (value, row) in out.iter_mut().zip(self.data.chunks_exact(self.cols)) {
             *value = dot(row, input);
@@ -55,6 +56,9 @@ impl Matrix {
 
 /// Rows of a tile of `Tiled`
 const TILE: usize = 16;
+/// Whether the products of the model fuse their additions without a check of the processor:
+/// arm64 always has a fused multiply-add, a build for x86-64 may have it
+const FUSED: bool = cfg!(any(target_arch = "aarch64", target_feature = "fma"));
 /// Vectors that a tile multiplies at once: `Tiled::apply_all` keeps this many sums
 const BATCH: usize = 4;
 const _: () = assert!(BATCH == 4);
@@ -87,11 +91,12 @@ impl Tiled {
     }
 
     /// `out += self · input` for one vector
-    fn apply_add(&self, input: &[f32], out: &mut [f32]) {
+    #[inline(always)]
+    fn apply_add<const FMA: bool>(&self, input: &[f32], out: &mut [f32]) {
         for (tile, columns) in self.columns.chunks_exact(self.cols).enumerate() {
             let mut sums = [0.0f32; TILE];
             for (column, &value) in columns.iter().zip(input) {
-                axpy(&mut sums, column, value);
+                axpy::<FMA>(&mut sums, column, value);
             }
             let start = tile * TILE;
             let end = (start + TILE).min(self.rows);
@@ -102,7 +107,8 @@ impl Tiled {
     }
 
     /// `out[t] = self · inputs[t] + bias` for all vectors of `inputs` in a row
-    fn apply_all(&self, inputs: &[f32], bias: &[f32], out: &mut [f32]) {
+    #[inline(always)]
+    fn apply_all<const FMA: bool>(&self, inputs: &[f32], bias: &[f32], out: &mut [f32]) {
         let count = inputs.len() / self.cols;
         let mut padded = vec![[0.0f32; BATCH]; self.cols];
         for first in (0..count).step_by(BATCH) {
@@ -122,10 +128,10 @@ impl Tiled {
                 let (mut s0, mut s1, mut s2, mut s3) =
                     ([0.0f32; TILE], [0.0; TILE], [0.0; TILE], [0.0; TILE]);
                 for (column, values) in columns.iter().zip(&padded) {
-                    axpy(&mut s0, column, values[0]);
-                    axpy(&mut s1, column, values[1]);
-                    axpy(&mut s2, column, values[2]);
-                    axpy(&mut s3, column, values[3]);
+                    axpy::<FMA>(&mut s0, column, values[0]);
+                    axpy::<FMA>(&mut s1, column, values[1]);
+                    axpy::<FMA>(&mut s2, column, values[2]);
+                    axpy::<FMA>(&mut s3, column, values[3]);
                 }
                 let sums = [s0, s1, s2, s3];
                 for (b, sums) in sums.iter().enumerate().take(batch) {
@@ -141,23 +147,21 @@ impl Tiled {
     }
 }
 
-/// `sums += value · column`, by a fused multiply-add where the processor has it: a quarter less
-/// time, and the last bits differ from a processor without it
+/// `sums += value · column`, by a fused multiply-add if `FMA`: a quarter less time, and the last
+/// bits differ from a processor without it
 #[inline(always)]
-fn axpy(sums: &mut [f32; TILE], column: &[f32; TILE], value: f32) {
+fn axpy<const FMA: bool>(sums: &mut [f32; TILE], column: &[f32; TILE], value: f32) {
     for (sum, &weight) in sums.iter_mut().zip(column) {
-        #[cfg(any(target_arch = "aarch64", target_feature = "fma"))]
-        {
-            *sum = value.mul_add(weight, *sum);
-        }
-        #[cfg(not(any(target_arch = "aarch64", target_feature = "fma")))]
-        {
-            *sum += value * weight;
-        }
+        *sum = if FMA {
+            value.mul_add(weight, *sum)
+        } else {
+            *sum + value * weight
+        };
     }
 }
 
 /// Dot product by blocks of 8: so the loop is vectorized
+#[inline(always)]
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     let mut sums = [0.0f32; 8];
     let (left, right) = (a.as_chunks::<8>(), b.as_chunks::<8>());
@@ -170,6 +174,7 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
     sums.iter().sum::<f32>() + tail
 }
 
+#[inline(always)]
 fn add(out: &mut [f32], values: &[f32]) {
     for (out, value) in out.iter_mut().zip(values) {
         *out += value;
@@ -607,6 +612,37 @@ impl Context {
         analyses: Vec<Vec<Analysis>>,
         first: bool,
     ) -> Vec<Vec<Analysis>> {
+        // A build for x86-64 knows no fused multiply-add and no AVX2: a processor that has them
+        // takes the copy of the model built for them, whose scores are those of arm64 to the last
+        // bit
+        #[cfg(target_arch = "x86_64")]
+        if !FUSED && is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            // SAFETY: the processor has the features of the function
+            return unsafe { self.rank_fused(words, analyses, first) };
+        }
+        self.rank_with::<FUSED>(words, analyses, first)
+    }
+
+    /// `rank` with the instructions of AVX2 and the fused multiply-add
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2,fma")]
+    fn rank_fused(
+        &self,
+        words: &[&str],
+        analyses: Vec<Vec<Analysis>>,
+        first: bool,
+    ) -> Vec<Vec<Analysis>> {
+        self.rank_with::<true>(words, analyses, first)
+    }
+
+    /// `rank` with the fused multiply-add if `FMA`; inlined into each copy with its instructions
+    #[inline(always)]
+    fn rank_with<const FMA: bool>(
+        &self,
+        words: &[&str],
+        analyses: Vec<Vec<Analysis>>,
+        first: bool,
+    ) -> Vec<Vec<Analysis>> {
         let model = &self.model;
         let n = words.len();
         if n == 0 {
@@ -644,12 +680,14 @@ impl Context {
         }
 
         let mut hidden = vec![0.0f32; n * d];
-        model.input.apply_all(&x, &model.input_bias, &mut hidden);
+        model
+            .input
+            .apply_all::<FMA>(&x, &model.input_bias, &mut hidden);
         for value in &mut hidden {
             *value = value.max(0.0);
         }
         for layer in &model.lstm {
-            hidden = bilstm(layer, &hidden, n, d);
+            hidden = bilstm::<FMA>(layer, &hidden, n, d);
         }
 
         let mut query = vec![0.0f32; dc];
@@ -657,8 +695,15 @@ impl Context {
         let mut result = Vec::with_capacity(n);
         for (t, mut list) in analyses.into_iter().enumerate() {
             let h = &hidden[t * d..(t + 1) * d];
-            let mean = h.iter().sum::<f32>() / d as f32;
-            let variance = h.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / d as f32;
+            let (mut sum, mut squares) = (0.0f32, 0.0f32);
+            for value in h {
+                sum += value;
+            }
+            let mean = sum / d as f32;
+            for value in h {
+                squares += (value - mean) * (value - mean);
+            }
+            let variance = squares / d as f32;
             let scale = 1.0 / (variance + 1e-5).sqrt();
             for (i, value) in normed.iter_mut().enumerate() {
                 *value = (h[i] - mean) * scale * model.norm_weight[i] + model.norm_bias[i];
@@ -679,6 +724,7 @@ impl Context {
     }
 
     /// Score of an analysis for the query vector of its token
+    #[inline(always)]
     fn score(&self, query: &[f32], analysis: &Analysis) -> f32 {
         let source = (SOURCES.iter())
             .position(|&source| source == analysis.source)
@@ -710,15 +756,16 @@ fn softmax(analyses: &mut [Analysis]) {
 /// A layer of a BiLSTM: the output of a token is the states of the forward and the backward
 /// direction in a row. Both directions go in one loop: their chains are independent, and the
 /// processor runs them at once
-fn bilstm(layer: &[Lstm; 2], input: &[f32], n: usize, d: usize) -> Vec<f32> {
+#[inline(always)]
+fn bilstm<const FMA: bool>(layer: &[Lstm; 2], input: &[f32], n: usize, d: usize) -> Vec<f32> {
     let hidden = d / 2;
     let mut output = vec![0.0f32; n * d];
-    // The input part of all gates for all tokens at once
-    let gates_input = layer.each_ref().map(|cell| {
-        let mut gates = vec![0.0f32; n * 4 * hidden];
-        cell.input.apply_all(input, &cell.bias, &mut gates);
-        gates
-    });
+    // The input part of all gates for all tokens at once. The products go in loops, not in
+    // closures: a closure that is not inlined has none of the instructions of the copy of `rank`
+    let mut gates_input = [(); 2].map(|()| vec![0.0f32; n * 4 * hidden]);
+    for (cell, gates) in layer.iter().zip(&mut gates_input) {
+        cell.input.apply_all::<FMA>(input, &cell.bias, gates);
+    }
     let mut states = [(); 2].map(|()| (vec![0.0f32; hidden], vec![0.0f32; hidden]));
     let mut gates = [(); 2].map(|()| vec![0.0f32; 4 * hidden]);
     for step in 0..n {
@@ -727,19 +774,19 @@ fn bilstm(layer: &[Lstm; 2], input: &[f32], n: usize, d: usize) -> Vec<f32> {
             let (h, c) = &mut states[direction];
             let gates = &mut gates[direction];
             gates.copy_from_slice(&gates_input[direction][t * 4 * hidden..(t + 1) * 4 * hidden]);
-            layer[direction].hidden.apply_add(h, gates);
+            layer[direction].hidden.apply_add::<FMA>(h, gates);
             // Gates i, f, g, o; every loop goes over an array without branches
             let (sigmoids, rest) = gates.split_at_mut(2 * hidden);
             let (candidates, outputs) = rest.split_at_mut(hidden);
-            sigmoids
-                .iter_mut()
-                .for_each(|value| *value = sigmoid(*value));
-            candidates
-                .iter_mut()
-                .for_each(|value| *value = tanh(*value));
-            outputs
-                .iter_mut()
-                .for_each(|value| *value = sigmoid(*value));
+            for value in sigmoids.iter_mut() {
+                *value = sigmoid(*value);
+            }
+            for value in candidates.iter_mut() {
+                *value = tanh(*value);
+            }
+            for value in outputs.iter_mut() {
+                *value = sigmoid(*value);
+            }
             let (inputs, forgets) = sigmoids.split_at(hidden);
             for i in 0..hidden {
                 c[i] = forgets[i] * c[i] + inputs[i] * candidates[i];
@@ -1160,7 +1207,7 @@ pub(crate) mod tests {
             hidden: zeros(1),
             bias: bias.clone(),
         };
-        let output = bilstm(&[cell(), cell()], &[0.0; 6], 3, 2);
+        let output = bilstm::<FUSED>(&[cell(), cell()], &[0.0; 6], 3, 2);
         let (i, f, g, o) = (sigmoid(0.5), sigmoid(-0.3), 0.8f32.tanh(), sigmoid(0.2));
         let mut states = Vec::new();
         let mut c = 0.0;
@@ -1176,7 +1223,13 @@ pub(crate) mod tests {
 
     #[test]
     fn tiled_products() {
-        // 18 rows: two tiles, the second one partly empty; 5 vectors: two batches
+        tiled_products_with::<false>();
+        tiled_products_with::<true>();
+    }
+
+    fn tiled_products_with<const FMA: bool>() {
+        // 18 rows: two tiles, the second one partly empty; 5 vectors: two batches. The values are
+        // exact, so a fused product gives them too
         let (rows, cols) = (18, 3);
         let data: Vec<f32> = (0..rows * cols).map(|i| (i % 7) as f32 - 3.0).collect();
         let matrix = Matrix { rows, cols, data };
@@ -1184,14 +1237,14 @@ pub(crate) mod tests {
         let inputs: Vec<f32> = (0..5 * cols).map(|i| i as f32 * 0.5).collect();
         let bias: Vec<f32> = (0..rows).map(|i| i as f32).collect();
         let mut out = vec![0.0; 5 * rows];
-        tiled.apply_all(&inputs, &bias, &mut out);
+        tiled.apply_all::<FMA>(&inputs, &bias, &mut out);
         for t in 0..5 {
             let mut expected = vec![0.0; rows];
             matrix.apply(&inputs[t * cols..(t + 1) * cols], &mut expected);
             add(&mut expected, &bias);
             assert_eq!(out[t * rows..(t + 1) * rows], expected[..]);
             let mut added = bias.clone();
-            tiled.apply_add(&inputs[t * cols..(t + 1) * cols], &mut added);
+            tiled.apply_add::<FMA>(&inputs[t * cols..(t + 1) * cols], &mut added);
             assert_eq!(added, expected);
         }
     }
