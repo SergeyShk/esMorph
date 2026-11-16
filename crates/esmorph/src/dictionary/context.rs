@@ -613,7 +613,8 @@ impl Context {
         first: bool,
     ) -> Vec<Vec<Analysis>> {
         // A build for x86-64 knows no fused multiply-add and no AVX2: a processor that has them
-        // takes the copy of the model built for them, the same as on arm64 to the last bit
+        // takes the copy of the model built for them, whose scores are those of arm64 to the last
+        // bit
         #[cfg(target_arch = "x86_64")]
         if !FUSED && is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
             // SAFETY: the processor has the features of the function
@@ -694,8 +695,15 @@ impl Context {
         let mut result = Vec::with_capacity(n);
         for (t, mut list) in analyses.into_iter().enumerate() {
             let h = &hidden[t * d..(t + 1) * d];
-            let mean = h.iter().sum::<f32>() / d as f32;
-            let variance = h.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / d as f32;
+            let (mut sum, mut squares) = (0.0f32, 0.0f32);
+            for value in h {
+                sum += value;
+            }
+            let mean = sum / d as f32;
+            for value in h {
+                squares += (value - mean) * (value - mean);
+            }
+            let variance = squares / d as f32;
             let scale = 1.0 / (variance + 1e-5).sqrt();
             for (i, value) in normed.iter_mut().enumerate() {
                 *value = (h[i] - mean) * scale * model.norm_weight[i] + model.norm_bias[i];
@@ -752,12 +760,12 @@ fn softmax(analyses: &mut [Analysis]) {
 fn bilstm<const FMA: bool>(layer: &[Lstm; 2], input: &[f32], n: usize, d: usize) -> Vec<f32> {
     let hidden = d / 2;
     let mut output = vec![0.0f32; n * d];
-    // The input part of all gates for all tokens at once
-    let gates_input = layer.each_ref().map(|cell| {
-        let mut gates = vec![0.0f32; n * 4 * hidden];
-        cell.input.apply_all::<FMA>(input, &cell.bias, &mut gates);
-        gates
-    });
+    // The input part of all gates for all tokens at once. The products go in loops, not in
+    // closures: a closure that is not inlined has none of the instructions of the copy of `rank`
+    let mut gates_input = [(); 2].map(|()| vec![0.0f32; n * 4 * hidden]);
+    for (cell, gates) in layer.iter().zip(&mut gates_input) {
+        cell.input.apply_all::<FMA>(input, &cell.bias, gates);
+    }
     let mut states = [(); 2].map(|()| (vec![0.0f32; hidden], vec![0.0f32; hidden]));
     let mut gates = [(); 2].map(|()| vec![0.0f32; 4 * hidden]);
     for step in 0..n {
@@ -770,15 +778,15 @@ fn bilstm<const FMA: bool>(layer: &[Lstm; 2], input: &[f32], n: usize, d: usize)
             // Gates i, f, g, o; every loop goes over an array without branches
             let (sigmoids, rest) = gates.split_at_mut(2 * hidden);
             let (candidates, outputs) = rest.split_at_mut(hidden);
-            sigmoids
-                .iter_mut()
-                .for_each(|value| *value = sigmoid(*value));
-            candidates
-                .iter_mut()
-                .for_each(|value| *value = tanh(*value));
-            outputs
-                .iter_mut()
-                .for_each(|value| *value = sigmoid(*value));
+            for value in sigmoids.iter_mut() {
+                *value = sigmoid(*value);
+            }
+            for value in candidates.iter_mut() {
+                *value = tanh(*value);
+            }
+            for value in outputs.iter_mut() {
+                *value = sigmoid(*value);
+            }
             let (inputs, forgets) = sigmoids.split_at(hidden);
             for i in 0..hidden {
                 c[i] = forgets[i] * c[i] + inputs[i] * candidates[i];
