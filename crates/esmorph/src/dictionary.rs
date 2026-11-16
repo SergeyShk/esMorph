@@ -2680,6 +2680,10 @@ pub(crate) mod tests {
                 .add_form("a", "X", "a", "PrepCase=Npr|PunctType=Comm")
                 .is_ok()
         );
+        // A layered feature of a known one
+        let mut layered = |feats| builder.add_form("b", "X", "b", feats).is_ok();
+        assert!(layered("Number[psor]=Plur"));
+        assert!(!layered("Numbr[psor]=Plur") && !layered("Number[]=Plur"));
     }
 
     #[test]

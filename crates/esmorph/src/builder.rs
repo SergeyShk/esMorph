@@ -18,8 +18,8 @@ const MIN_TABLE_LEXEMES: usize = 3;
 /// An ending that fewer word forms of the dictionary have is a mark of a word, not a sample
 const MIN_ENDING_COUNT: u32 = 3;
 /// Names of the features of Universal Dependencies: the universal ones and those of the Spanish
-/// treebanks
-const UD_FEATURES: [&str; 31] = [
+/// treebanks; a layered feature has one of them before its layer (`Number[psor]`)
+const UD_FEATURES: [&str; 32] = [
     "Abbr",
     "Animacy",
     "Aspect",
@@ -33,6 +33,7 @@ const UD_FEATURES: [&str; 31] = [
     "ExtPos",
     "Foreign",
     "Gender",
+    "Hyph",
     "Mood",
     "NounClass",
     "NumForm",
@@ -201,7 +202,8 @@ impl Builder {
     }
 
     /// Adds a form of a lexeme: words are in lower case, `feats` in CoNLL-U notation in any order
-    /// (`Gender=Fem|Number=Sing`, an empty string for none); the same form is added once
+    /// (`Gender=Fem|Number=Sing`, an empty string for none) with the names of the features of
+    /// Universal Dependencies; the same form is added once
     pub fn add_form(
         &mut self,
         lemma: &str,
@@ -766,7 +768,11 @@ fn normalized(feats: &str) -> Result<String, Error> {
     for feat in feats.split('|').filter(|_| !feats.is_empty()) {
         match feat.split_once('=') {
             Some((name, value)) if !name.is_empty() && !value.is_empty() => {
-                if !UD_FEATURES.contains(&name) {
+                let base = (name.strip_suffix(']'))
+                    .and_then(|name| name.split_once('['))
+                    .filter(|(_, layer)| !layer.is_empty())
+                    .map_or(name, |(base, _)| base);
+                if !UD_FEATURES.contains(&base) {
                     return Err(Error::Build(format!(
                         "{name:?} of {feats:?} is no feature of Universal Dependencies"
                     )));
