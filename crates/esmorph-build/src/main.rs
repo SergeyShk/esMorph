@@ -9,7 +9,7 @@
 
 mod frequencies;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
@@ -235,7 +235,8 @@ fn build(
     builder.meta(meta);
     let lexemes = export.join("lexemes.tsv");
     let table = read(&lexemes)?;
-    let mut forms: BTreeMap<&str, Vec<Row>> = BTreeMap::new();
+    // The rows of every form for its counts, a pair a row: a map of vectors takes much more
+    let mut forms: Vec<(&str, Row)> = Vec::new();
     // Lexemes with a main form: the others only spell other words
     let mut main: HashSet<(&str, &str)> = HashSet::new();
     for (number, line) in table.lines().enumerate() {
@@ -304,17 +305,20 @@ fn build(
                 .set_rank(lemma, pos, form, plain(feats), rank)
                 .map_err(at)?;
         }
-        forms.entry(form).or_default().push(Row {
+        let row = Row {
             lemma,
             pos,
             feats,
             spelling: false,
-        });
+        };
+        forms.push((form, row));
     }
     if forms.is_empty() {
         return Err(Error::Build(format!("{}: no rows", lexemes.display())));
     }
-    for row in forms.values_mut().flatten() {
+    // The rows of a form go together in the order of the table
+    forms.sort_by_key(|&(form, _)| form);
+    for (_, row) in &mut forms {
         row.spelling = !main.contains(&(row.lemma, row.pos));
     }
     let analyses = counts.join("analyses.tsv");
@@ -325,9 +329,11 @@ fn build(
             .add_tag_frequency(pos, plain(feats), count)
             .map_err(|err| within(&analyses, err))?;
     }
-    for (form, rows) in &forms {
+    for group in forms.chunk_by(|a, b| a.0 == b.0) {
+        let form = group[0].0;
+        let rows: Vec<Row> = group.iter().map(|&(_, row)| row).collect();
         builder.set_frequency(form, counts.frequency(form));
-        for &row in rows {
+        for &row in &rows {
             let count = counts.count(form, row);
             if count > 0 {
                 builder.set_count(row.lemma, row.pos, form, plain(row.feats), count)?;
@@ -336,7 +342,7 @@ fn build(
         if rows.len() < 2 {
             continue;
         }
-        let ranked = counts.rank(form, rows);
+        let ranked = counts.rank(form, &rows);
         for (place, row) in ranked.rows.iter().enumerate() {
             let probability = ranked.probabilities.as_ref().map(|values| values[place]);
             builder.place(
@@ -349,6 +355,9 @@ fn build(
             )?;
         }
     }
+    // The builder keeps its own copies: the table and the counts go before it builds
+    drop((forms, main, counts));
+    drop(table);
     let bytes = builder.build()?;
     if context.is_some() {
         let gaps = esmorph::Dictionary::from_bytes(&bytes)?.context_gaps()?;
@@ -535,11 +544,11 @@ mod tests {
             2
         );
         let other = dir.join("other.dict");
-        fs::write(&lexemes, "casa\tNOUN\tcasa\tFoo=Bar\t_\t_\n").unwrap();
+        fs::write(&lexemes, "casa\tNOUN\tcasa\tTypo=Yes\t_\t_\n").unwrap();
         let message = build(&export, &counts, &other, Some(&weights))
             .unwrap_err()
             .to_string();
-        assert!(message.contains("without the tags F=Foo=Bar"), "{message}");
+        assert!(message.contains("without the tags F=Typo=Yes"), "{message}");
         assert!(!other.exists());
         let truncated = dir.join("truncated.bin");
         fs::write(&truncated, &fs::read(&weights).unwrap()[..1000]).unwrap();
