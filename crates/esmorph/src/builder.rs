@@ -17,6 +17,42 @@ const GUESSED: [&str; 4] = ["NOUN", "ADJ", "VERB", "ADV"];
 const MIN_TABLE_LEXEMES: usize = 3;
 /// An ending that fewer word forms of the dictionary have is a mark of a word, not a sample
 const MIN_ENDING_COUNT: u32 = 3;
+/// Names of the features of Universal Dependencies: the universal ones and those of the Spanish
+/// treebanks
+const UD_FEATURES: [&str; 31] = [
+    "Abbr",
+    "Animacy",
+    "Aspect",
+    "Case",
+    "Clusivity",
+    "Definite",
+    "Degree",
+    "Deixis",
+    "DeixisRef",
+    "Evident",
+    "ExtPos",
+    "Foreign",
+    "Gender",
+    "Mood",
+    "NounClass",
+    "NumForm",
+    "NumType",
+    "Number",
+    "Person",
+    "Polarity",
+    "Polite",
+    "Poss",
+    "PrepCase",
+    "PronType",
+    "PunctSide",
+    "PunctType",
+    "Reflex",
+    "Tense",
+    "Typo",
+    "VerbForm",
+    "Voice",
+];
+
 /// How many of the most frequent forms of tables an ending keeps for guessing
 const MAX_GUESSES: usize = 10;
 
@@ -345,7 +381,12 @@ impl Builder {
     /// accents by this number and the number of their analyses: without it every analysis of the
     /// key has an equal share
     pub fn set_frequency(&mut self, form: &str, frequency: u32) {
-        self.frequencies.insert(form.to_owned(), frequency);
+        // Most word forms are not in texts: a missing frequency is zero
+        if frequency == 0 {
+            self.frequencies.remove(form);
+        } else {
+            self.frequencies.insert(form.to_owned(), frequency);
+        }
     }
 
     /// Adds to how often texts have a part of speech with features, up to `u32::MAX`: a form of a
@@ -725,6 +766,11 @@ fn normalized(feats: &str) -> Result<String, Error> {
     for feat in feats.split('|').filter(|_| !feats.is_empty()) {
         match feat.split_once('=') {
             Some((name, value)) if !name.is_empty() && !value.is_empty() => {
+                if !UD_FEATURES.contains(&name) {
+                    return Err(Error::Build(format!(
+                        "{name:?} of {feats:?} is no feature of Universal Dependencies"
+                    )));
+                }
                 pairs.push((name, value));
             }
             _ => return Err(invalid()),

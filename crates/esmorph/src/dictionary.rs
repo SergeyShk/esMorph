@@ -2666,6 +2666,23 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn features_are_those_of_universal_dependencies() {
+        let mut builder = Builder::new();
+        let error = builder.add_form("a", "X", "a", "Gendr=Fem").unwrap_err();
+        assert!(error.to_string().contains("\"Gendr\""), "{error}");
+        assert!(
+            builder
+                .add_tag_frequency("X", "Number=Sing|Numbr=Plur", 1)
+                .is_err()
+        );
+        assert!(
+            builder
+                .add_form("a", "X", "a", "PrepCase=Npr|PunctType=Comm")
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn unknown_flags_of_a_table_are_an_error() {
         let clean = bytes();
         let tables = format::layout(&clean, true).unwrap().tables;
