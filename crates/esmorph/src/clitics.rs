@@ -43,10 +43,12 @@ pub(crate) fn homonym(token: &str) -> bool {
     HOMONYMS.iter().any(|word| token.eq_ignore_ascii_case(word))
 }
 
-/// Whether a token ends with a clitic after a host: no other token splits as a verb with clitics
+/// Whether a token in any case ends with a clitic after a host: no other token splits as a verb
+/// with clitics
 pub(crate) fn may_split(token: &str) -> bool {
     (CLITICS.iter()).any(|&(clitic, _)| {
-        (token.strip_suffix(clitic)).is_some_and(|host| host.chars().count() >= MIN_HOST)
+        let mut letters = token.chars().rev().flat_map(char::to_lowercase);
+        clitic.chars().rev().all(|c| letters.next() == Some(c)) && letters.count() >= MIN_HOST
     })
 }
 

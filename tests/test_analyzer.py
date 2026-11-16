@@ -853,6 +853,8 @@ def test_old_forms_of_verbs(morph, token, lemma, feats):
         ("erisipela", "erisipela", "NOUN"),
         ("difterias", "difteria", "NOUN"),
         ("bacía", "bacía", "NOUN"),
+        # A plural is no verb with clitics if its lemma is none: not fresa + les
+        ("fresales", "fresal", "NOUN"),
     ],
 )
 def test_words_of_the_extra_source(morph, token, lemma, pos):
@@ -887,6 +889,7 @@ def test_own_word_is_no_word_of_the_extra_source():
         # A colloquial spelling of a word of the main source and a verb with clitics go first
         ("juera", "fuera", "ADV", "dictionary"),
         ("abrázala", "abrazar", "VERB", "clitics"),
+        ("ABRÁZALA", "abrazar", "VERB", "clitics"),
         # With a capital letter a word of only the extra source is mostly a name
         ("Navas", "Navas", "PROPN", "rule"),
         ("NAVAS", "NAVAS", "PROPN", "rule"),

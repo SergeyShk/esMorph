@@ -463,8 +463,13 @@ impl Dictionary {
         // `verte` is `ver` + `te`, not `verté`; a few words of the dictionary are such verbs
         // mostly (`verse`). Clitics follow a verb: a token without letters has none
         let homonym = exact && clitics::homonym(&word);
-        // A word of only the extra source is such a verb first too: `abrázala` is `abraza` + `la`
-        let extra = exact && !homonym && clitics::may_split(&word) && self.extra_only(&found);
+        // A word of only the extra source whose lemma is such a verb is one first too: `abrázala`
+        // is `abraza` + `la`, while `fresales` stays the plural of `fresal`
+        let extra = exact
+            && !homonym
+            && clitics::may_split(&word)
+            && self.extra_only(&found)
+            && (found.iter()).any(|analysis| !self.with_clitics(&analysis.lemma).is_empty());
         if (!exact || homonym || extra) && word.chars().any(char::is_alphabetic) {
             let mut analyses = self.with_clitics(&word);
             if !analyses.is_empty() {
@@ -3182,6 +3187,21 @@ pub(crate) mod tests {
                 "Gender=Fem|Number=Sing",
                 true,
             ),
+            (
+                "fresar",
+                "VERB",
+                "fresa",
+                "Mood=Imp|Number=Sing|Person=2|VerbForm=Fin",
+                false,
+            ),
+            ("fresal", "NOUN", "fresal", "Gender=Masc|Number=Sing", true),
+            (
+                "fresal",
+                "NOUN",
+                "fresales",
+                "Gender=Masc|Number=Plur",
+                true,
+            ),
         ] {
             builder.add_form(lemma, pos, form, feats).unwrap();
             if extra {
@@ -3203,6 +3223,9 @@ pub(crate) mod tests {
         assert_eq!(lemmas(&dictionary, "juera"), ["fuera"]);
         // A verb with clitics goes first too: `abrázala` is `abraza` + `la`
         assert_eq!(lemmas(&dictionary, "abrázala"), ["abrazar", "abrázala"]);
+        assert_eq!(summary(&dictionary, "ABRÁZALA")[0].1, "abrazar");
+        // unless its lemma is no such verb: `fresales` is no `fresa` + `les`
+        assert_eq!(lemmas(&dictionary, "fresales")[0], "fresal");
         // With a capital letter a word of only the extra source is mostly a name, a word of the
         // main source is not
         for token in ["Navas", "NAVAS"] {
