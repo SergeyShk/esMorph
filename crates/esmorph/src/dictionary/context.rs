@@ -9,6 +9,7 @@ use std::fmt::Write;
 
 use super::{Analysis, Source};
 use crate::Error;
+use crate::clitics;
 use crate::ud::UdTags;
 
 const MAGIC: &[u8; 8] = b"ESMCTX\0\0";
@@ -577,6 +578,14 @@ impl Context {
     /// Place of the sums of an analysis among the sums of the tags
     fn slot(&self, analysis: &Analysis) -> Option<usize> {
         let words = analysis.words.len().clamp(1, MAX_WORDS);
+        // The model saw tokens of several words only of verbs with clitics and contractions: a
+        // number with its sign (`60%`) and a unit with its number (`km.24`) are one word for it
+        let several = match analysis.source {
+            Source::Rule => false,
+            Source::Dictionary => clitics::contraction(&analysis.word).is_some(),
+            _ => true,
+        };
+        let words = if words > 1 && !several { 1 } else { words };
         let at = usize::from(analysis.ud) * MAX_WORDS + words - 1;
         (at < self.tag_bias.len()).then_some(at)
     }
@@ -954,6 +963,35 @@ pub(crate) mod tests {
             la[0].ud
         );
         assert!(dictionary.has_context());
+    }
+
+    #[test]
+    fn a_number_with_its_sign_is_one_word_for_the_model() {
+        let dictionary = dictionary(Some(weights(&[("P=PRON", 0.0)])));
+        let context = dictionary.context().unwrap();
+        let la = dictionary.analyze("la").remove(0);
+        let with = |source, word: &str, words: &[&str]| Analysis {
+            source,
+            word: word.to_owned(),
+            words: words.iter().map(|&word| word.to_owned()).collect(),
+            ..la.clone()
+        };
+        let one = context.slot(&la);
+        assert!(one.is_some());
+        assert_eq!(context.slot(&with(Source::Rule, "60%", &["60", "%"])), one);
+        assert_eq!(
+            context.slot(&with(Source::Dictionary, "km", &["km.", "24"])),
+            one
+        );
+        let two = one.map(|at| at + 1);
+        assert_eq!(
+            context.slot(&with(Source::Clitics, "dala", &["da", "la"])),
+            two
+        );
+        assert_eq!(
+            context.slot(&with(Source::Dictionary, "del", &["de", "el"])),
+            two
+        );
     }
 
     #[test]

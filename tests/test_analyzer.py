@@ -1621,6 +1621,45 @@ def test_roman_numerals(morph):
     assert sum(a.prob for a in analyses) == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize(
+    ("token", "lemma", "words"),
+    [
+        ("60%", "60", ("60", "%")),
+        ("-3,5‰", "-3,5", ("-3,5", "‰")),
+        ("5kg", "5", ("5", "kg")),
+        ("2,5kg", "2,5", ("2,5", "kg")),
+    ],
+)
+def test_number_with_a_sign_or_a_unit_is_two_words(morph, token, lemma, words):
+    first = morph.analyze(token)[0]
+    assert (first.word, first.lemma, first.pos, first.words) == (token, lemma, "NUM", words)
+    assert morph.analyze("%")[0].pos == "SYM"
+
+
+def test_unit_with_a_number_is_two_words(morph):
+    first = morph.analyze("km.24")[0]
+    assert (first.lemma, first.pos, first.words) == ("km", "NOUN", ("km.", "24"))
+
+
+def test_a_clitic_inflects_to_a_clitic(morph):
+    le = next(a for a in morph.analyze("le") if a.pos == "PRON")
+    les = next(a for a in morph.analyze("les") if a.pos == "PRON")
+    assert (le.inflect(Case="Acc"), les.inflect(Case="Acc")) == ("lo", "los")
+    lo = next(a for a in morph.analyze("lo") if a.pos == "PRON")
+    assert lo.inflect(Case="Dat") == "le"
+
+
+def test_forms_of_entries_have_the_gender_of_their_noun(morph):
+    # "plural of abajeña" names no gender, the noun has one; a noun of both genders keeps none
+    def noun(word, lemma):
+        return next(a for a in morph.analyze(word) if (a.pos, a.lemma) == ("NOUN", lemma))
+
+    assert noun("abajeñas", "abajeña").feats == {"Gender": "Fem", "Number": "Plur"}
+    assert noun("artes", "arte").feats == {"Number": "Plur"}
+    # The feminine of misionario gives no gender to its plural
+    assert "Gender" not in noun("misionarios", "misionario").feats
+
+
 def test_names(morph):
     for token in ["Josep", "EUiA", "W.", "TV-3", "Macapagal-Arroyo"]:
         assert summary(morph, token) == [(token, token, "PROPN", {}, "rule")], token

@@ -185,6 +185,36 @@ impl RuleTags {
     }
 }
 
+/// Signs that follow a number in one token as a word of their own
+const NUMBER_SIGNS: [char; 3] = ['%', '‰', '‱'];
+
+/// A number and a sign or a unit after it in one token, two words: `60%` is `60` and `%`, `-3,5‰`
+/// is `-3,5` and `‰`, `5kg` is `5` and `kg`
+pub(crate) fn number_and_unit(token: &str) -> Option<(&str, &str)> {
+    let at = match token.chars().next_back() {
+        Some(sign) if NUMBER_SIGNS.contains(&sign) => token.len() - sign.len_utf8(),
+        _ => {
+            // Of the units that end the token, the one after a number: `kg`, not `g`, in `5kg`
+            let unit = UNITS.iter().find(|unit| {
+                (token.strip_suffix(**unit)).is_some_and(|digits| {
+                    digits.ends_with(|c: char| c.is_ascii_digit()) && number(digits).is_some()
+                })
+            })?;
+            token.len() - unit.len()
+        }
+    };
+    let number_part = &token[..at];
+    number(number_part)?;
+    Some((number_part, &token[at..]))
+}
+
+/// A unit with its period and a number in one token, two words: `km.24` is `km.` and `24`
+pub(crate) fn unit_and_number(token: &str) -> Option<(&str, &str)> {
+    let (unit, digits) = token.rsplit_once('.')?;
+    (UNITS.contains(&unit) && !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+        .then(|| token.split_at(unit.len() + 1))
+}
+
 /// Analyses of a token by the rules: the lemma, the rule and the share; empty if no rule fits
 pub(crate) fn rules(token: &str) -> Vec<(String, Rule, f64)> {
     // A replacement character is a lost character of the text, not a sign
@@ -541,6 +571,29 @@ mod tests {
                 !kinds(word).iter().any(|(_, rule)| *rule == Rule::Cardinal),
                 "{word}"
             );
+        }
+    }
+
+    #[test]
+    fn a_number_with_a_sign_or_a_unit_is_two_words() {
+        for (token, number, sign) in [
+            ("60%", "60", "%"),
+            ("-3,5‰", "-3,5", "‰"),
+            ("5kg", "5", "kg"),
+            ("+10mm", "+10", "mm"),
+            ("2,5kg", "2,5", "kg"),
+            ("1.200m", "1.200", "m"),
+        ] {
+            assert_eq!(number_and_unit(token), Some((number, sign)), "{token}");
+        }
+        for token in [
+            "%", "a%", "1..2%", "--5%", "5", "5k", "kg", "--5kg", "½kg", "5²m",
+        ] {
+            assert_eq!(number_and_unit(token), None, "{token}");
+        }
+        assert_eq!(unit_and_number("km.24"), Some(("km.", "24")));
+        for token in ["km.", "km.2a", "art.24", "24.km"] {
+            assert_eq!(unit_and_number(token), None, "{token}");
         }
     }
 

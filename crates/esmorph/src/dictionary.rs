@@ -106,8 +106,9 @@ pub struct Analysis {
     pub source: Source,
     /// The form of the inflection table
     pub entry: Option<Entry>,
-    /// Words of a token of several: a verb and its clitics (`da`, `me`, `lo`) or a contraction
-    /// (`de`, `el`); empty for a token of one word. The analysis describes the first of them
+    /// Words of a token of several: a verb and its clitics (`da`, `me`, `lo`), a contraction (`de`,
+    /// `el`) or a number and its sign or unit (`60`, `%`); empty for a token of one word. The
+    /// analysis describes the first of them
     pub words: Vec<String>,
 }
 
@@ -674,6 +675,25 @@ impl Dictionary {
         let Some(tags) = &self.rule_tags else {
             return Vec::new();
         };
+        // A unit with its period and a number is two words, and its analyses are those of the unit
+        if let Some((unit, number)) = rules::unit_and_number(token) {
+            return (self.analyze(unit).into_iter())
+                .map(|analysis| Analysis {
+                    words: vec![unit.to_owned(), number.to_owned()],
+                    ..analysis
+                })
+                .collect();
+        }
+        // A number with a sign or a unit is two words, and its analyses are those of the number
+        if let Some((number, sign)) = rules::number_and_unit(token) {
+            return (self.ruled(number).into_iter())
+                .map(|analysis| Analysis {
+                    word: token.to_owned(),
+                    words: vec![number.to_owned(), sign.to_owned()],
+                    ..analysis
+                })
+                .collect();
+        }
         rules::rules(token)
             .into_iter()
             .map(|(lemma, rule, share)| Analysis {
@@ -1193,6 +1213,13 @@ impl Dictionary {
             .count()
             > 1;
         let own_word = lexeme.spell(&self.suffixes, own_form)?;
+        // A clitic gives a clitic: `le` in the accusative is `lo`, not `él`
+        let own_clitic = clitics::is_clitic(&own_word);
+        let other_word = |form: usize| {
+            own_clitic
+                && !(lexeme.spell(&self.suffixes, form))
+                    .is_some_and(|word| clitics::is_clitic(&word))
+        };
         let common_prefix = |form: usize| {
             let word = lexeme.spell(&self.suffixes, form).unwrap_or_default();
             let common = |same: fn(char, char) -> bool| {
@@ -1263,6 +1290,7 @@ impl Dictionary {
                 let key = (
                     missed,
                     contradicted,
+                    other_word(form),
                     extra,
                     absent,
                     variety(cell(form), own),
@@ -1277,7 +1305,7 @@ impl Dictionary {
         // The best form and the best main form for a variant
         let (mut best, mut other) = (None, None);
         for candidate in candidates {
-            if candidate.0.4 == MAIN_FORM && other.is_none_or(|known| candidate < known) {
+            if candidate.0.5 == MAIN_FORM && other.is_none_or(|known| candidate < known) {
                 other = Some(candidate);
             }
             if best.is_none_or(|known| candidate < known) {
@@ -1290,8 +1318,9 @@ impl Dictionary {
         if let Some((main_key, main)) = other
             && own & VARIANT != 0
             && NOMINAL.contains(&tag.pos())
-            && key.4 == SAME_KIND
-            && (main_key.0, main_key.1, main_key.2, main_key.3) == (key.0, key.1, key.2, key.3)
+            && key.5 == SAME_KIND
+            && (main_key.0, main_key.1, main_key.2, main_key.3, main_key.4)
+                == (key.0, key.1, key.2, key.3, key.4)
             && common_prefix(main) > common_prefix(best)
         {
             best = main;
@@ -2897,6 +2926,17 @@ pub(crate) mod tests {
             [("Josep".into(), "Josep".into(), "PROPN ".into(), "rule")]
         );
         assert_eq!(summary("XXI")[0].2, "NUM NumForm=Roman|NumType=Card");
+        // A number with a sign or a unit is two words, the analysis is of the number
+        for (token, number, sign) in [("60%", "60", "%"), ("5kg", "5", "kg")] {
+            let found = &dictionary.analyze(token)[0];
+            let tag = dictionary.ud_tag(found.ud).unwrap();
+            assert_eq!(
+                (found.word.as_str(), found.lemma.as_str(), tag.pos()),
+                (token, number, "NUM")
+            );
+            assert_eq!(found.words, [number, sign]);
+        }
+        assert!(dictionary.analyze("1999")[0].words.is_empty());
         assert!(summary("qzxw").is_empty());
         // The rules give analyses, not words of the dictionary
         assert!(!dictionary.is_known("Josep") && !dictionary.is_known(","));

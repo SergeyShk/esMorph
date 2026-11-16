@@ -118,7 +118,8 @@ enum AnalysisTag {
 ///         they saw in other forms; of analyze_sentence - the score of the context model in the
 ///         sentence
 ///     words (tuple[str, ...]): Words of the token: a verb and its clitics, the words of a
-///         contraction, or the word itself; the analysis describes the first of them
+///         contraction, a number and its sign or unit, or the word itself; the analysis describes
+///         the first of them
 ///     source (str): Where the analysis comes from: "dictionary", "clitics" for a verb of the
 ///         dictionary with clitics, "rule" for a token out of the dictionary (punctuation, a
 ///         symbol, a number, a Roman numeral, a name) and for the name or the Roman numeral of a
