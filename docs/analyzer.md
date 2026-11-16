@@ -1,7 +1,7 @@
 # Analyzer
 
 ``` {.python .signature}
-Analyzer(path=None, *, verify=False)
+Analyzer(path=None, *, verify=False, words=None)
 ```
 
 Morphological analyzer: for a word form it finds all [analyses](analysis.md) in a dictionary built from Wiktionary - the lemma, the part of speech and the [Universal Dependencies](https://universaldependencies.org/) features - and orders them by probability. A token that the dictionary does not have gets the analyses of [rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). The dictionary is loaded when the analyzer is created.
@@ -10,8 +10,8 @@ Exceptions:
 
 - `FileNotFoundError` - the dictionary file does not exist;
 - `OSError` - the dictionary file cannot be read: no access, the path points to a directory, a pipe or a device;
-- `ValueError` - the file is not an esMorph dictionary or is damaged (with `verify=True`, a deliberately crafted file too), the path has a NUL character;
-- `TypeError` - a path that is neither a string nor `PathLike`, `verify` that is not `bool`.
+- `ValueError` - the file is not an esMorph dictionary, is of another version of the format (a dictionary built by an earlier release is built again) or is damaged (with `verify=True`, a deliberately crafted file too), the path has a NUL character, an [own word](#words) does not follow its sample;
+- `TypeError` - a path that is neither a string nor `PathLike`, `verify` that is not `bool`, `words` that is no mapping of strings to strings or pairs of strings.
 
 === "Code"
 
@@ -34,6 +34,7 @@ Exceptions:
 | :-------- | :--- | :------ | :---------- |
 | `path` | `str` / `PathLike` | `None` | Path to the dictionary file; by default, the dictionary of the package |
 | `verify` | `bool` | `False` | Check the whole dictionary, for a file of an untrusted source; takes tens of milliseconds |
+| `words` | `Mapping[str, str \| tuple[str, str]]` | `None` | [Own words](#words) and their samples |
 
 The object keeps the absolute dictionary path in `path` of type `Path`, read-only. The dictionary file is mapped into memory, so processes with the same file share its memory. While an analyzer exists, the file must not be overwritten in place, but it can be replaced with a new file; on Windows an open file can be neither replaced nor deleted. A dictionary is trusted data, like code: loading rejects a damaged file but not every deliberately crafted one, which may make the analysis fail. A dictionary of an untrusted source is loaded with `verify=True`: a deliberately crafted file is then rejected with `ValueError`, and pickle keeps the check.
 
@@ -299,6 +300,31 @@ The property `dictionary_info` describes the dictionary of the analyzer: the sou
     ```
     ('Wiktionary', 'CC BY-SA 4.0', ['UD_Spanish-AnCora', 'UD_Spanish-GSD'])
     ```
+
+## Own words { #words }
+
+The parameter `words` adds words that the dictionary does not have. Each word comes with its sample: a word of the dictionary in the same form, usually the lemma.
+
+- The word takes the forms of the lexemes of its sample with their features, order and shares: `{"tiktokear": "bloguear"}` gives `tiktokeo`, `tiktokeó` and `tiktokeando`.
+- A sample with lexemes of several parts of speech needs the part of speech in a pair: `{"cajo": ("bajo", "NOUN")}`.
+- An own word may have letters that the dictionary has not.
+- A word of the dictionary given as an own word keeps its analyses, and the new ones join them.
+- The analyses of own words are those of words of the dictionary, with `source` equal to `"dictionary"`, and they are [inflected](inflection.md) like their samples.
+
+=== "Code"
+
+    ``` python
+    own = Analyzer(words={"tiktokear": "bloguear", "cajo": ("bajo", "NOUN")})
+    [(analysis.lemma, analysis.pos) for analysis in (own.analyze(word)[0] for word in ["tiktokeó", "cajos"])]
+    ```
+
+=== "Result"
+
+    ```
+    [('tiktokear', 'VERB'), ('cajo', 'NOUN')]
+    ```
+
+A sample that is not in the dictionary, a sample with lexemes of several parts of speech without one, a word without the ending of its sample (`"tiuteo"` as `"bloguear"`) and a word with a space raise `ValueError`. The analyzer shares the dictionary mapped into memory with the analyzers of the same file. Twenty thousand own words are added in about half a second, and the analysis is at most a few percent slower. Pickle keeps the own words. The [command](cli.md#options) takes own words from a file with `-w`, and the [spaCy component](spacy.md#config) takes them with the parameter `words`.
 
 ## Threads and processes { #parallel }
 

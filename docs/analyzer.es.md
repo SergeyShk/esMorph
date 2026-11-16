@@ -1,7 +1,7 @@
 # Analizador
 
 ``` {.python .signature}
-Analyzer(path=None, *, verify=False)
+Analyzer(path=None, *, verify=False, words=None)
 ```
 
 Analizador morfológico: para una forma de palabra busca todos sus [análisis](analysis.md) en un diccionario creado a partir de Wiktionary - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) - y los ordena por probabilidad. Un token que el diccionario no tiene recibe los análisis de unas [reglas](analysis.md#rules), y una palabra desconocida en minúsculas se [estima](analysis.md#guess). El diccionario se carga al crear el analizador.
@@ -10,8 +10,8 @@ Excepciones:
 
 - `FileNotFoundError` - el archivo del diccionario no existe;
 - `OSError` - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio, una tubería o un dispositivo;
-- `ValueError` - el archivo no es un diccionario de esMorph o está dañado (con `verify=True`, también un archivo creado a propósito), la ruta tiene un carácter NUL;
-- `TypeError` - una ruta que no es una cadena ni `PathLike`, `verify` que no es `bool`.
+- `ValueError` - el archivo no es un diccionario de esMorph, es de otra versión del formato (un diccionario construido por una versión anterior se construye de nuevo) o está dañado (con `verify=True`, también un archivo creado a propósito), la ruta tiene un carácter NUL, una [palabra propia](#words) no sigue a su modelo;
+- `TypeError` - una ruta que no es una cadena ni `PathLike`, `verify` que no es `bool`, `words` que no es un mapeo de cadenas a cadenas o a pares de cadenas.
 
 === "Código"
 
@@ -34,6 +34,7 @@ Excepciones:
 | :-------- | :--- | :---------- | :---------- |
 | `path` | `str` / `PathLike` | `None` | Ruta al archivo del diccionario; por defecto, el diccionario del paquete |
 | `verify` | `bool` | `False` | Comprobar el diccionario entero, para un archivo de una fuente no fiable; tarda decenas de milisegundos |
+| `words` | `Mapping[str, str \| tuple[str, str]]` | `None` | [Palabras propias](#words) y sus modelos |
 
 El objeto guarda la ruta absoluta del diccionario en `path`, de tipo `Path` y solo de lectura. El archivo del diccionario se proyecta en memoria, así que los procesos con el mismo archivo comparten su memoria. Mientras exista un analizador, el archivo no debe sobrescribirse en su lugar, pero se puede sustituir por un archivo nuevo; en Windows un archivo abierto no se puede ni sustituir ni borrar. Un diccionario es un dato de confianza, como el código: la carga rechaza un archivo dañado, pero no todo archivo creado a propósito, que puede hacer fallar el análisis. Un diccionario de una fuente no fiable se carga con `verify=True`: entonces un archivo creado a propósito se rechaza con `ValueError`, y pickle conserva la comprobación.
 
@@ -299,6 +300,31 @@ La propiedad `dictionary_info` describe el diccionario del analizador: la fuente
     ```
     ('Wiktionary', 'CC BY-SA 4.0', ['UD_Spanish-AnCora', 'UD_Spanish-GSD'])
     ```
+
+## Palabras propias { #words }
+
+El parámetro `words` añade palabras que el diccionario no tiene. Cada palabra viene con su modelo: una palabra del diccionario en la misma forma, normalmente el lema.
+
+- La palabra toma las formas de los lexemas de su modelo con sus rasgos, su orden y sus proporciones: `{"tiktokear": "bloguear"}` da `tiktokeo`, `tiktokeó` y `tiktokeando`.
+- Un modelo con lexemas de varias categorías necesita la categoría en un par: `{"cajo": ("bajo", "NOUN")}`.
+- Una palabra propia puede tener letras que el diccionario no tiene.
+- Una palabra del diccionario dada como palabra propia conserva sus análisis, y los nuevos se suman a ellos.
+- Los análisis de las palabras propias son los de las palabras del diccionario, con `source` igual a `"dictionary"`, y se [flexionan](inflection.md) como sus modelos.
+
+=== "Código"
+
+    ``` python
+    own = Analyzer(words={"tiktokear": "bloguear", "cajo": ("bajo", "NOUN")})
+    [(analysis.lemma, analysis.pos) for analysis in (own.analyze(word)[0] for word in ["tiktokeó", "cajos"])]
+    ```
+
+=== "Resultado"
+
+    ```
+    [('tiktokear', 'VERB'), ('cajo', 'NOUN')]
+    ```
+
+Un modelo que no está en el diccionario, un modelo con lexemas de varias categorías sin la categoría, una palabra sin la terminación de su modelo (`"tiuteo"` como `"bloguear"`) y una palabra con un espacio lanzan `ValueError`. El analizador comparte el diccionario proyectado en memoria con los analizadores del mismo archivo. Veinte mil palabras propias se añaden en alrededor de medio segundo, y el análisis es a lo sumo unos pocos por ciento más lento. Pickle conserva las palabras propias. El [comando](cli.md#options) toma las palabras propias de un archivo con `-w`, y el [componente de spaCy](spacy.md#config) las toma con el parámetro `words`.
 
 ## Hilos y procesos { #parallel }
 

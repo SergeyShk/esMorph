@@ -173,6 +173,26 @@ Más detalles en la documentación: [tokens fuera del diccionario](https://serge
 </details>
 
 <details>
+<summary><b>Grafías coloquiales y palabras propias</b></summary>
+
+<br>
+
+Una palabra en minúsculas fuera del diccionario puede ser una grafía coloquial de una palabra del diccionario: un participio sin su `d` (`trabajao`), una `-á` final por `-ad` (`caridá`), una `f` o una `h` aspiradas (`juera`); el diccionario también tiene grafías de palabras como suenan (`na`, `pos`, `güeno`). Esa palabra recibe los análisis de la palabra estándar, y `word` es su grafía estándar. Las palabras propias toman las formas de una palabra modelo del diccionario: `Analyzer(words=...)`, la opción `-w` del comando y el parámetro `words` del componente de spaCy.
+
+```python
+>>> [(a.word, a.lemma) for a in (morph.analyze(w)[0] for w in ["trabajao", "caridá", "na"])]
+[('trabajado', 'trabajar'), ('caridad', 'caridad'), ('nada', 'nada')]
+>>> own = Analyzer(words={"tiktokear": "bloguear"})
+>>> analysis = own.analyze("tiktokeó")[0]
+>>> analysis.lemma, analysis.pos, analysis.inflect(Person="1")
+('tiktokear', 'VERB', 'tiktokeé')
+```
+
+Más detalles en la documentación: [grafías coloquiales](https://sergeyshk.github.io/esMorph/es/analysis/#spelling), [palabras propias](https://sergeyshk.github.io/esMorph/es/analyzer/#words).
+
+</details>
+
+<details>
 <summary><b>Flexión</b></summary>
 
 <br>

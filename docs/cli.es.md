@@ -21,12 +21,23 @@ decir yo el verdad de el caso .
 | `-f`, `--format` | `lemmas` | [Formato de salida](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Entrada](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | el diccionario del paquete | Un archivo de diccionario de esMorph, comprobado entero como con [`verify=True`](analyzer.md#parameters) |
+| `-w`, `--words` | | Un archivo de [palabras propias](analyzer.md#words): en cada línea una palabra y su modelo separados por un tabulador, y la categoría si el modelo tiene lexemas de varias; la opción puede repetirse |
 | `--no-context` | | Ordenar los análisis de una palabra como [`analyze`](analyzer.md#analyze), sin el modelo de contexto: más rápido; para una lista de palabras y un diccionario sin modelo |
 | `-o`, `--output` | la salida estándar | El archivo del resultado; `-` es la salida estándar |
 | `-h`, `--help` | | Mostrar la ayuda |
 | `-V`, `--version` | | Mostrar la versión |
 
 Los archivos se leen uno tras otro; sin archivos y en lugar de `-` se lee la entrada estándar. La entrada está en UTF-8: un archivo en otra codificación (Latin-1, cp1252, UTF-16) no se analiza, salvo que su primera letra con tilde llegue después de los primeros 64 KiB: entonces se analiza el texto anterior a esa línea hasta su última línea en blanco. Una sola línea con bytes no válidos se analiza con U+FFFD en su lugar. El valor de una opción se escribe aparte o junto: `-f conllu`, `-fconllu`, `--format=conllu`. El texto se analiza por párrafos: un párrafo se escribe en cuanto una línea en blanco o el final de la entrada lo cierra - en una terminal de inmediato, y a una tubería o un archivo cada vez que el comando espera la siguiente línea de entrada, así que se puede mantener abierto y darle texto párrafo a párrafo. Las entradas `tokens` y `conllu` se escriben por oraciones.
+
+Un archivo de palabras propias está en UTF-8; las líneas en blanco y las que empiezan por `#` se omiten, y los espacios alrededor de un campo se ignoran:
+
+```
+# new verbs
+tiktokear	bloguear
+cajo	bajo	NOUN
+```
+
+Con él, `esmorph -w words.tsv text.txt` analiza `tiktokeó` como una forma de `tiktokear`, como lo hace [`Analyzer(words=...)`](analyzer.md#words).
 
 En Windows PowerShell 5.1 la redirección `>` y una canalización (`Get-Content text.txt | esmorph`) estropean las letras con tilde: pase el archivo como argumento y escriba el resultado con la opción `-o` (en PowerShell 7 también funcionan). El texto pasado con `echo` en cmd llega en la codificación de la consola: ejecute antes `chcp 65001`.
 
@@ -133,7 +144,7 @@ echo "Vino ayer." | esmorph -f jsonl
 | :----- | :----- |
 | 0 | Éxito, también cuando la salida se cierra antes del final (`esmorph text.txt \| head`) |
 | 1 | Un archivo de entrada no existe, no se puede leer o no está en UTF-8, una línea no está en UTF-8 (se analiza con U+FFFD), una oración de CoNLL-U no válida; el resto se analiza igualmente |
-| 1 | El diccionario no se puede leer o está dañado, no tiene modelo de contexto y no se da `--no-context`, el archivo de salida no se puede crear, el archivo de salida o la salida estándar es un archivo de entrada o el diccionario; no se analiza nada |
+| 1 | El diccionario no se puede leer o está dañado, no tiene modelo de contexto y no se da `--no-context`, un archivo de palabras propias no se puede leer o tiene una línea errónea (el mensaje da el archivo y la línea), el archivo de salida no se puede crear, el archivo de salida o la salida estándar es un archivo de entrada, el diccionario o un archivo de palabras propias; no se analiza nada |
 | 1 | Un error de escritura, la salida estándar cerrada (el comando instalado con cargo la escribe en /dev/null y termina con 0); el análisis se detiene |
 | 2 | Opciones no válidas |
 
