@@ -263,8 +263,8 @@ impl Builder {
     /// Marks an added form as one of the extra source, the Spanish edition of Wiktionary, keeping its
     /// kind: a word that the main source has not (`erisipela`) or a new form of its lexeme
     /// (`difterias` of `difteria`). Such a form does not guess unknown words; a colloquial spelling
-    /// of a word of the main source goes before it, and a word with a capital letter that only it
-    /// has is mostly a name
+    /// of a word of the main source and a verb with clitics go before it, and a word with a capital
+    /// letter that only it has is mostly a name
     pub fn mark_extra(
         &mut self,
         lemma: &str,

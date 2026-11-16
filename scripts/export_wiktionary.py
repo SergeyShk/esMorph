@@ -10,8 +10,8 @@ Description:
     words and forms that it has not. The kind is `variant` for a variant of another form with the
     same features (an old or regional spelling, a form of `vos`), `old` for an old or nonstandard
     form of a verb (`trujo` of `traer`), `spoken:` with the standard form of a spelling as the word
-    sounds (`mu` of `muy`), `extra` and `extra-variant` for a main form and a variant of the
-    Spanish edition and `_` for a main form; the place is the number of the row in the table of its
+    sounds (`mu` of `muy`), `extra`, `extra-variant` and `extra-old` for a main form, a variant and
+    an old form of the Spanish edition and `_` for a main form; the place is the number of the row in the table of its
     lexeme, `_` for a row that only another entry gives. Only the standard library is needed.
 
 Example:
@@ -973,8 +973,9 @@ def extra_rows(
         edition has, even under other accents: the Spanish edition gives words of their own to
         what the English one has as other words (`y` as an adverb, `años` as a lemma). A lexeme
         that the English edition has only as a spelling of another word gets no new forms: the
-        forms of `cognocer` are written as those of `conocer`. A Roman numeral is left to the rule
-        of the analyzer
+        forms of `cognocer` are written as those of `conocer`. A new lexeme needs a row of its
+        lemma (`acodamientos` alone makes no lexeme), a participle needs its verb (`abachado`
+        is no adjective without `abachar`). A Roman numeral is left to the rule of the analyzer
 
     Arguments:
         path (Path): File of the snapshot of the Spanish edition
@@ -983,29 +984,52 @@ def extra_rows(
         closed (set[conventions.Row]): Rows of the table of closed classes
 
     Returns:
-        dict[conventions.Row, str]: The rows in the conventions and their kinds: `extra` or
-        `extra-variant`
+        dict[conventions.Row, str]: The rows in the conventions and their kinds: `extra`,
+        `extra-variant` or `extra-old`
     """
-    table, variants, *_ = rows(lambda: eswiktionary.entries(path))
+    table, variants, _, _, old = rows(lambda: eswiktionary.entries(path))
     table, _ = conventions.apply(table, closed)
-    # An entry of a form may not name the gender that the table of its word names
-    gendered = set()
-    for lemma, pos, form, text in table:
-        feats = conventions.parse_features(text)
-        if pos in ("ADJ", "NOUN") and feats.pop("Gender", None):
-            gendered.add((lemma, pos, form, conventions.format_features(feats)))
-    table -= gendered
     spelled = {without_marks(form) for _, _, form, _ in main}
     lexemes = {(lemma, pos) for (lemma, pos, _, _), kind in main.items() if kind == "_"}
     known = {(lemma, pos) for lemma, pos, _, _ in main}
-    found = {}
-    for row in table:
-        lemma, pos, form, _ = row
-        if without_marks(form) in spelled or ROMAN.match(form):
-            continue
-        if (lemma, pos) in lexemes or ((lemma, pos) not in known and pos in EXTRA_LEXEMES):
-            variant = kind(row, variants, closed, {}, set()) == "variant"
-            found[row] = "extra-variant" if variant else "extra"
+    found = {
+        row
+        for row in table - genderless(table)
+        if not (without_marks(row[2]) in spelled or ROMAN.match(row[2]))
+        and (row[:2] in lexemes or (row[:2] not in known and row[1] in EXTRA_LEXEMES))
+    }
+    verbs = {form for _, pos, form, _ in found if pos == "VERB"}
+    found = {
+        row
+        for row in found
+        if not (row[1] == "ADJ" and "VerbForm=Part" in row[3] and row[2] not in verbs)
+    }
+    lemmas = {(lemma, pos) for lemma, pos, form, _ in found if form == lemma}
+    found = {
+        row
+        for row in found
+        if row[:2] in lexemes or row[:2] in lemmas or without_marks(row[0]) in spelled
+    }
+    kinds = {"old": "extra-old", "variant": "extra-variant", "_": "extra"}
+    return {row: kinds[kind(row, variants, closed, {}, old)] for row in found}
+
+
+def genderless(table: set[conventions.Row]) -> set[conventions.Row]:
+    """
+    Rows of nouns and adjectives without a gender that a row of the same form names
+
+    Arguments:
+        table (set[conventions.Row]): The rows
+
+    Returns:
+        set[conventions.Row]: The rows: an entry of a form may not name the gender that the table
+        of its word names
+    """
+    found = set()
+    for lemma, pos, form, text in table:
+        feats = conventions.parse_features(text)
+        if pos in ("ADJ", "NOUN") and feats.pop("Gender", ""):
+            found.add((lemma, pos, form, conventions.format_features(feats)))
     return found
 
 

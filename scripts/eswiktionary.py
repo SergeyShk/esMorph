@@ -26,6 +26,8 @@ SNAPSHOT = (
     "b35093f1bb71f5096e4c4b8997f13f542a5f9d6f6236e0d88674609897969d23",
 )
 PARTS_OF_SPEECH = {"adj", "adv", "intj", "noun", "verb"}
+# Tags of this edition by the names of the English one
+OTHER_NAMES = {"outdated": "dated"}
 GENDERS = {"femenin": "feminine", "masculin": "masculine"}
 PERSONS = {"Primera": "first-person", "Segunda": "second-person", "Tercera": "third-person"}
 # Times of the glosses of verb forms, the longer first
@@ -41,8 +43,11 @@ TIMES = (
     ("imperativo", {"imperative"}),
 )
 VERB_FORM = re.compile(
-    r"^(Primera|Segunda|Tercera) persona del (singular|plural) (?:\([^)]*\) )?del (.+) de [^ ]+?\.?$"
+    r"^(Primera|Segunda|Tercera) persona del (singular|plural) (?:\(([^)]*)\) )?del (.+) de [^ ]+?\.?$"
 )
+# The pronouns of a gloss of a form of `usted` and of `vos`, whose person the gloss calls the second
+USTED = {"usted", "ustedes"}
+VOS = {"vos"}
 NOMINAL_FORM = re.compile(r"^Forma del ((?:femenino|masculino|singular|plural)(?: \w+)?) de ")
 NOMINAL_TAGS = {
     "femenino": "feminine",
@@ -50,8 +55,9 @@ NOMINAL_TAGS = {
     "singular": "singular",
     "plural": "plural",
 }
-# A sense that only spells another word: "Variante obsoleta de mano", "Grafía alternativa de güija"
-SPELLING = re.compile(r"^(?:Variante|Grafía)\b[^.,;:()]*? de ([^\s.,;:()]+)")
+# A sense that only spells another word: "Variante obsoleta de mano", "Grafía alternativa de güija";
+# the word ends the phrase, unlike in a definition: "Variante de la papa, de menor tamaño"
+SPELLING = re.compile(r"^(?:Variante|Grafía)\b[^.,;:()]*? de ([^\s.,;:()]+)(?=\s*(?:[.,;:(]|$))")
 # Labels of such a sense in the tags of the English edition
 SPELLING_TAGS = (
     ("anticuad", "archaic"),
@@ -72,14 +78,19 @@ def verb_tags(gloss: str) -> set[str] | None:
 
     Returns:
         set[str] | None: The person, the number, the mood and the tense; `None` for a gloss of
-        another kind
+        another kind. A form of `usted` is of the third person, a form of `vos` is a variant
     """
     match = VERB_FORM.match(gloss.strip())
     if not match:
         return None
-    person, number, time = match.groups()
+    person, number, pronouns, time = match.groups()
     tags = next((tags for text, tags in TIMES if time.startswith(text)), None)
-    return None if tags is None else {PERSONS[person], number} | tags
+    if tags is None:
+        return None
+    who = {word.strip() for word in re.split(r"[,;]", pronouns or "")}
+    if who == VOS:
+        tags = tags | {"vos-form"}
+    return {"third-person" if who <= USTED else PERSONS[person], number} | tags
 
 
 def nominal_tags(gloss: str) -> set[str] | None:
@@ -130,15 +141,20 @@ def sense(record: dict, pos: str, gender: set[str]) -> dict | None:
         gender (set[str]): Genders of its entry
 
     Returns:
-        dict | None: Tags, `form_of` and `alt_of`; `None` for a form whose gloss names no grammar
+        dict | None: Tags, `form_of` and `alt_of`; `None` for a form whose gloss names no grammar.
+        A form of a noun has the gender of its entry if its gloss names none
     """
-    tags = set(record["tags"]) - {"form-of"}
+    tags = {OTHER_NAMES.get(tag, tag) for tag in record["tags"]} - {"form-of"}
     gloss = " ".join(record.get("glosses", []))
     if record["form_of"]:
         found = verb_tags(gloss) if pos == "verb" else nominal_tags(gloss)
         if found is None:
             return None
+        if pos == "noun" and not found & set(GENDERS.values()):
+            found |= gender
         return {"tags": sorted(tags | found), "form_of": record["form_of"][:1], "alt_of": []}
+    # The tag `plural` of a sense means "used in the plural": `boleadora` is `las boleadoras`
+    tags.discard("plural")
     spelling = SPELLING.match(gloss) if pos != "verb" else None
     if spelling:
         head = gloss[: spelling.start(1)]

@@ -32,7 +32,7 @@ pub(crate) const SPOKEN: u32 = 1 << 18;
 pub(crate) const OLD: u32 = 1 << 19;
 /// The flag of a form of a table from the extra source, the Spanish edition of Wiktionary: a word
 /// of the main source does not have its spelling, a colloquial spelling of a word of the main
-/// source goes before it, and with a capital letter it is mostly a name
+/// source and a verb with clitics go before it, and with a capital letter it is mostly a name
 pub(crate) const EXTRA: u32 = 1 << 20;
 /// The first bit of the place in its table of the form that a spoken spelling stands for
 pub(crate) const SPOKEN_FORM_SHIFT: u32 = 21;

@@ -852,8 +852,7 @@ def test_old_forms_of_verbs(morph, token, lemma, feats):
         # A word and a form that only the Spanish edition of Wiktionary has
         ("erisipela", "erisipela", "NOUN"),
         ("difterias", "difteria", "NOUN"),
-        # A word of the dictionary is no verb with clitics: not figura + les
-        ("figurales", "figural", "ADJ"),
+        ("bacía", "bacía", "NOUN"),
     ],
 )
 def test_words_of_the_extra_source(morph, token, lemma, pos):
@@ -862,11 +861,32 @@ def test_words_of_the_extra_source(morph, token, lemma, pos):
     assert morph.is_known(token)
 
 
+def test_extra_source_takes_the_grammar_of_its_entries(morph):
+    # The gender of an entry of a form, the person of the imperative of usted
+    assert morph.analyze("acidimetrías")[0].feats == {"Gender": "Fem", "Number": "Plur"}
+    imperatives = [a for a in morph.analyze("abniegue") if a.feats.get("Mood") == "Imp"]
+    assert imperatives and all(a.feats["Person"] == "3" for a in imperatives)
+    # A definition is no spelling of a word: "Variante de la papa, de menor tamaño"
+    assert {a.lemma for a in morph.analyze("papín")} == {"papín"}
+    # An old form gives old forms
+    assert verb(morph, "haigamos").inflect(Person="3") == "haigan"
+    # A participle needs its verb, a new lexeme its lemma
+    assert not morph.is_known("abachado")
+    assert not morph.is_known("acodamientos")
+
+
+def test_own_word_is_no_word_of_the_extra_source():
+    # The plural of the sample comes from the extra source, the own word is still no name
+    own = Analyzer(words={"tripela": "difteria"})
+    assert own.analyze("Tripelas")[0].pos == "NOUN"
+
+
 @pytest.mark.parametrize(
     ("token", "lemma", "pos", "source"),
     [
-        # A colloquial spelling of a word of the main source goes first
+        # A colloquial spelling of a word of the main source and a verb with clitics go first
         ("juera", "fuera", "ADV", "dictionary"),
+        ("abrázala", "abrazar", "VERB", "clitics"),
         # With a capital letter a word of only the extra source is mostly a name
         ("Navas", "Navas", "PROPN", "rule"),
         ("NAVAS", "NAVAS", "PROPN", "rule"),

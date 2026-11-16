@@ -463,12 +463,15 @@ impl Dictionary {
         // `verte` is `ver` + `te`, not `verté`; a few words of the dictionary are such verbs
         // mostly (`verse`). Clitics follow a verb: a token without letters has none
         let homonym = exact && clitics::homonym(&word);
-        if (!exact || homonym) && word.chars().any(char::is_alphabetic) {
+        // A word of only the extra source is such a verb first too: `abrázala` is `abraza` + `la`
+        let extra = exact && !homonym && clitics::may_split(&word) && self.extra_only(&found);
+        if (!exact || homonym || extra) && word.chars().any(char::is_alphabetic) {
             let mut analyses = self.with_clitics(&word);
             if !analyses.is_empty() {
-                // A word the dictionary has is a name as rarely as any other: `Vete`, `Trátase`
-                let known = !found.is_empty();
-                if homonym {
+                // A word the dictionary has is a name as rarely as any other: `Vete`, `Trátase`;
+                // a word of only the extra source is none of them
+                let known = !found.is_empty() && !extra;
+                if homonym || extra {
                     for analysis in &mut analyses {
                         analysis.prob *= clitics::HOMONYM_SHARE;
                     }
@@ -579,6 +582,7 @@ impl Dictionary {
         !analyses.is_empty()
             && analyses.iter().all(|analysis| {
                 analysis.source == Source::Dictionary
+                    && !self.is_own_analysis(analysis)
                     && (self.lexeme_of(analysis))
                         .zip(analysis.entry)
                         .and_then(|(lexeme, entry)| {
@@ -1138,7 +1142,9 @@ impl Dictionary {
         }
         let lexeme = self.lexeme_of(analysis)?;
         let own_form = usize::from(analysis.entry?.form);
-        let own = *lexeme.cells.get(own_form)?;
+        // A form of the extra source and a main one with the same features are one cell
+        let cell = |form: usize| lexeme.cells[form] & !EXTRA;
+        let own = *lexeme.cells.get(own_form)? & !EXTRA;
         let tag = self.ud.get(analysis.ud)?;
         // Names and values as numbers of the strings of the tags, compared as numbers; a name
         // without a number is in no tag
@@ -1177,7 +1183,10 @@ impl Dictionary {
         // several: `hablase` with `Person=3` is `hablase`, `elegido` with `Gender=Fem` is
         // `elegida`, not `electa`; of equally close ones the analysis itself: `paga` stays `paga`,
         // not `pagada`, and `ha` stays `ha`, not `hay`
-        let several = lexeme.cells.iter().filter(|&&cell| cell == own).count() > 1;
+        let several = (0..lexeme.cells.len())
+            .filter(|&form| cell(form) == own)
+            .count()
+            > 1;
         let own_word = lexeme.spell(&self.suffixes, own_form)?;
         let common_prefix = |form: usize| {
             let word = lexeme.spell(&self.suffixes, form).unwrap_or_default();
@@ -1192,8 +1201,8 @@ impl Dictionary {
         let closeness = |form: usize| if several { common_prefix(form) } else { (0, 0) };
         // Forms of one tag are one group in the place of its first form
         let group = |form: usize| {
-            (lexeme.cells.iter())
-                .position(|&cell| cell == lexeme.cells[form])
+            (0..lexeme.cells.len())
+                .position(|other| cell(other) == cell(form))
                 .unwrap_or(form)
         };
         let own_tag = tag;
@@ -1251,8 +1260,8 @@ impl Dictionary {
                     contradicted,
                     extra,
                     absent,
-                    variety(lexeme.cells[form], own),
-                    lexeme.cells[form] != own,
+                    variety(cell(form), own),
+                    cell(form) != own,
                     group(form),
                     Reverse(closeness(form)),
                     form != own_form,
@@ -3159,6 +3168,20 @@ pub(crate) mod tests {
             ("juera", "INTJ", "juera", "", true),
             ("nava", "NOUN", "nava", "Gender=Fem|Number=Sing", true),
             ("nava", "NOUN", "navas", "Gender=Fem|Number=Plur", true),
+            (
+                "abrazar",
+                "VERB",
+                "abraza",
+                "Mood=Imp|Number=Sing|Person=2|VerbForm=Fin",
+                false,
+            ),
+            (
+                "abrázala",
+                "NOUN",
+                "abrázala",
+                "Gender=Fem|Number=Sing",
+                true,
+            ),
         ] {
             builder.add_form(lemma, pos, form, feats).unwrap();
             if extra {
@@ -3178,6 +3201,8 @@ pub(crate) mod tests {
         assert_eq!(lemmas(&dictionary, "navas"), ["nava"]);
         // A colloquial spelling of a word of the main source goes first: `juera` is `fuera`
         assert_eq!(lemmas(&dictionary, "juera"), ["fuera"]);
+        // A verb with clitics goes first too: `abrázala` is `abraza` + `la`
+        assert_eq!(lemmas(&dictionary, "abrázala"), ["abrazar", "abrázala"]);
         // With a capital letter a word of only the extra source is mostly a name, a word of the
         // main source is not
         for token in ["Navas", "NAVAS"] {
@@ -3186,6 +3211,33 @@ pub(crate) mod tests {
             assert_eq!(found[1].1, "nava");
         }
         assert_eq!(summary(&dictionary, "Fuera")[0].2, "ADV");
+        // A form of the extra source shares the cell of a main form with its features: `abniego`
+        // keeps its stem, `abnego` its own
+        let first =
+            |person: &str| format!("Mood=Ind|Number=Sing|Person={person}|Tense=Pres|VerbForm=Fin");
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        builder
+            .add_form("abnegar", "VERB", "abnegar", "VerbForm=Inf")
+            .unwrap();
+        for (form, person, extra) in [
+            ("abnego", "1", false),
+            ("abnega", "3", false),
+            ("abniego", "1", true),
+            ("abniega", "3", true),
+        ] {
+            builder
+                .add_form("abnegar", "VERB", form, &first(person))
+                .unwrap();
+            if extra {
+                (builder.mark_extra("abnegar", "VERB", form, &first(person))).unwrap();
+            }
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        for (word, form) in [("abniego", "abniega"), ("abnego", "abnega")] {
+            let analysis = &dictionary.analyze(word)[0];
+            assert_eq!(inflected(&dictionary, analysis, &[("Person", "3")]), form);
+        }
         // A form of the extra source guesses no unknown word
         assert!((dictionary.analyze("trapela").iter()).all(|analysis| analysis.lemma != "trapela"));
     }
