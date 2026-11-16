@@ -306,7 +306,7 @@ The property `dictionary_info` describes the dictionary of the analyzer: the sou
 The parameter `words` adds words that the dictionary does not have. Each word comes with its sample: a word of the dictionary in the same form, usually the lemma.
 
 - The word takes the forms of the lexemes of its sample with their features, order and shares: `{"tiktokear": "bloguear"}` gives `tiktokeo`, `tiktokeó` and `tiktokeando`.
-- A sample with lexemes of several parts of speech needs the part of speech in a pair: `{"cajo": ("bajo", "NOUN")}`.
+- A sample with lexemes of several parts of speech needs the part of speech, a UD tag in capitals, in a pair: `{"cajo": ("bajo", "NOUN")}`.
 - An own word may have letters that the dictionary has not.
 - A word of the dictionary given as an own word keeps its analyses, and the new ones join them.
 - The analyses of own words are those of words of the dictionary, with `source` equal to `"dictionary"`, and they are [inflected](inflection.md) like their samples.
@@ -324,7 +324,7 @@ The parameter `words` adds words that the dictionary does not have. Each word co
     [('tiktokear', 'VERB'), ('cajo', 'NOUN')]
     ```
 
-A sample that is not in the dictionary, a sample with lexemes of several parts of speech without one, a word without the ending of its sample (`"tiuteo"` as `"bloguear"`) and a word with a space raise `ValueError`. The analyzer shares the dictionary mapped into memory with the analyzers of the same file. Twenty thousand own words are added in about half a second, and the analysis is at most a few percent slower. Pickle keeps the own words. The [command](cli.md#options) takes own words from a file with `-w`, and the [spaCy component](spacy.md#config) takes them with the parameter `words`.
+A sample that is not in the dictionary, a sample with lexemes of several parts of speech without one, a part of speech that the sample has not (`("bajo", "noun")`), a word without the ending of its sample (`"tiuteo"` as `"bloguear"`) and a word with a space raise `ValueError`. The analyzer shares the dictionary mapped into memory with the analyzers of the same file. Twenty thousand own words are added in about half a second, and the analysis is at most a few percent slower. Pickle keeps the own words. The [command](cli.md#options) takes own words from a file with `-w`, and the [spaCy component](spacy.md#config) takes them with the parameter `words`.
 
 ## Threads and processes { #parallel }
 

@@ -306,7 +306,7 @@ La propiedad `dictionary_info` describe el diccionario del analizador: la fuente
 El parámetro `words` añade palabras que el diccionario no tiene. Cada palabra viene con su modelo: una palabra del diccionario en la misma forma, normalmente el lema.
 
 - La palabra toma las formas de los lexemas de su modelo con sus rasgos, su orden y sus proporciones: `{"tiktokear": "bloguear"}` da `tiktokeo`, `tiktokeó` y `tiktokeando`.
-- Un modelo con lexemas de varias categorías necesita la categoría en un par: `{"cajo": ("bajo", "NOUN")}`.
+- Un modelo con lexemas de varias categorías necesita la categoría, una etiqueta de UD en mayúsculas, en un par: `{"cajo": ("bajo", "NOUN")}`.
 - Una palabra propia puede tener letras que el diccionario no tiene.
 - Una palabra del diccionario dada como palabra propia conserva sus análisis, y los nuevos se suman a ellos.
 - Los análisis de las palabras propias son los de las palabras del diccionario, con `source` igual a `"dictionary"`, y se [flexionan](inflection.md) como sus modelos.
@@ -324,7 +324,7 @@ El parámetro `words` añade palabras que el diccionario no tiene. Cada palabra 
     [('tiktokear', 'VERB'), ('cajo', 'NOUN')]
     ```
 
-Un modelo que no está en el diccionario, un modelo con lexemas de varias categorías sin la categoría, una palabra sin la terminación de su modelo (`"tiuteo"` como `"bloguear"`) y una palabra con un espacio lanzan `ValueError`. El analizador comparte el diccionario proyectado en memoria con los analizadores del mismo archivo. Veinte mil palabras propias se añaden en alrededor de medio segundo, y el análisis es a lo sumo unos pocos por ciento más lento. Pickle conserva las palabras propias. El [comando](cli.md#options) toma las palabras propias de un archivo con `-w`, y el [componente de spaCy](spacy.md#config) las toma con el parámetro `words`.
+Un modelo que no está en el diccionario, un modelo con lexemas de varias categorías sin la categoría, una categoría que el modelo no tiene (`("bajo", "noun")`), una palabra sin la terminación de su modelo (`"tiuteo"` como `"bloguear"`) y una palabra con un espacio lanzan `ValueError`. El analizador comparte el diccionario proyectado en memoria con los analizadores del mismo archivo. Veinte mil palabras propias se añaden en alrededor de medio segundo, y el análisis es a lo sumo unos pocos por ciento más lento. Pickle conserva las palabras propias. El [comando](cli.md#options) toma las palabras propias de un archivo con `-w`, y el [componente de spaCy](spacy.md#config) las toma con el parámetro `words`.
 
 ## Hilos y procesos { #parallel }
 

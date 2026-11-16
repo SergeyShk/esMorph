@@ -103,7 +103,9 @@ Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tild
 - una `-á`, `-é` o `-ú` final en lugar de `-ad`, `-ed` o `-ud`: `caridá` es `caridad`, `virtú` es `virtud`;
 - una `f` o una `h` aspiradas: `juera` es `fuera`, `juevo` es `huevo`.
 
-El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: `na` y `naa` son `nada`, `pos` es `pues`, `to` es `todo`, `mu` es `muy`, `güeno` es `bueno`, `er` es `el`. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y `word` es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (`mu` también es una interjección). Una palabra con mayúscula no es una grafía así: `Julita` es un nombre, no `fulita`.
+Una palabra con mayúscula no es una grafía así: `Trabajao` y `Julita` son nombres, no `trabajado` y `fulita`.
+
+El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: `na` y `naa` son `nada`, `pos` es `pues`, `to` es `todo`, `mu` es `muy`, `güeno` es `bueno`, `er` es `el`. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y `word` es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (`mu` también es una interjección). Como palabras del diccionario, se encuentran con cualquier uso de mayúsculas: `Güeno` también es `bueno`.
 
 === "Código"
 

@@ -103,7 +103,9 @@ A lowercase word that the dictionary has not, even without its accents, may be a
 - a final `-á`, `-é` or `-ú` for `-ad`, `-ed` or `-ud`: `caridá` is `caridad`, `virtú` is `virtud`;
 - an aspirated `f` or `h`: `juera` is `fuera`, `juevo` is `huevo`.
 
-The dictionary also has spellings of words as they sound and common shortened forms: `na` and `naa` are `nada`, `pos` is `pues`, `to` is `todo`, `mu` is `muy`, `güeno` is `bueno`, `er` is `el`. They have the analyses of the standard word with its lemma and features, and `word` is the standard spelling; the context chooses among them and the other words of the same spelling (`mu` is also an interjection). A word with a capital letter is no such spelling: `Julita` is a name, not `fulita`.
+A word with a capital letter is no such spelling: `Trabajao` and `Julita` are names, not `trabajado` and `fulita`.
+
+The dictionary also has spellings of words as they sound and common shortened forms: `na` and `naa` are `nada`, `pos` is `pues`, `to` is `todo`, `mu` is `muy`, `güeno` is `bueno`, `er` is `el`. They have the analyses of the standard word with its lemma and features, and `word` is the standard spelling; the context chooses among them and the other words of the same spelling (`mu` is also an interjection). As words of the dictionary, they are found in any case: `Güeno` is `bueno` too.
 
 === "Code"
 
