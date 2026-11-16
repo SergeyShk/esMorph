@@ -6,8 +6,9 @@ Description:
     checked by SHA-256. Every entry and every form of its table become rows "lemma, part of speech,
     form, features, kind, place" in the terms of Universal Dependencies; the builder joins the rows
     of one lemma and part of speech into a lexeme. The kind is `variant` for a variant of another
-    form with the same features (an old or regional spelling, a form of `vos`) and `_` for a main
-    form; the place is the number of the row in the table of its lexeme, `_` for a row that only
+    form with the same features (an old or regional spelling, a form of `vos`), `old` for an old or
+    nonstandard form of a verb (`trujo` of `traer`), `spoken:` with the standard form of a spelling
+    as the word sounds (`mu` of `muy`) and `_` for a main form; the place is the number of the row in the table of its lexeme, `_` for a row that only
     another entry gives. Only the standard library is needed.
 
 Example:
@@ -123,6 +124,10 @@ VARIANT_TAGS = {
 }
 # Tags of a spelling that shows how a word sounds: `güeno` of `bueno`, `er` of `el`
 SPOKEN_TAGS = {"eye-dialect", "pronunciation-spelling"}
+# Tags of a verb form of an older or a nonstandard language: `trujo` of `traer`, `vido` of `vio`
+OLD_FORM_TAGS = {"archaic", "dated", "nonstandard", "obsolete"}
+# Tags of style among OTHER_VERB_FORM: a form with them alone is still a form of the paradigm
+STYLE_TAGS = OTHER_VERB_FORM & VARIANT_TAGS - {"alternative"}
 ACUTE_OF = str.maketrans("aeiou", "áéíóú")
 MASCULINE_PARTICIPLE = "Gender=Masc|Number=Sing|Tense=Past|VerbForm=Part"
 WORD_SIGNS = {".", "-", "'"}
@@ -635,6 +640,99 @@ def spoken_targets(entry: dict) -> tuple[set[str], bool]:
     return targets, only
 
 
+OldForm = tuple[str, list[tuple[str, dict[str, str]]], str | None]
+
+
+def old_verb_forms(entry: dict) -> Iterator[OldForm]:
+    """
+    Old and nonstandard forms of verbs that the senses of an entry give and its other rows leave
+    out
+
+    Description:
+        A sense with `form_of` and a tag of OLD_FORM_TAGS is a form of its lemma (`trujo` of
+        `traer`, `habemos` of `haber`); a sense with `alt_of` that names a form rather than an
+        infinitive spells that form (`vido` of `vio`, `quisiéredes` of `quisiereis`), whose
+        analyses `rows` finds
+
+    Arguments:
+        entry (dict): Entry of the snapshot
+
+    Returns:
+        Iterator[OldForm]: The form, the lemmas and features of a sense with `form_of` and the form
+        a sense with `alt_of` spells
+    """
+    word = clean(entry["word"])
+    if entry["pos"] != "verb" or not word:
+        return
+    for sense in entry["senses"]:
+        tags = set(sense["tags"])
+        if not tags & OLD_FORM_TAGS or "misspelling" in tags or "Internet" in tags:
+            continue
+        if sense["form_of"]:
+            found = form_of_rows(word, "VERB", tags - STYLE_TAGS, sense["form_of"])
+            yield word, [(lemma, feats) for lemma, _, _, feats, *_ in found], None
+        elif sense["alt_of"]:
+            target = sense["alt_of"][0]
+            if not (INFINITIVE.search(word) and INFINITIVE.search(target)):
+                yield word, [], clean(target)
+
+
+def without_acute(word: str) -> str:
+    """
+    A word without its acute accents, as the dictionary finds it under other accents
+
+    Arguments:
+        word (str): The word
+
+    Returns:
+        str: The word
+    """
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFD", word).replace("\u0301", ""))
+
+
+def old_form_rows(table: set[conventions.Row], old: list[OldForm]) -> set[conventions.Row]:
+    """
+    Rows of the old and nonstandard forms of verbs
+
+    Arguments:
+        table (set[conventions.Row]): Rows of the other senses and tables
+        old (list[OldForm]): The forms of `old_verb_forms`
+
+    Returns:
+        set[conventions.Row]: The rows of the forms whose spelling no word of the table has, even
+        under other accents (`fué` is found as `fue`, `hé` as `he`); a form that spells another
+        one has its verb analyses
+    """
+    spelled = {without_acute(form) for _, _, form, _ in table}
+    verb_forms: dict[str, set[tuple[str, str]]] = {}
+    for lemma, pos, form, text in table:
+        if pos == "VERB":
+            verb_forms.setdefault(form, set()).add((lemma, text))
+    rows = set()
+    for form, found, target in old:
+        if without_acute(form) in spelled:
+            continue
+        analyses = {
+            (lemma, feature_text(feats)) for name, feats in found if (lemma := clean(name))
+        }
+        for lemma, text in analyses | verb_forms.get(target or "", set()):
+            rows.add((lemma, "VERB", form, text))
+    return rows
+
+
+def feature_text(feats: dict[str, str]) -> str:
+    """
+    Features in CoNLL-U notation
+
+    Arguments:
+        feats (dict[str, str]): The features
+
+    Returns:
+        str: The features sorted by name, `_` for none
+    """
+    return "|".join(f"{name}={feats[name]}" for name in sorted(feats, key=str.lower)) or "_"
+
+
 def snapshot_entries(path: Path) -> Iterator[dict]:
     """
     Entries of the snapshot
@@ -691,11 +789,15 @@ def normalized_lemma(lemma: str, pos: str, participles: dict[str, str]) -> str:
 def rows(
     path: Path,
 ) -> tuple[
-    set[conventions.Row], set[Variant], dict[conventions.Row, int], set[conventions.Spoken]
+    set[conventions.Row],
+    set[Variant],
+    dict[conventions.Row, int],
+    set[conventions.Spoken],
+    set[str],
 ]:
     """
-    Rows of the table, the variants among them, their places in the tables of their lexemes and
-    the spellings of words as they sound
+    Rows of the table, the variants among them, their places in the tables of their lexemes, the
+    spellings of words as they sound and the old forms of verbs
 
     Description:
         A row is a variant if the table of its lexeme says so, or, without such a table, if all
@@ -711,10 +813,10 @@ def rows(
 
     Returns:
         tuple[set[conventions.Row], set[Variant], dict[conventions.Row, int],
-        set[conventions.Spoken]]: Lemma, part of speech, form, features in CoNLL-U notation;
-        lemma, part of speech, form and features of the variants, `None` for any lemma and
-        features; the places of the rows by their lemmas of the conventions; the spellings of
-        words as they sound
+        set[conventions.Spoken], set[str]]: Lemma, part of speech, form, features in CoNLL-U
+        notation; lemma, part of speech, form and features of the variants, `None` for any lemma
+        and features; the places of the rows by their lemmas of the conventions; the spellings of
+        words as they sound; the old and nonstandard forms of verbs of `old_form_rows`
     """
     entries = {entry["word"] for entry in snapshot_entries(path)}
     lower_entries = {word for word in entries if word == word.lower()}
@@ -729,6 +831,7 @@ def rows(
     # The words that the entries of a word and part of speech spell as they sound, and whether they
     # have no other sense
     spoken: dict[tuple[str, str], tuple[set[str], bool]] = {}
+    old: list[OldForm] = []
     for entry in snapshot_entries(path):
         headword = (entry["word"], entry["pos"])
         etymology = etymologies.get(headword, 0)
@@ -738,19 +841,22 @@ def rows(
             targets, only = spoken_targets(entry)
             known, known_only = spoken.get((word, pos), (set(), True))
             spoken[(word, pos)] = (known | targets, known_only and only)
+        old.extend(old_verb_forms(entry))
         for lemma, pos, form, feats, variant, place in entry_rows(entry, entries, lower_entries):
             if place is not None:
                 place += etymology * TABLE_ROWS
             lemma, form = clean(lemma), clean(form)
             if lemma and form:
-                text = "|".join(f"{name}={feats[name]}" for name in sorted(feats, key=str.lower))
-                row = (lemma, pos, form, text or "_")
+                text = feature_text(feats)
+                row = (lemma, pos, form, text)
                 table.add(row)
                 kinds.setdefault(row, set()).add((variant, place is not None))
                 if place is not None:
                     places[row] = min(place, places.get(row, place))
                 if pos == "VERB" and text == MASCULINE_PARTICIPLE and lemma != form:
                     participles.setdefault(form, lemma)
+    old_rows = old_form_rows(table, old)
+    table |= old_rows
     # Variants and places by the lemmas of the conventions: a verb without `-se`
     merged: dict[Variant, set[tuple[bool, bool]]] = {}
     ranks: dict[conventions.Row, int] = {}
@@ -787,7 +893,7 @@ def rows(
         for (word, pos), (targets, only) in spoken.items()
         for target in targets
     }
-    return table, variants, ranks, pairs
+    return table, variants, ranks, pairs, {form for _, _, form, _ in old_rows}
 
 
 def kind(
@@ -795,6 +901,7 @@ def kind(
     variants: set[Variant],
     closed: set[conventions.Row],
     spoken: dict[conventions.Row, str],
+    old: set[str],
 ) -> str:
     """
     Kind of a row of the export
@@ -805,11 +912,13 @@ def kind(
         closed (set[conventions.Row]): Rows of the table of closed classes
         spoken (dict[conventions.Row, str]): Rows of the spoken spellings and the forms they stand
             for
+        old (set[str]): The old and nonstandard forms of verbs
 
     Returns:
-        str: `spoken:` and the form of a spoken spelling, `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative
-        pronoun of the table with an accent is a variant of the one without, which the spelling of
-        2010 prefers: `éste` of `este`
+        str: `spoken:` and the form of a spoken spelling, `old` for an old form of a verb,
+        `variant` or `_`; an auxiliary is a variant as its verb, and a demonstrative pronoun of the
+        table with an accent is a variant of the one without, which the spelling of 2010 prefers:
+        `éste` of `este`
     """
     if row in spoken:
         return f"spoken:{spoken[row]}"
@@ -817,6 +926,8 @@ def kind(
     if pos == "PRON" and lemma in DEMONSTRATIVES and row in closed:
         return "variant" if set(form) & ACUTE else "_"
     pos = "VERB" if pos == "AUX" else pos
+    if pos == "VERB" and form in old:
+        return "old"
     return "variant" if {(lemma, pos, form, feats), (None, pos, form, None)} & variants else "_"
 
 
@@ -848,7 +959,7 @@ def export(output: Path) -> int:
         int: Number of rows
     """
     name, url, digest = SNAPSHOT
-    table, variants, ranks, pairs = rows(download(url, output / "raw" / name, digest))
+    table, variants, ranks, pairs, old = rows(download(url, output / "raw" / name, digest))
     closed = conventions.closed_classes()
     table, spellings = conventions.apply(table, closed)
     # A spelling of a word of the table that the table has not is a variant: `güeno` of `bueno`
@@ -856,7 +967,7 @@ def export(output: Path) -> int:
     table, spoken = conventions.spoken(table, pairs, conventions.spellings())
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
-            "\t".join((*row, kind(row, variants, closed, spoken), rank(row, ranks))) + "\n"
+            "\t".join((*row, kind(row, variants, closed, spoken, old), rank(row, ranks))) + "\n"
             for row in sorted(table | spoken.keys())
         )
     meta = {"source": "Wiktionary", "snapshot": name, "sha256": digest, "license": LICENSE}

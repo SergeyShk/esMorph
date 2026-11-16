@@ -43,6 +43,7 @@ Las categorías gramaticales, los rasgos y los lemas siguen las directrices de [
 - `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` y `saber` tienen análisis `AUX` y `VERB`; `hay` es ante todo el verbo `haber`;
 - un participio es un verbo con el infinitivo como lema (`VerbForm=Part`, `Tense=Past`) y un adjetivo con el masculino singular como lema (`VerbForm=Part` sin `Tense`);
 - los verbos no llevan `-se` en el lema: `quejarse` es `quejar` con el clítico `se`;
+- las formas antiguas y no estándar de un verbo son sus variantes: `trujo` es `traer`, `vido` es `ver`, `habemos` es `haber`;
 - el condicional y el imperativo no tienen `Tense`; un nombre propio no tiene rasgos, y su lema lleva mayúscula: `madrid` y `Madrid` son `Madrid`, `PSOE` sigue siendo `PSOE`;
 - un adjetivo en `-ísimo` es su propio lema con `Degree=Abs`.
 

@@ -43,6 +43,7 @@ Parts of speech, features and lemmas follow the [Universal Dependencies](https:/
 - `ser`, `estar`, `haber`, `poder`, `deber`, `soler`, `querer` and `saber` have both `AUX` and `VERB` analyses; `hay` is first of all the verb `haber`;
 - a participle is a verb with the infinitive as the lemma (`VerbForm=Part`, `Tense=Past`) and an adjective with the masculine singular as the lemma (`VerbForm=Part` without `Tense`);
 - verbs have no `-se` in the lemma: `quejarse` is `quejar` with the clitic `se`;
+- older and nonstandard forms of a verb are its variants: `trujo` is `traer`, `vido` is `ver`, `habemos` is `haber`;
 - the conditional and the imperative have no `Tense`; a proper name has no features, and its lemma has a capital letter: `madrid` and `Madrid` are `Madrid`, `PSOE` stays `PSOE`;
 - an adjective in `-ísimo` is its own lemma with `Degree=Abs`.
 

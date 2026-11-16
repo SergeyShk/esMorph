@@ -26,8 +26,12 @@ pub(crate) const LEMMA_ONLY: u32 = 1 << 17;
 /// `muy`, `güeno` of `bueno`), which is its analysis; inflection and the forms of the lexeme do not
 /// take it
 pub(crate) const SPOKEN: u32 = 1 << 18;
+/// The flag of a variant of a table: an old or a nonstandard form (`trujo` of `traer`), which
+/// inflection gives only from such a form, while a variant of the standard language (`hablás`)
+/// gives another one or a main form
+pub(crate) const OLD: u32 = 1 << 19;
 /// The first bit of the place in its table of the form that a spoken spelling stands for
-pub(crate) const SPOKEN_FORM_SHIFT: u32 = 19;
+pub(crate) const SPOKEN_FORM_SHIFT: u32 = 20;
 /// The most places of a table that a spoken spelling refers to
 #[cfg(any(test, feature = "build"))]
 pub(crate) const MAX_SPOKEN_FORM: usize = (1 << (32 - SPOKEN_FORM_SHIFT)) - 1;
@@ -37,7 +41,7 @@ pub(crate) const UD_BITS: u32 = 0xFFFF;
 pub(crate) const MAX_ENDING: usize = 5;
 /// Largest dictionary file: offsets into records and variants are of 32 bits
 pub(crate) const MAX_FILE: u64 = 1 << 31;
-const VERSION: u32 = 6;
+const VERSION: u32 = 7;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
 const SECTIONS: usize = 14;
@@ -677,13 +681,13 @@ pub(crate) mod tests {
             assert!(layout(broken, true).is_err());
         }
         let mut other = data.clone();
-        other[8] = 5;
+        other[8] = 6;
         assert!(
             layout(&other, true)
                 .err()
                 .unwrap()
                 .to_string()
-                .contains("format version 5, supported 6: build the dictionary again")
+                .contains("format version 6, supported 7: build the dictionary again")
         );
         let mut foreign = data.clone();
         foreign[0] = b'X';

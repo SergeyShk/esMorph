@@ -831,6 +831,41 @@ def test_old_spellings_and_imperatives_with_se(morph):
     assert (dense.lemma, dense.words) == ("dar", ("den", "se"))
 
 
+@pytest.mark.parametrize(
+    ("token", "lemma", "feats"),
+    [
+        ("trujo", "traer", {"Person": "3", "Tense": "Past"}),
+        ("vido", "ver", {"Person": "3", "Tense": "Past"}),
+        ("habemos", "haber", {"Number": "Plur", "Person": "1", "Tense": "Pres"}),
+        ("quisiéredes", "querer", {"Number": "Plur", "Person": "2", "Tense": "Fut"}),
+    ],
+)
+def test_old_forms_of_verbs(morph, token, lemma, feats):
+    analysis = morph.analyze(token)[0]
+    assert (analysis.lemma, analysis.word, analysis.source) == (lemma, token, "dictionary")
+    assert feats.items() <= analysis.feats.items()
+
+
+def test_old_forms_of_verbs_are_variants(morph):
+    # An old form follows the standard paradigm and gives old forms; a main form and a form of vos
+    # never give them
+    words = [form.word for form in verb(morph, "traer").forms()]
+    assert words.index("trujo") > words.index("traigan")
+    assert verb(morph, "trajeron").inflect(Number="Sing") == "trajo"
+    assert verb(morph, "trujo").inflect(Number="Plur") == "trujeron"
+    assert verb(morph, "podés").inflect(Number="Plur") == "podéis"
+    assert verb(morph, "sabés").inflect(Person="1") == "sé"
+    # A form that only differs in accents is found under them: fué is fue
+    assert morph.analyze("fué")[0].word == "fue"
+
+
+def test_own_verb_takes_no_old_forms_of_its_sample():
+    own = Analyzer(words={"chuntraer": "traer"})
+    assert own.analyze("chuntrajo")[0].lemma == "chuntraer"
+    assert own.analyze("chuntraés")[0].lemma == "chuntraer"
+    assert own.analyze("chuntrujo")[0].source == "guess"
+
+
 def test_frequent_verb_of_a_form_goes_first(morph):
     # vengo is a form of venir and of the rare vengar
     assert morph.analyze("vengo")[0].lemma == "venir"

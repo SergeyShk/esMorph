@@ -7,7 +7,7 @@ use std::sync::Arc;
 use super::{Analysis, Dictionary, Entry, Lexeme, Source, analyses_at, normalized};
 use crate::Error;
 use crate::alphabet::{Key, MAX_KEY};
-use crate::format::{LEMMA_ONLY, SPOKEN, VARIANT};
+use crate::format::{LEMMA_ONLY, OLD, SPOKEN, VARIANT};
 
 /// Sample of an own word: a word of the dictionary in the same form as the own word (mostly the
 /// lemma) and the UD part of speech if the sample has lexemes of several (`bajo` is ADJ, ADP, ADV,
@@ -223,8 +223,9 @@ impl Dictionary {
                 continue;
             }
             lexemes.push((entry.table, lexeme.stem));
+            // An own verb takes the forms of `vos`, not the old ones (`truje` of `traer`)
             let skipped = match pos(analysis) {
-                "VERB" | "AUX" => LEMMA_ONLY | SPOKEN,
+                "VERB" | "AUX" => LEMMA_ONLY | SPOKEN | OLD,
                 _ => LEMMA_ONLY | SPOKEN | VARIANT,
             };
             for form in 0..lexeme.cells.len() {
