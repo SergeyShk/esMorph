@@ -58,7 +58,7 @@ O con [uv](https://docs.astral.sh/uv/):
 uv add esmorph
 ```
 
-Hay paquetes precompilados para Linux (también Alpine), macOS y Windows y para Python 3.14t sin GIL; para instalarlos no hace falta Rust, y el diccionario va en el paquete. En otras plataformas pip compila el paquete desde el código fuente, lo que requiere [Rust](https://www.rust-lang.org/tools/install) 1.88 o superior. Más detalles en la página de [instalación](https://sergeyshk.github.io/esMorph/es/installation/).
+Hay paquetes precompilados para Linux (también Alpine), macOS y Windows y para Python 3.14t y 3.15t sin GIL; para instalarlos no hace falta Rust, y el diccionario va en el paquete. En otras plataformas pip compila el paquete desde el código fuente, lo que requiere [Rust](https://www.rust-lang.org/tools/install) 1.88 o superior. Más detalles en la página de [instalación](https://sergeyshk.github.io/esMorph/es/installation/).
 
 Para Rust está el crate [`esmorph`](https://crates.io/crates/esmorph) con el diccionario (`cargo add esmorph`; la documentación está en [docs.rs](https://docs.rs/esmorph)).
 

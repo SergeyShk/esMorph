@@ -35,7 +35,7 @@ make docs-build  # mkdocs build --strict, if the documentation changed
 
 The licenses of the Rust crates built into the module are in `THIRD-PARTY-NOTICES.txt` and go into the wheels; after a change of `Cargo.lock` the file is written again with `uv run python scripts/notices.py`, otherwise `test_third_party_notices` fails.
 
-CI runs the same on Python 3.11-3.14 and the free-threaded 3.14t (Linux) and on Windows and macOS for one Python version, and checks the build on the minimum Rust version 1.88. When raising the minimum Rust version, change it in `rust-version` in `Cargo.toml`, in the `msrv` job of `ci.yml` and on the installation pages of the documentation and in the README.
+CI runs the same on Python 3.11-3.15 and the free-threaded 3.14t and 3.15t (Linux) and on Windows and macOS for one Python version, and checks the build on the minimum Rust version 1.88. When raising the minimum Rust version, change it in `rust-version` in `Cargo.toml`, in the `msrv` job of `ci.yml` and on the installation pages of the documentation and in the README.
 
 ## What a pull request is expected to contain
 

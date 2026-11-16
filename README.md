@@ -58,7 +58,7 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv add esmorph
 ```
 
-Wheels are built for Linux (Alpine included), macOS and Windows and for the free-threaded Python 3.14t; Rust is not needed to install them, and the dictionary is in the package. On other platforms pip builds the package from source, which requires [Rust](https://www.rust-lang.org/tools/install) 1.88 or newer. See the [Installation](https://sergeyshk.github.io/esMorph/installation/) page.
+Wheels are built for Linux (Alpine included), macOS and Windows and for the free-threaded Python 3.14t and 3.15t; Rust is not needed to install them, and the dictionary is in the package. On other platforms pip builds the package from source, which requires [Rust](https://www.rust-lang.org/tools/install) 1.88 or newer. See the [Installation](https://sergeyshk.github.io/esMorph/installation/) page.
 
 For Rust there is the crate [`esmorph`](https://crates.io/crates/esmorph) with the dictionary (`cargo add esmorph`; the documentation is on [docs.rs](https://docs.rs/esmorph)).
 
