@@ -32,7 +32,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 | `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
 | `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
 | `prob` | `float` | Share of the analysis among the analyses of the word; it sums to 1 over all of them. From [`analyze_sentence`](analyzer.md#analyze_sentence) - the score of the context model in the sentence |
-| `words` | `tuple[str, ...]` | Words of the token: a verb and its clitics, the words of a contraction (`del`, `al`, the older `desta`), or the word itself; the analysis describes the first of them |
+| `words` | `tuple[str, ...]` | Words of the token: a verb and its clitics, the words of a contraction (`del`, `al`, the older `desta`), a number and its sign or unit (`60%`), or the word itself; the analysis describes the first of them |
 | `source` | `str` | Where the analysis comes from: `"dictionary"` - the word form is in the dictionary, `"clitics"` - a verb of the dictionary with [clitics](#clitics), `"rule"` - an [analysis by rule](#rules), `"guess"` - a [guessed analysis](#guess) of an unknown word |
 
 ## Parts of speech and features { #ud }
@@ -102,7 +102,7 @@ Case does not matter for finding a word in the dictionary, though a token with a
 A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
 
 - a sign of punctuation is `PUNCT` with the `PunctType` of its signs if they are of one kind, and `PunctSide` for brackets and question and exclamation marks; a symbol such as `%`, `€` or `²` is `SYM`;
-- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too, also with a sign, a fraction, a power or spaces between thousands (`-5`, `37½`, `10²`, `10 000`); the lemma drops the periods between thousands (`10.000` is `10000`) and a unit after the number (`500cc` is `500`);
+- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too, also with a sign, a fraction, a power or spaces between thousands (`-5`, `37½`, `10²`, `10 000`); the lemma drops the periods between thousands (`10.000` is `10000`); a number with a percent sign or a unit is two words, and the analysis is that of the number (`60%` is `60` and `%`, `500cc` is `500` and `cc`);
 - an ordinal number in digits is `ADJ` with `NumForm=Digit|NumType=Ord`, its gender and number, and the masculine singular as the lemma: `2.ª` is `2.º`;
 - a Roman numeral is `NUM` with `NumForm=Roman`, less often a name; in lower case it is a numeral only: `xii`;
 - a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`;

@@ -38,7 +38,7 @@ class Analysis:
 
     @property
     def words(self) -> tuple[str, ...]:
-        """Words of the token: a verb and its clitics, the words of a contraction, or the word"""
+        """Words of the token: a verb and clitics, a contraction, a number and sign, or the word"""
 
     @property
     def source(self) -> str:

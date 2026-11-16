@@ -32,7 +32,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
 | `prob` | `float` | Parte del análisis entre los análisis de la palabra; la suma de todos es 1. En [`analyze_sentence`](analyzer.md#analyze_sentence) - la puntuación del modelo de contexto en la oración |
-| `words` | `tuple[str, ...]` | Palabras del token: un verbo y sus clíticos, las palabras de una contracción (`del`, `al`, la antigua `desta`) o la propia palabra; el análisis describe la primera |
+| `words` | `tuple[str, ...]` | Palabras del token: un verbo y sus clíticos, las palabras de una contracción (`del`, `al`, la antigua `desta`), un número y su signo o unidad (`60%`) o la propia palabra; el análisis describe la primera |
 | `source` | `str` | De dónde viene el análisis: `"dictionary"` - la forma está en el diccionario, `"clitics"` - un verbo del diccionario con [clíticos](#clitics), `"rule"` - un [análisis por regla](#rules), `"guess"` - un [análisis estimado](#guess) de una palabra desconocida |
 
 ## Categorías y rasgos { #ud }
@@ -102,7 +102,7 @@ Las mayúsculas no importan para buscar una palabra en el diccionario, aunque un
 Un token que el diccionario no tiene recibe los análisis de unas reglas, con `source` igual a `"rule"` y `word` tal como está escrito:
 
 - un signo de puntuación es `PUNCT` con el `PunctType` de sus signos si son de una misma clase, y `PunctSide` para los paréntesis, los corchetes, las llaves y los signos de interrogación y de exclamación; un símbolo como `%`, `€` o `²` es `SYM`;
-- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año, también con signo, fracción, potencia o espacios entre los millares (`-5`, `37½`, `10²`, `10 000`); el lema quita los puntos entre los millares (`10.000` es `10000`) y una unidad tras el número (`500cc` es `500`);
+- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año, también con signo, fracción, potencia o espacios entre los millares (`-5`, `37½`, `10²`, `10 000`); el lema quita los puntos entre los millares (`10.000` es `10000`); un número con signo de porcentaje o con unidad son dos palabras, y el análisis es el del número (`60%` es `60` y `%`, `500cc` es `500` y `cc`);
 - un número ordinal en cifras es `ADJ` con `NumForm=Digit|NumType=Ord`, su género y su número, y el masculino singular como lema: `2.ª` es `2.º`;
 - un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre; en minúsculas es solo un numeral: `xii`;
 - un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`;

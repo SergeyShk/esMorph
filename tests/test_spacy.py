@@ -228,6 +228,13 @@ def test_extension(nlp):
     assert doc[4]._.esmorph is None
 
 
+def test_number_with_a_sign(nlp):
+    # The tokenizer keeps the percent sign with the number: the token is the number
+    token = nlp("Subió un 60% ayer.")[2]
+    assert (token.text, token.pos_, token.lemma_) == ("60%", "NUM", "60")
+    assert token._.esmorph.words == ("60", "%")
+
+
 def test_analyzer_cache_is_bounded(tmp_path):
     import esmorph.spacy
 
