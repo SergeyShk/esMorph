@@ -831,6 +831,29 @@ def test_old_spellings_and_imperatives_with_se(morph):
     assert (dense.lemma, dense.words) == ("dar", ("den", "se"))
 
 
+@pytest.mark.parametrize(
+    ("token", "lemma", "feats"),
+    [
+        ("trujo", "traer", {"Person": "3", "Tense": "Past"}),
+        ("vido", "ver", {"Person": "3", "Tense": "Past"}),
+        ("habemos", "haber", {"Number": "Plur", "Person": "1", "Tense": "Pres"}),
+        ("quisiéredes", "querer", {"Number": "Plur", "Person": "2", "Tense": "Fut"}),
+    ],
+)
+def test_old_forms_of_verbs(morph, token, lemma, feats):
+    analysis = morph.analyze(token)[0]
+    assert (analysis.lemma, analysis.word, analysis.source) == (lemma, token, "dictionary")
+    assert feats.items() <= analysis.feats.items()
+
+
+def test_old_forms_of_verbs_are_variants(morph):
+    # The standard paradigm keeps its forms, an old form gives old ones
+    assert verb(morph, "trajeron").inflect(Number="Sing") == "trajo"
+    assert verb(morph, "trujo").inflect(Number="Plur") == "trujeron"
+    # A form that only differs in accents is found under them: fué is fue
+    assert morph.analyze("fué")[0].word == "fue"
+
+
 def test_frequent_verb_of_a_form_goes_first(morph):
     # vengo is a form of venir and of the rare vengar
     assert morph.analyze("vengo")[0].lemma == "venir"
