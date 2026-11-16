@@ -70,8 +70,9 @@ Los tokens, sus palabras y los inicios de oración según las convenciones de Un
 | :-------- | :--- | :---------- | :---------- |
 | `dictionary` | `str` | `None` | Ruta al archivo del diccionario; por defecto, el diccionario del paquete |
 | `context` | `bool` | `True` | Elegir el análisis por los tokens de alrededor; `False` - el análisis más probable de la forma, como con [`analyze`](analyzer.md#analyze) |
+| `words` | `dict` | `None` | [Palabras propias](analyzer.md#words) y sus modelos; un modelo con su categoría es una lista: `{"cajo": ["bajo", "NOUN"]}` |
 
-`nlp.evaluate` y `spacy evaluate` evalúan el componente como al morfologizador y al lematizador: `pos_acc`, `morph_acc`, `morph_per_feat` y `lemma_acc`. `spacy package` no encuentra esmorph entre los requisitos de una cadena: añada `"requirements": ["esmorph>=0.3,<0.4"]` a su `meta.json` antes de empaquetarla. El parámetro `dictionary` guarda una ruta, así que un diccionario propio debe estar en esa ruta donde se instale el paquete.
+`nlp.evaluate` y `spacy evaluate` evalúan el componente como al morfologizador y al lematizador: `pos_acc`, `morph_acc`, `morph_per_feat` y `lemma_acc`. `spacy package` no encuentra esmorph entre los requisitos de una cadena: añada `"requirements": ["esmorph>=0.4,<0.5"]` a su `meta.json` antes de empaquetarla. El parámetro `dictionary` guarda una ruta, así que un diccionario propio debe estar en esa ruta donde se instale el paquete.
 
 === "Código"
 
@@ -89,7 +90,7 @@ Los tokens, sus palabras y los inicios de oración según las convenciones de Un
 
 ## Análisis de esMorph { #extension }
 
-`token._.esmorph` es el [análisis](analysis.md) de esMorph con el lema, la categoría y los rasgos del token, según el diccionario del componente que anotó el documento: da las palabras del token y las [formas de la palabra](inflection.md). Su probabilidad no tiene en cuenta el contexto. Si la forma no tiene ese análisis - por ejemplo, otro componente cambió la anotación del token - el valor es `None`. El documento guarda en `user_data` la ruta de un diccionario distinto del del paquete, así que `DocBin(store_user_data=True)` y `span.as_doc(copy_user_data=True)` la conservan, mientras que `Doc.from_docs` no la traslada.
+`token._.esmorph` es el [análisis](analysis.md) de esMorph con el lema, la categoría y los rasgos del token, según el diccionario del componente que anotó el documento: da las palabras del token y las [formas de la palabra](inflection.md). Su probabilidad no tiene en cuenta el contexto. Si la forma no tiene ese análisis - por ejemplo, otro componente cambió la anotación del token - el valor es `None`. El documento guarda en `user_data` la ruta de un diccionario distinto del del paquete, así que `DocBin(store_user_data=True)` y `span.as_doc(copy_user_data=True)` la conservan, mientras que `Doc.from_docs` no la traslada. El documento de un componente con palabras propias guarda un resumen de ellas, y `token._.esmorph` conoce las palabras en un proceso que tiene un componente con ellas.
 
 === "Código"
 

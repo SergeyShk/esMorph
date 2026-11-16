@@ -15,7 +15,7 @@
 
     ---
 
-    Lemma, UD part of speech and features, probability of the analysis; the analysis of a sentence in context, lists of words, lemmatization and documents of the anySeg segmenter without the GIL
+    Lemma, UD part of speech and features, probability of the analysis; the analysis of a sentence in context, lists of words, lemmatization and documents of the anySeg segmenter without the GIL; own words by a sample word
 
     [:octicons-arrow-right-24: Analyzer](analyzer.md)
 
@@ -23,7 +23,7 @@
 
     ---
 
-    Parts of speech, features and lemmas by the UD guidelines and the AnCora conventions; verbs with clitics, numbers, signs and names by rules, unknown words by their ending
+    Parts of speech, features and lemmas by the UD guidelines and the AnCora conventions; verbs with clitics, numbers, signs and names by rules, colloquial spellings by the standard word, unknown words by their ending
 
     [:octicons-arrow-right-24: Word analysis](analysis.md)
 

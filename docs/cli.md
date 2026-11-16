@@ -21,12 +21,23 @@ decir yo el verdad de el caso .
 | `-f`, `--format` | `lemmas` | [Output format](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Input](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | the package dictionary | An esMorph dictionary file, checked whole as with [`verify=True`](analyzer.md#parameters) |
+| `-w`, `--words` | | A file of [own words](analyzer.md#words): per line a word and its sample separated by a tab, and the part of speech if the sample has lexemes of several; the option may repeat |
 | `--no-context` | | Order the analyses of a word as [`analyze`](analyzer.md#analyze) does, without the context model: faster; for a list of words and a dictionary without a model |
 | `-o`, `--output` | the standard output | The result file; `-` is the standard output |
 | `-h`, `--help` | | Show the help |
 | `-V`, `--version` | | Show the version |
 
 Files are read one after another; without files and in place of `-` the standard input is read. The input is in UTF-8: a file in another encoding (Latin-1, cp1252, UTF-16) is not analyzed, unless its first letter with an accent comes after the first 64 KiB: then the text before that line is analyzed up to its last blank line. A single line with invalid bytes is analyzed with U+FFFD in their place. An option value is written separately or attached: `-f conllu`, `-fconllu`, `--format=conllu`. Text is analyzed by paragraphs: a paragraph is written as soon as a blank line or the end of the input closes it - on a terminal at once, and to a pipe or a file whenever the command waits for the next input line, so it can be kept open and fed text paragraph by paragraph. The inputs `tokens` and `conllu` are written by sentences.
+
+A file of own words is in UTF-8; blank lines and lines that start with `#` are skipped, and spaces around a field are ignored:
+
+```
+# new verbs
+tiktokear	bloguear
+cajo	bajo	NOUN
+```
+
+With it, `esmorph -w words.tsv text.txt` analyzes `tiktokeó` as a form of `tiktokear`, as [`Analyzer(words=...)`](analyzer.md#words) does.
 
 In Windows PowerShell 5.1 the `>` redirection and a pipeline (`Get-Content text.txt | esmorph`) corrupt letters with accents: pass the file as an argument and write the result with the `-o` option (in PowerShell 7 they work too). Text passed with `echo` in cmd comes in the console encoding: run `chcp 65001` first.
 
@@ -133,7 +144,7 @@ echo "Vino ayer." | esmorph -f jsonl
 | :--- | :--- |
 | 0 | Success, including when the output is closed before the end (`esmorph text.txt \| head`) |
 | 1 | An input file is missing, cannot be read or is not in UTF-8, a line is not in UTF-8 (it is analyzed with U+FFFD), an invalid CoNLL-U sentence; the rest is still analyzed |
-| 1 | The dictionary cannot be read or is damaged, it has no context model and `--no-context` is not given, the output file cannot be created, the output file or the standard output is an input file or the dictionary; nothing is analyzed |
+| 1 | The dictionary cannot be read or is damaged, it has no context model and `--no-context` is not given, a file of own words cannot be read or has a wrong line (the message gives the file and the line), the output file cannot be created, the output file or the standard output is an input file, the dictionary or a file of own words; nothing is analyzed |
 | 1 | A write error, a closed standard output (the command installed with cargo writes it to /dev/null and ends with 0); the analysis stops |
 | 2 | Invalid options |
 

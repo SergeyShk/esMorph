@@ -97,6 +97,33 @@ Las mayúsculas no importan para buscar una palabra en el diccionario, aunque un
     ['camión', 'camión', 'pingüino']
     ```
 
+Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tildes, puede ser una grafía coloquial de una palabra del diccionario. Una palabra así recibe los análisis de esa palabra, y `word` es su grafía estándar. Las grafías son:
+
+- un participio sin su `d`: `trabajao` es `trabajado`, `sío` es `sido`; su tilde no es una tilde perdida, así que `perdío` es `perdido`, no `perdió`;
+- una `-á`, `-é` o `-ú` final en lugar de `-ad`, `-ed` o `-ud`: `caridá` es `caridad`, `virtú` es `virtud`;
+- una `f` o una `h` aspiradas: `juera` es `fuera`, `juevo` es `huevo`.
+
+Una palabra con mayúscula no es una grafía así: `Trabajao` y `Julita` son nombres, no `trabajado` y `fulita`.
+
+El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: `na` y `naa` son `nada`, `pos` es `pues`, `to` es `todo`, `mu` es `muy`, `güeno` es `bueno`, `er` es `el`. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y `word` es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (`mu` también es una interjección). Como palabras del diccionario, se encuentran con cualquier uso de mayúsculas: `Güeno` también es `bueno`.
+
+=== "Código"
+
+    ``` python
+    [
+        (analysis.word, analysis.lemma)
+        for analysis in (
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+        )
+    ]
+    ```
+
+=== "Resultado"
+
+    ```
+    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuera', 'fuera'), ('nada', 'nada'), ('el', 'el')]
+    ```
+
 ## Tokens fuera del diccionario { #rules }
 
 Un token que el diccionario no tiene recibe los análisis de unas reglas, con `source` igual a `"rule"` y `word` tal como está escrito:

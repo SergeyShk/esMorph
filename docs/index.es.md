@@ -15,7 +15,7 @@
 
     ---
 
-    Lema, categoría y rasgos de UD, probabilidad del análisis; el análisis de una oración en contexto, listas de palabras, lematización y documentos del segmentador anySeg sin el GIL
+    Lema, categoría y rasgos de UD, probabilidad del análisis; el análisis de una oración en contexto, listas de palabras, lematización y documentos del segmentador anySeg sin el GIL; palabras propias por una palabra modelo
 
     [:octicons-arrow-right-24: Analizador](analyzer.md)
 
@@ -23,7 +23,7 @@
 
     ---
 
-    Categorías, rasgos y lemas según las directrices de UD y las convenciones de AnCora; verbos con clíticos, números, signos y nombres por reglas, palabras desconocidas por su terminación
+    Categorías, rasgos y lemas según las directrices de UD y las convenciones de AnCora; verbos con clíticos, números, signos y nombres por reglas, grafías coloquiales por la palabra estándar, palabras desconocidas por su terminación
 
     [:octicons-arrow-right-24: Análisis de palabras](analysis.md)
 

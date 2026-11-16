@@ -70,8 +70,9 @@ Tokens, their words and sentence starts by the conventions of Universal Dependen
 | :-------- | :--- | :------ | :---------- |
 | `dictionary` | `str` | `None` | Path to the dictionary file; by default - the dictionary of the package |
 | `context` | `bool` | `True` | Choose the analysis by the tokens around; `False` - the most probable analysis of the word form, as with [`analyze`](analyzer.md#analyze) |
+| `words` | `dict` | `None` | [Own words](analyzer.md#words) and their samples; a sample with its part of speech is a list: `{"cajo": ["bajo", "NOUN"]}` |
 
-`nlp.evaluate` and `spacy evaluate` score the component as the morphologizer and the lemmatizer: `pos_acc`, `morph_acc`, `morph_per_feat` and `lemma_acc`. `spacy package` does not find esmorph among the requirements of a pipeline: add `"requirements": ["esmorph>=0.3,<0.4"]` to its `meta.json` before packaging. The parameter `dictionary` keeps a path, so a dictionary of its own must be at that path where the package is installed.
+`nlp.evaluate` and `spacy evaluate` score the component as the morphologizer and the lemmatizer: `pos_acc`, `morph_acc`, `morph_per_feat` and `lemma_acc`. `spacy package` does not find esmorph among the requirements of a pipeline: add `"requirements": ["esmorph>=0.4,<0.5"]` to its `meta.json` before packaging. The parameter `dictionary` keeps a path, so a dictionary of its own must be at that path where the package is installed.
 
 === "Code"
 
@@ -89,7 +90,7 @@ Tokens, their words and sentence starts by the conventions of Universal Dependen
 
 ## esMorph analysis { #extension }
 
-`token._.esmorph` is the esMorph [analysis](analysis.md) with the lemma, the part of speech and the features of the token, by the dictionary of the component that annotated the document: it gives the words of the token and the [forms of the word](inflection.md). Its probability does not take the context into account. If the word form has no such analysis - for example, another component changed the annotation of the token - the value is `None`. A document keeps the path of a dictionary other than the one of the package in `user_data`, so `DocBin(store_user_data=True)` and `span.as_doc(copy_user_data=True)` preserve it, while `Doc.from_docs` does not carry it over.
+`token._.esmorph` is the esMorph [analysis](analysis.md) with the lemma, the part of speech and the features of the token, by the dictionary of the component that annotated the document: it gives the words of the token and the [forms of the word](inflection.md). Its probability does not take the context into account. If the word form has no such analysis - for example, another component changed the annotation of the token - the value is `None`. A document keeps the path of a dictionary other than the one of the package in `user_data`, so `DocBin(store_user_data=True)` and `span.as_doc(copy_user_data=True)` preserve it, while `Doc.from_docs` does not carry it over. A document of a component with own words keeps a digest of them, and `token._.esmorph` knows the words in a process that has a component with them.
 
 === "Code"
 

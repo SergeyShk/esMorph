@@ -97,6 +97,33 @@ Case does not matter for finding a word in the dictionary, though a token with a
     ['camión', 'camión', 'pingüino']
     ```
 
+A lowercase word that the dictionary has not, even without its accents, may be a colloquial spelling of a word of the dictionary. Such a word gets the analyses of that word, and `word` is its standard spelling. The spellings are:
+
+- a participle without its `d`: `trabajao` is `trabajado`, `sío` is `sido`; its accent is not lost, so `perdío` is `perdido`, not `perdió`;
+- a final `-á`, `-é` or `-ú` for `-ad`, `-ed` or `-ud`: `caridá` is `caridad`, `virtú` is `virtud`;
+- an aspirated `f` or `h`: `juera` is `fuera`, `juevo` is `huevo`.
+
+A word with a capital letter is no such spelling: `Trabajao` and `Julita` are names, not `trabajado` and `fulita`.
+
+The dictionary also has spellings of words as they sound and common shortened forms: `na` and `naa` are `nada`, `pos` is `pues`, `to` is `todo`, `mu` is `muy`, `güeno` is `bueno`, `er` is `el`. They have the analyses of the standard word with its lemma and features, and `word` is the standard spelling; the context chooses among them and the other words of the same spelling (`mu` is also an interjection). As words of the dictionary, they are found in any case: `Güeno` is `bueno` too.
+
+=== "Code"
+
+    ``` python
+    [
+        (analysis.word, analysis.lemma)
+        for analysis in (
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+        )
+    ]
+    ```
+
+=== "Result"
+
+    ```
+    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuera', 'fuera'), ('nada', 'nada'), ('el', 'el')]
+    ```
+
 ## Tokens out of the dictionary { #rules }
 
 A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
