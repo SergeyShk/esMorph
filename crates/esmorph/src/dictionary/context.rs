@@ -790,19 +790,35 @@ fn shape(token: &str, first: bool) -> usize {
 
 /// Kind of the letters and digits of a token for `shape`: 5 is a capital letter first
 fn kind(token: &str) -> usize {
-    let digits = token.chars().filter(char::is_ascii_digit).count();
-    let letters: Vec<char> = token.chars().filter(|c| c.is_alphabetic()).collect();
-    if digits == 0 && letters.is_empty() {
+    let (mut chars, mut digits, mut letters, mut upper, mut lower) = (0, 0, 0, 0, 0);
+    // Whether the first letter is a capital one and whether another one is
+    let (mut first, mut later) = (false, false);
+    for c in token.chars() {
+        chars += 1;
+        digits += usize::from(c.is_ascii_digit());
+        if c.is_alphabetic() {
+            let capital = c.is_uppercase();
+            if letters == 0 {
+                first = capital;
+            } else {
+                later |= capital;
+            }
+            letters += 1;
+            upper += usize::from(capital);
+            lower += usize::from(c.is_lowercase());
+        }
+    }
+    if digits == 0 && letters == 0 {
         0
-    } else if digits == token.chars().count() {
+    } else if digits == chars {
         1
     } else if digits > 0 {
         2
-    } else if letters.iter().all(|c| !c.is_uppercase()) {
+    } else if upper == 0 {
         3
-    } else if letters.iter().all(|c| !c.is_lowercase()) && letters.len() > 1 {
+    } else if lower == 0 && letters > 1 {
         4
-    } else if letters[0].is_uppercase() && letters[1..].iter().all(|c| !c.is_uppercase()) {
+    } else if first && !later {
         5
     } else {
         6
