@@ -22,6 +22,7 @@ class DictionaryInfo(TypedDict, total=False):
     source: str
     snapshot: str
     sha256: str
+    snapshots: dict[str, str]
     license: str
     ud_release: str
     treebanks: dict[str, str]

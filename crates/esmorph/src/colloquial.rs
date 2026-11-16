@@ -31,6 +31,13 @@ pub(crate) fn standard(word: &str) -> impl Iterator<Item = String> + '_ {
     endings.chain(starts)
 }
 
+/// Whether a word has an ending or a start of such spellings, without spelling its standard words
+pub(crate) fn may_be_spelling(word: &str) -> bool {
+    let stem = |rest: Option<&str>| rest.is_some_and(|rest| !rest.is_empty());
+    (ENDINGS.iter()).any(|&(ending, _)| stem(word.strip_suffix(ending)))
+        || (STARTS.iter()).any(|&(start, _)| stem(word.strip_prefix(start)))
+}
+
 /// Whether a word ends as a participle without its `d` that has an accent: `perdío`, `metíos`
 pub(crate) fn is_participle(word: &str) -> bool {
     ["ío", "íos"].iter().any(|ending| {
@@ -66,6 +73,22 @@ mod tests {
     fn participles_with_an_accent() {
         assert!(is_participle("perdío") && is_participle("metíos"));
         assert!(!is_participle("ío") && !is_participle("trabajao") && !is_participle("perdió"));
+    }
+
+    #[test]
+    fn a_word_may_be_a_spelling_as_it_has_standard_spellings() {
+        for word in [
+            "trabajao",
+            "verdá",
+            "juera",
+            "ao",
+            "á",
+            "ju",
+            "casa",
+            "erisipela",
+        ] {
+            assert_eq!(may_be_spelling(word), !spellings(word).is_empty(), "{word}");
+        }
     }
 
     #[test]

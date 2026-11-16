@@ -260,7 +260,7 @@ Bug reports, ideas and pull requests are welcome, in English or Spanish - the [i
 
 ## License
 
-The code is distributed under the [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt) license. The dictionary is built from [Wiktionary](https://en.wiktionary.org) and the treebanks [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora) and [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD), and is distributed under the [CC BY-SA 4.0](https://github.com/SergeyShk/esMorph/blob/master/LICENSE-DICTIONARY.txt) license.
+The code is distributed under the [MIT](https://github.com/SergeyShk/esMorph/blob/master/LICENSE.txt) license. The dictionary is built from the English and the Spanish Wiktionary ([en](https://en.wiktionary.org), [es](https://es.wiktionary.org)) and the treebanks [UD Spanish AnCora](https://github.com/UniversalDependencies/UD_Spanish-AnCora) and [UD Spanish GSD](https://github.com/UniversalDependencies/UD_Spanish-GSD), and is distributed under the [CC BY-SA 4.0](https://github.com/SergeyShk/esMorph/blob/master/LICENSE-DICTIONARY.txt) license.
 
 ## Citation
 

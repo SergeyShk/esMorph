@@ -46,6 +46,10 @@ pub(crate) const CLITICS_NAME: [f64; 2] = [45.0 / 48.0, 4.0 / 36.0];
 /// dictionary has only with them (`Angel`, `Perez`), by AnCora and GSD train (882 of 933)
 pub(crate) const RESTORED_NAME: f64 = 882.0 / 933.0;
 
+/// Share of a name among the analyses of a word with a capital letter or in capitals that only the
+/// extra source of the dictionary has (`Navas`, `NAVAS`), by AnCora and GSD train (491 of 510)
+pub(crate) const EXTRA_NAME: f64 = 491.0 / 510.0;
+
 /// Share of a name among the analyses of a capital letter with a period that the dictionary knows
 /// (`D.`, `V.`): an initial mostly, by AnCora and GSD train (48 of 63)
 pub(crate) const INITIAL_NAME: f64 = 48.0 / 63.0;
