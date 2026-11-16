@@ -1623,7 +1623,12 @@ def test_roman_numerals(morph):
 
 @pytest.mark.parametrize(
     ("token", "lemma", "words"),
-    [("60%", "60", ("60", "%")), ("-3,5‰", "-3,5", ("-3,5", "‰")), ("5kg", "5", ("5", "kg"))],
+    [
+        ("60%", "60", ("60", "%")),
+        ("-3,5‰", "-3,5", ("-3,5", "‰")),
+        ("5kg", "5", ("5", "kg")),
+        ("2,5kg", "2,5", ("2,5", "kg")),
+    ],
 )
 def test_number_with_a_sign_or_a_unit_is_two_words(morph, token, lemma, words):
     first = morph.analyze(token)[0]
@@ -1646,9 +1651,13 @@ def test_a_clitic_inflects_to_a_clitic(morph):
 
 def test_forms_of_entries_have_the_gender_of_their_noun(morph):
     # "plural of abajeña" names no gender, the noun has one; a noun of both genders keeps none
-    assert morph.analyze("abajeñas")[0].feats == {"Gender": "Fem", "Number": "Plur"}
-    artes = next(a for a in morph.analyze("artes") if a.pos == "NOUN")
-    assert artes.feats == {"Number": "Plur"}
+    def noun(word, lemma):
+        return next(a for a in morph.analyze(word) if (a.pos, a.lemma) == ("NOUN", lemma))
+
+    assert noun("abajeñas", "abajeña").feats == {"Gender": "Fem", "Number": "Plur"}
+    assert noun("artes", "arte").feats == {"Number": "Plur"}
+    # The feminine of misionario gives no gender to its plural
+    assert "Gender" not in noun("misionarios", "misionario").feats
 
 
 def test_names(morph):

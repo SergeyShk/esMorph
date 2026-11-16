@@ -194,11 +194,10 @@ pub(crate) fn number_and_unit(token: &str) -> Option<(&str, &str)> {
     let at = match token.chars().next_back() {
         Some(sign) if NUMBER_SIGNS.contains(&sign) => token.len() - sign.len_utf8(),
         _ => {
-            // Of the units that end the token, the one after the digits: `kg`, not `g`, in `5kg`
-            let unsigned = token.trim_start_matches(['+', '-', '−', '±']);
+            // Of the units that end the token, the one after a number: `kg`, not `g`, in `5kg`
             let unit = UNITS.iter().find(|unit| {
-                (unsigned.strip_suffix(**unit)).is_some_and(|digits| {
-                    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+                (token.strip_suffix(**unit)).is_some_and(|digits| {
+                    digits.ends_with(|c: char| c.is_ascii_digit()) && number(digits).is_some()
                 })
             })?;
             token.len() - unit.len()
@@ -582,10 +581,14 @@ mod tests {
             ("-3,5‰", "-3,5", "‰"),
             ("5kg", "5", "kg"),
             ("+10mm", "+10", "mm"),
+            ("2,5kg", "2,5", "kg"),
+            ("1.200m", "1.200", "m"),
         ] {
             assert_eq!(number_and_unit(token), Some((number, sign)), "{token}");
         }
-        for token in ["%", "a%", "1..2%", "--5%", "5", "5k", "kg"] {
+        for token in [
+            "%", "a%", "1..2%", "--5%", "5", "5k", "kg", "--5kg", "½kg", "5²m",
+        ] {
             assert_eq!(number_and_unit(token), None, "{token}");
         }
         assert_eq!(unit_and_number("km.24"), Some(("km.", "24")));

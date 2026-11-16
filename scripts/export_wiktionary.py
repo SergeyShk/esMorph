@@ -956,9 +956,10 @@ def noun_genders(
     The genders of the forms of nouns that only entries of forms give
 
     Description:
-        An entry "plural of X" names no gender. A lexeme whose other rows name one gender gives it
-        to such a form: `abajeñas` of `abajeña` is feminine. A row of a table keeps its features:
-        `artes` of `arte`, a noun of both genders, has none, as in the treebanks
+        An entry "plural of X" names no gender. A lexeme whose lemma and plural rows name one
+        gender gives it to such a form: `abajeñas` of `abajeña` is feminine, while the feminine
+        `misionaria` of `misionario` gives no gender to `misionarios`. A row of a table keeps its
+        features: `artes` of `arte`, a noun of both genders, has none, as in the treebanks
 
     Arguments:
         table (set[conventions.Row]): The rows
@@ -967,11 +968,13 @@ def noun_genders(
     Returns:
         dict[conventions.Row, conventions.Row]: The rows without a gender and the rows with it
     """
+    # A singular form spelled otherwise than the lemma is the other gender: `misionaria`
     genders: dict[str, set[str]] = {}
-    for lemma, pos, _, text in table:
-        gender = conventions.parse_features(text).get("Gender")
-        if pos == "NOUN" and gender:
-            genders.setdefault(lemma, set()).add(gender)
+    for lemma, pos, form, text in table:
+        feats = conventions.parse_features(text)
+        other = feats.get("Number") == "Sing" and form != lemma
+        if pos == "NOUN" and "Gender" in feats and not other:
+            genders.setdefault(lemma, set()).add(feats["Gender"])
     found = {}
     for row in table:
         lemma, pos, form, text = row
