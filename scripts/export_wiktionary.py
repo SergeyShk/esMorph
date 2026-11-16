@@ -854,6 +854,10 @@ def rows(
                     participles.setdefault(form, lemma)
     old_rows = old_form_rows(table, old)
     table |= old_rows
+    for row, gendered in noun_genders(table, places).items():
+        table.remove(row)
+        table.add(gendered)
+        kinds[gendered] = kinds.pop(row) | kinds.get(gendered, set())
     # Variants and places by the lemmas of the conventions: a verb without `-se`
     merged: dict[Variant, set[tuple[bool, bool]]] = {}
     ranks: dict[conventions.Row, int] = {}
@@ -943,6 +947,40 @@ def rank(row: conventions.Row, ranks: dict[conventions.Row, int]) -> str:
     lemma, pos, form, feats = row
     place = ranks.get((lemma, "VERB" if pos == "AUX" else pos, form, feats))
     return "_" if place is None else str(place)
+
+
+def noun_genders(
+    table: set[conventions.Row], places: dict[conventions.Row, int]
+) -> dict[conventions.Row, conventions.Row]:
+    """
+    The genders of the forms of nouns that only entries of forms give
+
+    Description:
+        An entry "plural of X" names no gender. A lexeme whose other rows name one gender gives it
+        to such a form: `abajeñas` of `abajeña` is feminine. A row of a table keeps its features:
+        `artes` of `arte`, a noun of both genders, has none, as in the treebanks
+
+    Arguments:
+        table (set[conventions.Row]): The rows
+        places (dict[conventions.Row, int]): The places of the rows of tables
+
+    Returns:
+        dict[conventions.Row, conventions.Row]: The rows without a gender and the rows with it
+    """
+    genders: dict[str, set[str]] = {}
+    for lemma, pos, _, text in table:
+        gender = conventions.parse_features(text).get("Gender")
+        if pos == "NOUN" and gender:
+            genders.setdefault(lemma, set()).add(gender)
+    found = {}
+    for row in table:
+        lemma, pos, form, text = row
+        feats = conventions.parse_features(text)
+        known = genders.get(lemma, set())
+        if pos == "NOUN" and row not in places and "Gender" not in feats and len(known) == 1:
+            feats["Gender"] = next(iter(known))
+            found[row] = (lemma, pos, form, conventions.format_features(feats))
+    return found
 
 
 def without_marks(word: str) -> str:
