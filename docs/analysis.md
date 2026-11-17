@@ -27,7 +27,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 
 | Attribute | Type | Description |
 | :-------- | :--- | :---------- |
-| `word` | `str` | The word form as the dictionary spells it, with its accents; a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters and with `-` for the hyphens U+2010 and U+2011 |
+| `word` | `str` | The word form as the dictionary spells it, with its accents; for a [colloquial spelling](#spelling) its standard spelling (`trabajado` of `trabajao`); a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters and with `-` for the hyphens U+2010 and U+2011 |
 | `lemma` | `str` | The lemma |
 | `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
 | `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
@@ -101,11 +101,11 @@ A lowercase word that the dictionary has not, even without its accents, may be a
 
 - a participle without its `d`: `trabajao` is `trabajado`, `sío` is `sido`; its accent is not lost, so `perdío` is `perdido`, not `perdió`;
 - a final `-á`, `-é` or `-ú` for `-ad`, `-ed` or `-ud`: `caridá` is `caridad`, `virtú` is `virtud`;
-- an aspirated `f` or `h`: `juera` is `fuera`, `juevo` is `huevo`.
+- an aspirated `f` or `h`: `juerza` is `fuerza`, `juevo` is `huevo`, `juyendo` is `huyendo`.
 
 A word with a capital letter is no such spelling: `Trabajao` and `Julita` are names, not `trabajado` and `fulita`.
 
-The dictionary also has spellings of words as they sound and common shortened forms: `na` and `naa` are `nada`, `pos` is `pues`, `to` is `todo`, `mu` is `muy`, `güeno` is `bueno`, `er` is `el`. They have the analyses of the standard word with its lemma and features, and `word` is the standard spelling; the context chooses among them and the other words of the same spelling (`mu` is also an interjection). As words of the dictionary, they are found in any case: `Güeno` is `bueno` too.
+The dictionary also has spellings of words as they sound and common shortened forms: `na` and `naa` are `nada`, `pos` is `pues`, `to` is `todo`, `mu` is `muy`, `güeno` is `bueno`, `er` is `el`. They have the analyses of the standard word with its lemma and features, and `word` is the standard spelling; the context chooses among them and the other words of the same spelling (`mu` is also an interjection). As words of the dictionary, they are found in any case: `Güeno` is `bueno` too. The analyses of all these spellings have `source` equal to `"dictionary"`, while [`is_known`](analyzer.md#is_known) tells only the spellings of the dictionary: `na` is known, `trabajao` is not.
 
 === "Code"
 
@@ -113,7 +113,7 @@ The dictionary also has spellings of words as they sound and common shortened fo
     [
         (analysis.word, analysis.lemma)
         for analysis in (
-            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juerza", "na", "er"]
         )
     ]
     ```
@@ -121,7 +121,7 @@ The dictionary also has spellings of words as they sound and common shortened fo
 === "Result"
 
     ```
-    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuera', 'fuera'), ('nada', 'nada'), ('el', 'el')]
+    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuerza', 'fuerza'), ('nada', 'nada'), ('el', 'el')]
     ```
 
 ## Tokens out of the dictionary { #rules }

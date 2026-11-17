@@ -27,7 +27,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 
 | Atributo | Tipo | Descripción |
 | :------- | :--- | :---------- |
-| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con `-` en lugar de los guiones U+2010 y U+2011 |
+| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; para una [grafía coloquial](#spelling), su grafía estándar (`trabajado` de `trabajao`); un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con `-` en lugar de los guiones U+2010 y U+2011 |
 | `lemma` | `str` | El lema |
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
@@ -101,11 +101,11 @@ Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tild
 
 - un participio sin su `d`: `trabajao` es `trabajado`, `sío` es `sido`; su tilde no es una tilde perdida, así que `perdío` es `perdido`, no `perdió`;
 - una `-á`, `-é` o `-ú` final en lugar de `-ad`, `-ed` o `-ud`: `caridá` es `caridad`, `virtú` es `virtud`;
-- una `f` o una `h` aspiradas: `juera` es `fuera`, `juevo` es `huevo`.
+- una `f` o una `h` aspiradas: `juerza` es `fuerza`, `juevo` es `huevo`, `juyendo` es `huyendo`.
 
 Una palabra con mayúscula no es una grafía así: `Trabajao` y `Julita` son nombres, no `trabajado` y `fulita`.
 
-El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: `na` y `naa` son `nada`, `pos` es `pues`, `to` es `todo`, `mu` es `muy`, `güeno` es `bueno`, `er` es `el`. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y `word` es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (`mu` también es una interjección). Como palabras del diccionario, se encuentran con cualquier uso de mayúsculas: `Güeno` también es `bueno`.
+El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: `na` y `naa` son `nada`, `pos` es `pues`, `to` es `todo`, `mu` es `muy`, `güeno` es `bueno`, `er` es `el`. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y `word` es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (`mu` también es una interjección). Como palabras del diccionario, se encuentran con cualquier uso de mayúsculas: `Güeno` también es `bueno`. Los análisis de todas estas grafías tienen `source` igual a `"dictionary"`, mientras que [`is_known`](analyzer.md#is_known) solo reconoce las grafías del diccionario: `na` es conocida, `trabajao` no.
 
 === "Código"
 
@@ -113,7 +113,7 @@ El diccionario tiene además grafías de palabras tal como suenan y formas abrev
     [
         (analysis.word, analysis.lemma)
         for analysis in (
-            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juerza", "na", "er"]
         )
     ]
     ```
@@ -121,7 +121,7 @@ El diccionario tiene además grafías de palabras tal como suenan y formas abrev
 === "Resultado"
 
     ```
-    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuera', 'fuera'), ('nada', 'nada'), ('el', 'el')]
+    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuerza', 'fuerza'), ('nada', 'nada'), ('el', 'el')]
     ```
 
 ## Tokens fuera del diccionario { #rules }

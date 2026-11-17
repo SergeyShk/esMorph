@@ -177,7 +177,7 @@ Más detalles en la documentación: [tokens fuera del diccionario](https://serge
 
 <br>
 
-Una palabra en minúsculas fuera del diccionario puede ser una grafía coloquial de una palabra del diccionario: un participio sin su `d` (`trabajao`), una `-á` final por `-ad` (`caridá`), una `f` o una `h` aspiradas (`juera`); el diccionario también tiene grafías de palabras como suenan (`na`, `pos`, `güeno`). Esa palabra recibe los análisis de la palabra estándar, y `word` es su grafía estándar. Las palabras propias toman las formas de una palabra modelo del diccionario: `Analyzer(words=...)`, la opción `-w` del comando y el parámetro `words` del componente de spaCy.
+Una palabra en minúsculas fuera del diccionario puede ser una grafía coloquial de una palabra del diccionario: un participio sin su `d` (`trabajao`), una `-á` final por `-ad` (`caridá`), una `f` o una `h` aspiradas (`juerza`); el diccionario también tiene grafías de palabras como suenan (`na`, `pos`, `güeno`). Esa palabra recibe los análisis de la palabra estándar, y `word` es su grafía estándar. Las palabras propias toman las formas de una palabra modelo del diccionario: `Analyzer(words=...)`, la opción `-w` del comando y el parámetro `words` del componente de spaCy.
 
 ```python
 >>> [(a.word, a.lemma) for a in (morph.analyze(w)[0] for w in ["trabajao", "caridá", "na"])]

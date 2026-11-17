@@ -260,7 +260,7 @@ Exceptions:
 is_known(word)
 ```
 
-Whether the dictionary has the word form, as written or as a verb of the dictionary with clitics; as with `analyze`, case and lost accents do not matter. Tokens analyzed by rules and guessed words are not in the dictionary.
+Whether the dictionary has the word form, as written or as a verb of the dictionary with clitics; as with `analyze`, case and lost accents do not matter. Tokens analyzed by rules, guessed words and colloquial spellings that only rules read as words of the dictionary (`trabajao`, [Word analysis](analysis.md#spelling)) are not in the dictionary.
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |

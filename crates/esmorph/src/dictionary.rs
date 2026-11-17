@@ -816,8 +816,10 @@ impl Dictionary {
     }
 
     /// Analyses of the tokens of a sentence, the most probable in the context first: the analyses
-    /// of `analyze` ordered by the context model of the dictionary, the probability is its score.
-    /// The tokens are those of one sentence in order, as `analyze` takes them (`del`, `dámelo`);
+    /// of `analyze` ordered by the context model of the dictionary, the probability is its score;
+    /// a few rules of Spanish then put first another analysis where only it fits, with the scores
+    /// of the model kept. The model and the rules read an older or colloquial spelling as the word
+    /// it stands for (`fué` as `fue`). The tokens are those of one sentence in order, as `analyze` takes them (`del`, `dámelo`);
     /// a sentence of one token is analyzed as `analyze`, one longer than `SENTENCE_CHUNK` tokens
     /// by parts of about `SENTENCE_CHUNK` ([`sentence_parts`]). The model is read on the first call
     ///

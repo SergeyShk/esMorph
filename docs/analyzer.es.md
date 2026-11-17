@@ -260,7 +260,7 @@ Excepciones:
 is_known(word)
 ```
 
-Si el diccionario tiene la forma de palabra, tal como está escrita o como un verbo del diccionario con clíticos; como en `analyze`, las mayúsculas y las tildes perdidas no importan. Los tokens analizados por reglas y las palabras estimadas no están en el diccionario.
+Si el diccionario tiene la forma de palabra, tal como está escrita o como un verbo del diccionario con clíticos; como en `analyze`, las mayúsculas y las tildes perdidas no importan. Los tokens analizados por reglas, las palabras estimadas y las grafías coloquiales que solo las reglas leen como palabras del diccionario (`trabajao`, [Análisis de palabras](analysis.md#spelling)) no están en el diccionario.
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |
