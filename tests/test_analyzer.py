@@ -1737,6 +1737,9 @@ def test_roman_numerals(morph):
         ("-3,5‰", "-3,5", ("-3,5", "‰")),
         ("5kg", "5", ("5", "kg")),
         ("2,5kg", "2,5", ("2,5", "kg")),
+        ("8GB", "8", ("8", "GB")),
+        ("-5ºC", "-5", ("-5", "ºC")),
+        ("40°", "40", ("40", "°")),
     ],
 )
 def test_number_with_a_sign_or_a_unit_is_two_words(morph, token, lemma, words):
@@ -1748,6 +1751,9 @@ def test_number_with_a_sign_or_a_unit_is_two_words(morph, token, lemma, words):
 def test_unit_with_a_number_is_two_words(morph):
     first = morph.analyze("km.24")[0]
     assert (first.lemma, first.pos, first.words) == ("km", "NOUN", ("km.", "24"))
+    # The minute of a match is no adjective `masculino`, and 3G is no gram
+    assert {analysis.pos for analysis in morph.analyze("m.36")} <= {"NOUN", "SYM"}
+    assert morph.analyze("3G")[0].pos == "PROPN"
 
 
 def test_a_clitic_inflects_to_a_clitic(morph):

@@ -713,16 +713,26 @@ impl Dictionary {
 
     /// Analyses of a token of a number and a sign or a unit, two words; `None` for another token
     fn number_with_unit(&self, token: &str) -> Option<Vec<Analysis>> {
-        // A unit with its period and a number: its analyses are those of the unit
+        // A unit with its period and a number: its analyses are those of the unit as a noun or a
+        // symbol, `m.` of `m.36` is no adjective `masculino`
         if let Some((unit, number)) = rules::unit_and_number(token) {
-            return Some(
-                (self.analyze(unit).into_iter())
-                    .map(|analysis| Analysis {
-                        words: vec![unit.to_owned(), number.to_owned()],
-                        ..analysis
-                    })
-                    .collect(),
-            );
+            let mut analyses: Vec<Analysis> = (self.analyze(unit).into_iter())
+                .filter(|analysis| {
+                    (self.ud.get(analysis.ud))
+                        .is_some_and(|tag| matches!(tag.pos(), "NOUN" | "SYM"))
+                })
+                .map(|analysis| Analysis {
+                    words: vec![unit.to_owned(), number.to_owned()],
+                    ..analysis
+                })
+                .collect();
+            let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+            for analysis in &mut analyses {
+                analysis.prob /= total;
+            }
+            if !analyses.is_empty() {
+                return Some(analyses);
+            }
         }
         // A number with a sign or a unit: its analyses are those of the number
         let (number, sign) = rules::number_and_unit(token)?;
