@@ -145,6 +145,9 @@ def sense(record: dict, pos: str, gender: set[str]) -> dict | None:
         A form of a noun has the gender of its entry if its gloss names none
     """
     tags = {OTHER_NAMES.get(tag, tag) for tag in record["tags"]} - {"form-of"}
+    # The genders of a sense of an adjective tell its use as a noun, not the gender of the word
+    if pos == "adj" and not record["form_of"]:
+        tags -= set(GENDERS.values())
     gloss = " ".join(record.get("glosses", []))
     if record["form_of"]:
         found = verb_tags(gloss) if pos == "verb" else nominal_tags(gloss)
@@ -182,6 +185,9 @@ def entry(record: dict) -> dict | None:
         return None
     title = record.get("title", "").lower()
     gender = {tag for text, tag in GENDERS.items() if text in title} if pos == "noun" else set()
+    # A noun of both genders with a feminine form of its own is masculine itself: `limosnador`
+    if len(gender) == 2 and any(tags == ["feminine"] for _, tags in record["forms"]):
+        gender = {"masculine"}
     senses = [sense(item, pos, gender) for item in record["senses"]]
     forms = [[form, table_tags(tags)] for form, tags in record["forms"]]
     # A conjugation table has the infinitive only in the compound form (`haber comido`), while
