@@ -229,13 +229,38 @@ def test_own_words_of_a_pair_or_several_parts_of_speech():
     assert {a.pos for a in morph.analyze("tiktokeros")} == {"ADJ", "NOUN"}
     # The part of speech chooses among the analyses of the sample: bueno is a form of the ADJ buen
     assert Analyzer(words={"zqbueno": ("bueno", "ADJ")}).analyze("zqbuenas")[0].pos == "ADJ"
+    # A sample that is a lemma of one part of speech and a form of another gives both
+    morph = Analyzer(words={"zqhelado": ("helado", "NOUN,VERB")})
+    assert {(a.lemma, a.pos) for a in morph.analyze("zqhelado")} >= {
+        ("zqhelado", "NOUN"),
+        ("zqhelar", "VERB"),
+    }
+
+
+def test_own_words_of_a_file_built_again(tmp_path):
+    path = tmp_path / "es.dict"
+    data = Analyzer().path.read_bytes()
+    path.write_bytes(data)
+    first = Analyzer(path, words={"tiktokear": "bloguear"})
+    # The file is replaced by another build: another description and checksum
+    other = bytearray(data.replace(b'"source": "Wiktionary"', b'"source": "Wiktionarz"', 1))
+    other[12:16] = zlib.crc32(other[16:]).to_bytes(4, "little")
+    (tmp_path / "new.dict").write_bytes(bytes(other))
+    (tmp_path / "new.dict").replace(path)
+    second = Analyzer(path, words={"tiktokear": "bloguear"})
+    assert second.dictionary_info["source"] == "Wiktionarz"
+    assert first.dictionary_info["source"] == "Wiktionary"
+    assert second.analyze("tiktokeó")[0].lemma == "tiktokear"
 
 
 def test_own_words_like_a_variant():
-    # The sample is a variant of its lexeme, or the only form of its tag is one
-    morph = Analyzer(words={"podcastt": "film", "zqgran": "gran"})
+    # The sample is a variant of its lexeme, or the only form of its number is one
+    morph = Analyzer(words={"podcastt": "film", "zqgran": "gran", "supertiempo": "tiempo"})
     assert morph.analyze("podcastt")[0].source == "dictionary"
     assert morph.analyze("zqgran")[0].lemma == "zqgran"
+    # An abbreviation of the sample is no form of the own word
+    with pytest.raises(esmorph.FormNotFoundError):
+        morph.analyze("supertiempo")[0].inflect(Gender="Fem")
 
 
 OWN_WORDS_PICKLE = """

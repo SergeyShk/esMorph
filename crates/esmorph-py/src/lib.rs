@@ -693,6 +693,15 @@ fn _analyses_analyzer(
     }
 }
 
+/// The checksum in the header of a dictionary file
+fn file_checksum(path: &Path) -> Option<u32> {
+    let mut header = [0; 16];
+    (File::open(path).and_then(|mut file| file.read_exact(&mut header))).ok()?;
+    Some(u32::from_le_bytes([
+        header[12], header[13], header[14], header[15],
+    ]))
+}
+
 /// Whether the file is a dictionary of another version of the format
 fn other_version(path: &Path) -> bool {
     let mut header = [0; 12];
@@ -1400,7 +1409,13 @@ impl Analyzer {
         }
         let explicit = path.is_some();
         let path = path.map(|path| std::path::absolute(&path).unwrap_or(path));
-        let base = shared(py, path, verify)?;
+        let mut base = shared(py, path.clone(), verify)?;
+        // A file built again since the shared analyzer loaded it is loaded anew
+        if let Some(path) = path
+            && file_checksum(&path).is_some_and(|sum| sum != base.get().dictionary.checksum())
+        {
+            base = Py::new(py, Analyzer::load(py, Some(path), verify)?)?;
+        }
         let this = base.get();
         let samples = words.iter().map(|(word, sample, pos)| {
             let sample = match pos {

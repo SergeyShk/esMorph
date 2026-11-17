@@ -206,8 +206,15 @@ impl Dictionary {
             analyses.retain(|analysis| wanted.contains(&pos(analysis)));
         }
         // A sample that is a lemma gives its lexemes of that lemma: `bajo` of `bajar` is no sample
-        // of a noun
-        if analyses.iter().any(|analysis| analysis.lemma == like) {
+        // of a noun; of several parts of speech given, within each (`helado` as a noun and `helar`)
+        if sample.pos.is_some() {
+            let of_lemma: Vec<&str> = (analyses.iter())
+                .filter(|analysis| analysis.lemma == like)
+                .map(pos)
+                .collect();
+            analyses
+                .retain(|analysis| analysis.lemma == like || !of_lemma.contains(&pos(analysis)));
+        } else if analyses.iter().any(|analysis| analysis.lemma == like) {
             analyses.retain(|analysis| analysis.lemma == like);
         }
         if sample.pos.is_none() {
@@ -253,16 +260,18 @@ impl Dictionary {
                 "VERB" | "AUX" => LEMMA_ONLY | SPOKEN | OLD,
                 _ => LEMMA_ONLY | SPOKEN | VARIANT,
             };
-            // A variant is kept if the sample is that form (`buen`) or it is the only form of its
-            // tag (`film` has no main singular)
+            // A variant is kept if the sample is that form (`film`, `buen`) or no main form has its
+            // number (`sexys` of `sexy`): not an abbreviation or a spelling of the main form
+            let number = |cell: u32| {
+                (self.ud.get((cell & UD_BITS) as u16)).and_then(|tag| tag.feat("Number"))
+            };
             let main = |form: usize| {
                 if form == usize::from(entry.form) {
                     return false;
                 }
-                let cell = lexeme.cells[form];
-                (0..lexeme.cells.len()).any(|other| {
-                    let main = lexeme.cells[other];
-                    main & (LEMMA_ONLY | SPOKEN | VARIANT) == 0 && main & UD_BITS == cell & UD_BITS
+                let wanted = number(lexeme.cells[form]);
+                (lexeme.cells.iter()).any(|&main| {
+                    main & (LEMMA_ONLY | SPOKEN | VARIANT) == 0 && number(main) == wanted
                 })
             };
             for form in 0..lexeme.cells.len() {
@@ -628,13 +637,17 @@ mod tests {
     }
 
     #[test]
-    fn a_variant_that_is_the_sample_or_alone_in_its_tag() {
+    fn a_variant_that_is_the_sample_or_alone_in_its_number() {
         let mut builder = Builder::new();
         builder.meta("{}");
         let (sing, plur) = ("Gender=Masc|Number=Sing", "Gender=Masc|Number=Plur");
         let forms = [
             ("film", "NOUN", "film", sing),
             ("film", "NOUN", "films", plur),
+            ("sexy", "ADJ", "sexy", "Number=Sing"),
+            ("sexy", "ADJ", "sexys", "Number=Plur"),
+            ("altura", "NOUN", "altura", "Gender=Fem|Number=Sing"),
+            ("altura", "NOUN", "altor", sing),
             ("gran", "ADJ", "gran", "Number=Sing"),
             ("bueno", "ADJ", "bueno", sing),
             ("bueno", "ADJ", "buen", sing),
@@ -648,17 +661,32 @@ mod tests {
             .mark_variant("gran", "ADJ", "gran", "Number=Sing")
             .unwrap();
         builder.mark_variant("bueno", "ADJ", "buen", sing).unwrap();
+        for (form, feats) in [("sexy", "Number=Sing"), ("sexys", "Number=Plur")] {
+            builder.mark_variant("sexy", "ADJ", form, feats).unwrap();
+        }
+        builder
+            .mark_variant("altura", "NOUN", "altor", sing)
+            .unwrap();
         let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
         let own = (dictionary.clone())
-            .with_words([("podcast", "film"), ("zqgran", "gran"), ("zqbuen", "buen")])
+            .with_words([
+                ("podcast", "film"),
+                ("zqgran", "gran"),
+                ("zqbuen", "buen"),
+                ("cringy", "sexy"),
+                ("megaaltura", "altura"),
+            ])
             .unwrap();
-        for word in ["podcast", "podcasts", "zqgran", "zqbuen", "zqbueno"] {
+        for word in [
+            "podcast", "podcasts", "zqgran", "zqbuen", "zqbueno", "cringys",
+        ] {
             assert!(
                 (own.analyze(word).iter()).any(|a| a.source == Source::Dictionary),
                 "{word}"
             );
         }
-        // A variant beside a main form of its tag stays out
+        // A variant beside a main form of its number stays out: `altor` is no form of `altura`
+        assert!((own.analyze("megaaltor").iter()).all(|a| a.source != Source::Dictionary));
         let dictionary = dictionary.with_words([("zqbueno", "bueno")]).unwrap();
         let forms: Vec<String> = (dictionary
             .forms(&dictionary.analyze("zqbuenos")[0])
