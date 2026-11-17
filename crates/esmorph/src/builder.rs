@@ -486,14 +486,16 @@ impl Builder {
             }
             // Unknown words are guessed by the tables without the forms of the extra source: such a
             // form parts no lexeme from the lexemes of its table
-            let extra = rows.iter().any(|row| row.flags & EXTRA != 0);
-            let rows: Vec<Row> = rows
-                .into_iter()
-                .filter(|row| row.flags & EXTRA == 0)
-                .collect();
-            if rows.is_empty() {
+            // A lexeme of only the extra source guesses nothing
+            if rows.iter().all(|row| row.flags & (EXTRA | LEMMA_ONLY) != 0) {
                 continue;
             }
+            let extra = rows.iter().any(|row| row.flags & EXTRA != 0);
+            // The first form is the lemma of the table
+            let rows: Vec<Row> = (rows.into_iter().enumerate())
+                .filter(|(at, row)| *at == 0 || row.flags & EXTRA == 0)
+                .map(|(_, row)| row)
+                .collect();
             let table = if extra {
                 let (paradigm, cells) = table_of(&rows, lemma, pos, &mut suffixes, &mut paradigms)?;
                 tables.number((paradigm, cells), "inflection tables", u16::MAX)?
