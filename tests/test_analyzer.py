@@ -158,7 +158,14 @@ def test_colloquial_spelling_is_only_for_unknown_lowercase_words(morph):
         ("güevos", "huevos", "huevo", "NOUN"),
         ("pos", "pues", "pues", "SCONJ"),
         ("po", "por", "por", "ADP"),
-        ("tos", "todos", "todo", "PRON"),
+        ("toos", "todos", "todo", "PRON"),
+        ("pa", "para", "para", "ADP"),
+        ("pa'", "para", "para", "ADP"),
+        # A spelling of the table may stand for a verb: `pue` is `puede` and `pues`
+        ("pue", "puede", "poder", "VERB"),
+        ("pue", "pues", "pues", "SCONJ"),
+        ("jué", "fue", "ser", "AUX"),
+        ("haiga", "haya", "haber", "AUX"),
         # The form the spelling stands for, not the first one of its features
         ("mu", "muy", "mucho", "ADV"),
         ("esplicase", "explicase", "explicar", "VERB"),
@@ -177,12 +184,15 @@ def test_spoken_spelling_has_the_analyses_of_the_standard_word(morph, token, wor
 
 
 def test_spoken_spelling_keeps_other_words(morph):
-    # A cough, not only `todos`; a spelling with another sense keeps it
-    assert {(a.word, a.lemma) for a in morph.analyze("tos")} >= {("tos", "tos"), ("todos", "todo")}
+    # A spelling with another sense keeps it; `tos` is only a cough, `todos` is `toos`
+    assert {(a.word, a.lemma) for a in morph.analyze("pos")} >= {("pos", "pos"), ("pues", "pues")}
+    assert {(a.word, a.lemma) for a in morph.analyze("tos")} == {("tos", "tos")}
+    # A spelling of the table with a part of speech takes only its analyses: no tree `haya`
+    assert {a.lemma for a in morph.analyze("haiga")} == {"haiga", "haber"}
     assert "nadar" not in {a.lemma for a in morph.analyze("na")}
     assert "PROPN" not in {a.pos for a in morph.analyze("güeno")}
-    # A form of the lexeme of a spelling keeps the analyses of other lexemes: the voseo of `dejar`
-    assert ("dejá", "dejar") in {(a.word, a.lemma) for a in morph.analyze("dejá")}
+    # A form of the verb of a participle is no spelling of the participle: the voseo of `dejar`
+    assert {(a.word, a.lemma) for a in morph.analyze("dejá")} == {("dejá", "dejar")}
     assert morph.analyze("dejés")[0].inflect(Mood="Ind") == "dejás"
     # A spelling with a capital letter is no name restored to its accents
     assert [morph.analyze(token)[0].word for token in ("Er", "Na")] == ["el", "nada"]
@@ -875,6 +885,13 @@ def test_extra_source_takes_the_grammar_of_its_entries(morph):
     # A participle needs its verb, a new lexeme its lemma
     assert not morph.is_known("abachado")
     assert not morph.is_known("acodamientos")
+    # A noun of both genders with a feminine form of its own is masculine; the genders of a sense
+    # of an adjective tell its use as a noun
+    assert {a.feats["Gender"] for a in morph.analyze("limosnadores")} == {"Masc"}
+    assert morph.analyze("aceráceo")[0].feats == {"Gender": "Masc", "Number": "Sing"}
+    # A verb that the English edition has as a spelling of another one gets no forms of its own
+    assert not morph.is_known("gubernaba")
+    assert not morph.is_known("absentaba")
 
 
 def test_own_word_is_no_word_of_the_extra_source():
@@ -893,6 +910,11 @@ def test_own_word_is_no_word_of_the_extra_source():
         # With a capital letter a word of only the extra source is mostly a name
         ("Navas", "Navas", "PROPN", "rule"),
         ("NAVAS", "NAVAS", "PROPN", "rule"),
+        # A word that the treebanks have only as a name is no word of the extra source
+        ("ciu", "ciu", "NOUN", "guess"),
+        # A monosyllabic imperative with clitics is that verb: `da` + `les`, no noun `dal`
+        ("dales", "dar", "VERB", "clitics"),
+        ("dame", "dar", "VERB", "clitics"),
         # A Roman numeral stays a numeral
         ("XIX", "XIX", "NUM", "rule"),
     ],

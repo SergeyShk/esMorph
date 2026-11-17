@@ -368,8 +368,6 @@ otro	PRON	otra	Gender=Fem|Number=Sing|PronType=Ind
 otro	PRON	otras	Gender=Fem|Number=Plur|PronType=Ind
 otro	PRON	otro	Gender=Masc|Number=Sing|PronType=Ind
 otro	PRON	otros	Gender=Masc|Number=Plur|PronType=Ind
-para	ADP	pa	_
-para	ADP	pa'	_
 para	ADP	para	_
 penúltimo	ADJ	penúltima	Gender=Fem|Number=Sing|NumType=Ord
 penúltimo	ADJ	penúltimas	Gender=Fem|Number=Plur|NumType=Ord

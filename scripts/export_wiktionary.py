@@ -128,6 +128,9 @@ VARIANT_TAGS = {
 }
 # Parts of speech of the words of their own that the Spanish edition adds
 EXTRA_LEXEMES = {"ADJ", "ADV", "INTJ", "NOUN"}
+# A monosyllabic imperative and its clitics: `dales` is `da` + `les`, no noun `dal`
+CLITICS_AFTER = re.compile(r"(?:me|te|se|nos|os|lo|la|le|los|las|les)+")
+VOWELS = re.compile(r"[aeiouáéíóú]+")
 # A Roman numeral, which the analyzer reads by a rule: `xix` is no noun
 ROMAN = re.compile(r"^(?=[ivxlcdm])m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$")
 # Tags of a spelling that shows how a word sounds: `güeno` of `bueno`, `er` of `el`
@@ -865,6 +868,14 @@ def rows(
         lemma = normalized_lemma(lemma, pos, participles)
         for key in (lemma, pos, form, text), (None, pos, form, None):
             merged.setdefault(key, set()).update(kind)
+    # The plain infinitive that the conventions give a verb known only with `-se` is of the kind
+    # of the reflexive one: `absentar` of `absentarse`, a spelling of `ausentarse`
+    for (lemma, pos, form, text), kind in kinds.items():
+        plain = normalized_lemma(lemma, pos, participles)
+        if pos == "VERB" and form == lemma != plain and text == "VerbForm=Inf":
+            key = (plain, pos, plain, text)
+            if key not in merged:
+                merged[key] = set(kind)
     for (lemma, pos, form, text), place in places.items():
         key = (normalized_lemma(lemma, pos, participles), pos, form, text)
         ranks[key] = min(place, ranks.get(key, place))
@@ -1014,9 +1025,11 @@ def extra_rows(
         edition has, even under other accents: the Spanish edition gives words of their own to
         what the English one has as other words (`y` as an adverb, `años` as a lemma). A lexeme
         that the English edition has only as a spelling of another word gets no new forms: the
-        forms of `cognocer` are written as those of `conocer`. A new lexeme needs a row of its
-        lemma (`acodamientos` alone makes no lexeme), a participle needs its verb (`abachado`
-        is no adjective without `abachar`). A Roman numeral is left to the rule of the analyzer
+        forms of `cognocer` are written as those of `conocer`, and those of `gubernar` as those of
+        `gobernar`. A new lexeme needs a row of its lemma (`acodamientos` alone makes no lexeme),
+        a participle needs its verb (`abachado` is no adjective without `abachar`). A Roman
+        numeral is left to the rule of the analyzer, and a monosyllabic imperative with clitics
+        to the analyzer of clitics: `dales` is `da` + `les`
 
     Arguments:
         path (Path): File of the snapshot of the Spanish edition
@@ -1031,12 +1044,32 @@ def extra_rows(
     table, variants, _, _, old = rows(lambda: eswiktionary.entries(path))
     table, _ = conventions.apply(table, closed)
     spelled = {without_marks(form) for _, _, form, _ in main}
-    lexemes = {(lemma, pos) for (lemma, pos, _, _), kind in main.items() if kind == "_"}
+    # A lexeme whose lemma is a spelling of another word is no lexeme of its own
+    spellings = {
+        (lemma, pos)
+        for (lemma, pos, form, _), kind in main.items()
+        if form == lemma and kind != "_"
+    }
+    lexemes = {
+        (lemma, pos) for (lemma, pos, _, _), kind in main.items() if kind == "_"
+    } - spellings
     known = {(lemma, pos) for lemma, pos, _, _ in main}
+    hosts = {
+        form
+        for (_, pos, form, feats), kind in main.items()
+        if pos in ("VERB", "AUX")
+        and kind == "_"
+        and {"Mood=Imp", "Number=Sing", "Person=2"} <= set(feats.split("|"))
+        and len(VOWELS.findall(form)) == 1
+    }
     found = {
         row
         for row in table - genderless(table)
         if not (without_marks(row[2]) in spelled or ROMAN.match(row[2]))
+        and not any(
+            row[2].startswith(host) and CLITICS_AFTER.fullmatch(row[2][len(host) :])
+            for host in hosts
+        )
         and (row[:2] in lexemes or (row[:2] not in known and row[1] in EXTRA_LEXEMES))
     }
     verbs = {form for _, pos, form, _ in found if pos == "VERB"}

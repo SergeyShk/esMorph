@@ -5,7 +5,9 @@
 //! `_`, the place in the table of the source or `_`) and `meta.json`, written by
 //! `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and `sources.json`,
 //! written by `scripts/export_ud.py`; the context model is the file of weights of
-//! `scripts/train_context.py`
+//! `scripts/train_context.py`. A form of the extra source that the treebanks have only as a name
+//! is left out, but an interjection: `ciu` is `CiU`; so is a lexeme of only the extra source with
+//! such a lemma (`cius`)
 
 mod frequencies;
 
@@ -233,8 +235,20 @@ fn build(
             .map_err(|err| within(context, err))?;
     }
     builder.meta(meta);
+    let analyses = counts.join("analyses.tsv");
+    let counts = Counts::read(&read(&analyses)?, &read(&counts.join("pos.tsv"))?)
+        .map_err(|err| within(counts, err))?;
     let lexemes = export.join("lexemes.tsv");
     let table = read(&lexemes)?;
+    // Lexemes of the main source: a name for a lemma leaves out only their forms of names
+    let main_source: HashSet<(&str, &str)> = (table.lines())
+        .filter_map(|line| {
+            let mut fields = line.split('\t');
+            let (lemma, pos) = (fields.next()?, fields.next()?);
+            let kind = fields.nth(2)?;
+            (!kind.starts_with("extra")).then_some((lemma, pos))
+        })
+        .collect();
     // The rows of every form for its counts, a pair a row: a map of vectors takes much more
     let mut forms: Vec<(&str, Row)> = Vec::new();
     // Lexemes with a main form: the others only spell other words
@@ -248,6 +262,15 @@ fn build(
                 fields.len()
             ))));
         };
+        // A lexeme of the extra source whose lemma the treebanks have only as a name is left out
+        // whole
+        if kind.starts_with("extra")
+            && pos != "INTJ"
+            && (counts.only_name(form)
+                || counts.only_name(lemma) && !main_source.contains(&(lemma, pos)))
+        {
+            continue;
+        }
         builder
             .add_form(lemma, pos, form, plain(feats))
             .map_err(at)?;
@@ -321,9 +344,6 @@ fn build(
     for (_, row) in &mut forms {
         row.spelling = !main.contains(&(row.lemma, row.pos));
     }
-    let analyses = counts.join("analyses.tsv");
-    let counts = Counts::read(&read(&analyses)?, &read(&counts.join("pos.tsv"))?)
-        .map_err(|err| within(counts, err))?;
     for (pos, feats, count) in counts.tags() {
         builder
             .add_tag_frequency(pos, plain(feats), count)
@@ -511,6 +531,48 @@ mod tests {
         }
         fs::write(counts.join("analyses.tsv"), "").unwrap();
         assert!(build(&export, &counts, &output, None).is_ok());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn extra_forms_of_names_are_left_out() {
+        let dir = std::env::temp_dir().join(format!("esmorph-build-names-{}", std::process::id()));
+        let (export, counts) = (dir.join("export"), dir.join("counts"));
+        fs::create_dir_all(&export).unwrap();
+        fs::create_dir_all(&counts).unwrap();
+        fs::write(export.join("meta.json"), "{}").unwrap();
+        fs::write(counts.join("analyses.tsv"), "").unwrap();
+        fs::write(
+            counts.join("pos.tsv"),
+            "ciu\tPROPN\t3\nchist\tPROPN\t1\nnobel\tPROPN\t2\n",
+        )
+        .unwrap();
+        fs::write(counts.join("sources.json"), "{}").unwrap();
+        let lexemes = "casa\tNOUN\tcasa\t_\t_\t_\nciu\tNOUN\tciu\t_\textra\t_\n\
+                       ciu\tNOUN\tcius\tNumber=Plur\textra\t_\n\
+                       chist\tINTJ\tchist\t_\textra\t_\n\
+                       nobel\tNOUN\tnobel\t_\t_\t_\nnobel\tNOUN\tnobeles\tNumber=Plur\textra\t_\n";
+        fs::write(export.join("lexemes.tsv"), lexemes).unwrap();
+        let output = dir.join("es.dict");
+        build(&export, &counts, &output, None).unwrap();
+        let dictionary = esmorph::Dictionary::open(&output).unwrap();
+        // The treebanks have `ciu` only as the name `CiU`, so its lexeme is left out; an
+        // interjection stays
+        assert!(dictionary.analyze("ciu").iter().all(|a| a.lemma != "ciu"));
+        assert!(dictionary.analyze("cius").iter().all(|a| a.lemma != "ciu"));
+        // A lexeme of the main source keeps its forms of the extra source
+        assert!(
+            dictionary
+                .analyze("nobeles")
+                .iter()
+                .any(|a| a.lemma == "nobel")
+        );
+        assert!(
+            dictionary
+                .analyze("chist")
+                .iter()
+                .any(|a| a.lemma == "chist")
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
