@@ -913,9 +913,9 @@
 <p>Se requiere Python 3.11 o superior.</p>
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>esmorph
 </code></pre></div>
-<p>El paquete instala también el <a href="../cli/">comando <code>esmorph</code></a>. El extra <code>spacy</code> instala spaCy para el <a href="../spacy/">componente <code>esmorph</code></a>: <code>pip install "esmorph[spacy]"</code>.</p>
+<p>El paquete instala también el <a href="../cli/">comando <code>esmorph</code></a>. El extra <code>spacy</code> instala spaCy para el <a href="../spacy/">componente <code>esmorph</code></a>: <code>pip install "esmorph[spacy]"</code>; spaCy no tiene paquetes precompilados para Python sin GIL (3.14t, 3.15t).</p>
 <h2 id="paquetes-precompilados">Paquetes precompilados<a class="headerlink" href="#paquetes-precompilados" title="Permanent link">&para;</a></h2>
-<p>PyPI tiene paquetes precompilados para Linux (x86_64 y aarch64, manylinux y musllinux), macOS (Intel y Apple Silicon) y Windows (x64 y arm64). Un mismo paquete sirve para todas las versiones de Python a partir de la 3.11, y Python 3.14t sin GIL tiene el suyo propio; para instalarlos no hace falta Rust. El diccionario forma parte del paquete y no requiere una instalación aparte. Python 3.13 sin GIL no es compatible: las compilaciones sin GIL empiezan en la 3.14.</p>
+<p>PyPI tiene paquetes precompilados para Linux (x86_64 y aarch64, manylinux y musllinux), macOS (Intel y Apple Silicon) y Windows (x64 y arm64). Un mismo paquete sirve para todas las versiones de Python a partir de la 3.11, y Python 3.14t y 3.15t sin GIL tienen los suyos propios; para instalarlos no hace falta Rust. El diccionario forma parte del paquete y no requiere una instalación aparte. Python 3.13 sin GIL no es compatible: las compilaciones sin GIL empiezan en la 3.14.</p>
 <p>Las versiones preliminares <code>X.Y.Z.devN</code> se publican solo en TestPyPI:</p>
 <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>--index-url<span class="w"> </span>https://test.pypi.org/simple/<span class="w"> </span>--extra-index-url<span class="w"> </span>https://pypi.org/simple/<span class="w"> </span>--pre<span class="w"> </span>esmorph
 </code></pre></div>
@@ -923,7 +923,7 @@
 <div class="highlight"><pre><span></span><code>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--extra-index-url<span class="w"> </span>https://test.pypi.org/simple/<span class="w"> </span>--index-strategy<span class="w"> </span>unsafe-best-match<span class="w"> </span>--pre<span class="w"> </span>esmorph
 </code></pre></div>
 <h2 id="compilacion-desde-el-codigo-fuente">Compilación desde el código fuente<a class="headerlink" href="#compilacion-desde-el-codigo-fuente" title="Permanent link">&para;</a></h2>
-<p>En otras plataformas y en las compilaciones sin GIL posteriores a la 3.14, pip compila el paquete desde el código fuente, lo que requiere <a href="https://www.rust-lang.org/tools/install">Rust</a> 1.88 o superior:</p>
+<p>En otras plataformas y en las compilaciones sin GIL posteriores a la 3.15, pip compila el paquete desde el código fuente, lo que requiere <a href="https://www.rust-lang.org/tools/install">Rust</a> 1.88 o superior:</p>
 <div class="highlight"><pre><span></span><code>curl<span class="w"> </span>--proto<span class="w"> </span><span class="s1">'=https'</span><span class="w"> </span>--tlsv1.2<span class="w"> </span>-sSf<span class="w"> </span>https://sh.rustup.rs<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 pip<span class="w"> </span>install<span class="w"> </span>esmorph
 </code></pre></div>

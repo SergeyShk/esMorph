@@ -782,6 +782,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#words" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Own words
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#parallel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1040,6 +1051,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#words" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Own words
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#parallel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1071,15 +1093,15 @@
 
 
 <h1 id="analyzer">Analyzer<a class="headerlink" href="#analyzer" title="Permanent link">&para;</a></h1>
-<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">words</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 </code></pre></div>
 <p>Morphological analyzer: for a word form it finds all <a href="../analysis/">analyses</a> in a dictionary built from Wiktionary - the lemma, the part of speech and the <a href="https://universaldependencies.org/">Universal Dependencies</a> features - and orders them by probability. A token that the dictionary does not have gets the analyses of <a href="../analysis/#rules">rules</a>, and an unknown lowercase word is <a href="../analysis/#guess">guessed</a>. The dictionary is loaded when the analyzer is created.</p>
 <p>Exceptions:</p>
 <ul>
 <li><code>FileNotFoundError</code> - the dictionary file does not exist;</li>
 <li><code>OSError</code> - the dictionary file cannot be read: no access, the path points to a directory, a pipe or a device;</li>
-<li><code>ValueError</code> - the file is not an esMorph dictionary or is damaged (with <code>verify=True</code>, a deliberately crafted file too), the path has a NUL character;</li>
-<li><code>TypeError</code> - a path that is neither a string nor <code>PathLike</code>, <code>verify</code> that is not <code>bool</code>.</li>
+<li><code>ValueError</code> - the file is not an esMorph dictionary, is of another version of the format (a dictionary built by an earlier release is built again) or is damaged (with <code>verify=True</code>, a deliberately crafted file too), the path has a NUL character, an <a href="#words">own word</a> does not follow its sample;</li>
+<li><code>TypeError</code> - a path that is neither a string nor <code>PathLike</code>, <code>verify</code> that is not <code>bool</code>, <code>words</code> that is no mapping of strings to strings or pairs of strings.</li>
 </ul>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Code</label><label for="__tabbed_1_2">Result</label></div>
 <div class="tabbed-content">
@@ -1118,6 +1140,12 @@
 <td style="text-align: left;"><code>bool</code></td>
 <td style="text-align: left;"><code>False</code></td>
 <td style="text-align: left;">Check the whole dictionary, for a file of an untrusted source; takes tens of milliseconds</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>words</code></td>
+<td style="text-align: left;"><code>Mapping[str, str \| tuple[str, str]]</code></td>
+<td style="text-align: left;"><code>None</code></td>
+<td style="text-align: left;"><a href="#words">Own words</a> and their samples</td>
 </tr>
 </tbody>
 </table>
@@ -1212,7 +1240,23 @@
 <p class="metric-meta"><code>analyze_sentence</code> · <code>list[list[Analysis]]</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">analyze_sentence</span><span class="p">(</span><span class="n">words</span><span class="p">)</span>
 </code></pre></div>
-<p>The analyses of the tokens of a sentence, as <a href="#analyze"><code>analyze</code></a> gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and <code>prob</code> is its score in this sentence. The tokens are those of one sentence in order, as <code>analyze</code> takes them: a contraction (<code>del</code>) or a verb with clitics (<code>dámelo</code>) is one token. A sentence of one token is analyzed as <code>analyze</code>, and one longer than 256 tokens by parts of about 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.</p>
+<p>The analyses of the tokens of a sentence, as <a href="#analyze"><code>analyze</code></a> gives them, ordered by the context model of the dictionary: the first is the one the model chose by the tokens around, and <code>prob</code> is its score in this sentence. A few rules of Spanish then put another analysis first where only it fits, with the scores of the model kept:</p>
+<ul>
+<li>an article before a finite verb is the clitic pronoun (<code>no la descubras</code>), though not after a preposition or a determiner (<code>de la luthiere</code>);</li>
+<li>a noun right after a verb that takes a bare infinitive is that infinitive (<code>puede ser</code>, <code>parecía pesar</code>), but not after another verb (<code>siento pesar</code>);</li>
+<li>a form of <code>ser</code> and <code>ir</code> is <code>ir</code>:<ul>
+<li>after a reflexive clitic, unless a predicate follows (<code>se fue</code>, but <code>me fue muy difícil</code>);</li>
+<li>before <code>a</code> (<code>á</code> in older writing) and its goal, unless a prepositional or an adverbial phrase or an hour follows (<code>fue a casa</code>, but <code>fue a partir de 1990</code>, <code>fue al principio</code>, <code>fue a las cinco</code>);</li>
+<li>before a gerund (<code>fue cayendo</code>);</li>
+</ul>
+</li>
+<li>a word after a clitic, the negation or <code>tú</code> is a verb (<code>que te vayas</code>, <code>no vayas</code>), though not after a preposition (<code>punto de no retorno</code>); after a clitic so is an adverb or an adjective (<code>se acerca</code>, <code>te quedas</code>);</li>
+<li>a capitalized imperative opening a sentence is no name (<code>Indique si desea</code>), unless the model ranks a noun of the dictionary above it (<code>Sangre de Abel</code>);</li>
+<li>a word of the dictionary that is mostly a verb with clitics is one (<code>¡Cállate!</code>);</li>
+<li>a rare verb gives way to a frequent one with the same form (<code>aunque vengan</code> is <code>venir</code>, not <code>vengar</code>), unless the model chose a participle (<code>había entrevisto</code>).</li>
+</ul>
+<p>The model and the rules read an older or colloquial spelling as the word it stands for: <code>fué</code> as <code>fue</code>, <code>podia</code> as <code>podía</code>, <code>trabajao</code> as <code>trabajado</code>. A word with a capital letter keeps its spelling, as a name does (<code>Ramon</code>), unless it opens the sentence and the dictionary reads it as a word rather than a name (<code>Fué</code>).</p>
+<p>The tokens are those of one sentence in order, as <code>analyze</code> takes them: a contraction (<code>del</code>) or a verb with clitics (<code>dámelo</code>) is one token. A sentence of one token is analyzed as <code>analyze</code>, and one longer than 256 tokens by parts of about 256. The model - a small neural network trained on the treebanks UD Spanish AnCora and GSD - is read on the first call, in a couple of milliseconds; the method releases the GIL.</p>
 <table>
 <thead>
 <tr>
@@ -1357,7 +1401,7 @@
 <p class="metric-meta"><code>is_known</code> · <code>bool</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">is_known</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
 </code></pre></div>
-<p>Whether the dictionary has the word form, as written or as a verb of the dictionary with clitics; as with <code>analyze</code>, case and lost accents do not matter. Tokens analyzed by rules and guessed words are not in the dictionary.</p>
+<p>Whether the dictionary has the word form, as written or as a verb of the dictionary with clitics; as with <code>analyze</code>, case and lost accents do not matter. Tokens analyzed by rules, guessed words and colloquial spellings that only rules read as words of the dictionary (<code>trabajao</code>, <a href="../analysis/#spelling">Word analysis</a>) are not in the dictionary.</p>
 <table>
 <thead>
 <tr>
@@ -1394,8 +1438,8 @@
 </div>
 </div>
 <h2 id="dictionary">Dictionary<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
-<p>The dictionary of the package is built from the English <a href="https://en.wiktionary.org">Wiktionary</a> of October 2026: 676 thousand word forms of 117 thousand lexemes. Symbols of units (<code>km</code>, <code>kg</code>) come from a table of their own, and determiners, pronouns, prepositions, conjunctions and numerals in words from a table after the treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, whose conventions the lemmas and features follow (<a href="../analysis/#ud">Word analysis</a>). The probabilities of analyses come from the training parts of UD Spanish AnCora and <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> license.</p>
-<p>The property <code>dictionary_info</code> describes the dictionary of the analyzer: the source and its snapshot with its SHA-256, the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, for a dictionary with a context model the release and the treebanks of its training (<code>context</code>), the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is <code>esmorph.DictionaryInfo</code>, and of <code>context</code> - <code>esmorph.ContextInfo</code>.</p>
+<p>The dictionary of the package is built from the English <a href="https://en.wiktionary.org">Wiktionary</a> of October 2026 with the words and forms that only the Spanish <a href="https://es.wiktionary.org">Wiktionary</a> of November 2026 has: 717 thousand word forms of 136 thousand lexemes. The Spanish edition adds nouns, adjectives, adverbs and interjections and new forms of the words of the English one, but no names and no new verbs; its word gives way to a colloquial spelling of a word of the English edition (<code>juera</code> is <code>fuera</code>) and to a verb with clitics (<code>abrázala</code> is <code>abraza</code> + <code>la</code>), and with a capital letter it is mostly a name (<code>Navas</code>). Symbols of units (<code>km</code>, <code>kg</code>) come from a table of their own, and determiners, pronouns, prepositions, conjunctions and numerals in words from a table after the treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, whose conventions the lemmas and features follow (<a href="../analysis/#ud">Word analysis</a>). The probabilities of analyses come from the training parts of UD Spanish AnCora and <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> license.</p>
+<p>The property <code>dictionary_info</code> describes the dictionary of the analyzer: the source and its main snapshot with its SHA-256, the snapshots of all its sources with theirs (<code>snapshots</code>), the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, for a dictionary with a context model the release and the treebanks of its training (<code>context</code>), the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is <code>esmorph.DictionaryInfo</code>, and of <code>context</code> - <code>esmorph.ContextInfo</code>.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Code</label><label for="__tabbed_8_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1409,9 +1453,35 @@
 </div>
 </div>
 </div>
-<h2 id="parallel">Threads and processes<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
-<p>One analyzer can be used from several threads. <code>lemmatize</code>, <code>analyze_sentence</code> and <code>annotate</code> release the GIL, so threads speed them up. <code>analyze_many</code> creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded 3.14t included: for a large text, <code>lemmatize</code> or processes are faster. The analyzer and analyses are pickled, so they work with <code>multiprocessing</code> and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone or of another version of the format takes the dictionary of the package, and a damaged file raises <code>ValueError</code>. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but <code>forms()</code> gives an empty list and <code>inflect</code> raises <code>FormNotFoundError</code>.</p>
+<h2 id="words">Own words<a class="headerlink" href="#words" title="Permanent link">&para;</a></h2>
+<p>The parameter <code>words</code> adds words that the dictionary does not have. Each word comes with its sample: a word of the dictionary in the same form, usually the lemma.</p>
+<ul>
+<li>The word takes the forms of the lexemes of its sample with their features, order and shares: <code>{"tiktokear": "bloguear"}</code> gives <code>tiktokeo</code>, <code>tiktokeó</code> and <code>tiktokeando</code>.</li>
+<li>A sample with lexemes of several parts of speech needs the part of speech, a UD tag in capitals, in a pair: <code>{"zajo": ("bajo", "NOUN")}</code>; the pair may be a list, and several parts of speech are separated by commas: <code>{"tiktokero": ("bloguero", "ADJ,NOUN")}</code>.</li>
+<li>An own word may have letters that the dictionary has not.</li>
+<li>A word of the dictionary given as an own word keeps its analyses, and the new ones join them.</li>
+<li>The analyses of own words are those of words of the dictionary, with <code>source</code> equal to <code>"dictionary"</code>, and they are <a href="../inflection/">inflected</a> like their samples.</li>
+</ul>
 <div class="tabbed-set tabbed-alternate" data-tabs="9:2"><input checked="checked" id="__tabbed_9_1" name="__tabbed_9" type="radio" /><input id="__tabbed_9_2" name="__tabbed_9" type="radio" /><div class="tabbed-labels"><label for="__tabbed_9_1">Code</label><label for="__tabbed_9_2">Result</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="n">own</span> <span class="o">=</span> <span class="n">Analyzer</span><span class="p">(</span><span class="n">words</span><span class="o">=</span><span class="p">{</span><span class="s2">"tiktokear"</span><span class="p">:</span> <span class="s2">"bloguear"</span><span class="p">,</span> <span class="s2">"zajo"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"bajo"</span><span class="p">,</span> <span class="s2">"NOUN"</span><span class="p">)})</span>
+<span class="p">[</span>
+    <span class="p">(</span><span class="n">analysis</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">analysis</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">analysis</span> <span class="ow">in</span> <span class="p">(</span><span class="n">own</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"tiktokeó"</span><span class="p">,</span> <span class="s2">"zajos"</span><span class="p">])</span>
+<span class="p">]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>[('tiktokear', 'VERB'), ('zajo', 'NOUN')]
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>A sample that is not in the dictionary, a sample with lexemes of several parts of speech without one, a part of speech that the sample has not (<code>("bajo", "noun")</code>), a word without the ending of its sample (<code>"tiuteo"</code> as <code>"bloguear"</code>) and a word with a space raise <code>ValueError</code>. The analyzer shares the dictionary mapped into memory with the analyzers of the same file. Twenty thousand own words are added in under half a second, and the analysis is a few percent slower. Every analyzer keeps the forms of its own words in memory: twenty thousand words of the treebanks take about 50 MB, twenty thousand verbs about 220 MB. Pickle keeps the own words, and a process that unpickles an analyzer with own words or its analyses many times, as a worker of a pool does, makes the analyzer once and keeps the last two such analyzers until the process ends. The <a href="../cli/#options">command</a> takes own words from a file with <code>-w</code>, and the <a href="../spacy/#config">spaCy component</a> takes them with the parameter <code>words</code>.</p>
+<h2 id="parallel">Threads and processes<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
+<p>One analyzer can be used from several threads. <code>lemmatize</code>, <code>analyze_sentence</code> and <code>annotate</code> release the GIL, so threads speed them up. <code>analyze_many</code> creates the analyses as Python objects, so threads speed it up little on any Python, the free-threaded one (3.14t, 3.15t) included: for a large text, <code>lemmatize</code> or processes are faster. The analyzer and analyses are pickled, so they work with <code>multiprocessing</code> and joblib: processes share the dictionary mapped into memory. Pickling an analysis costs more than finding it, so workers that return lemmas or tuples of fields are faster than workers that return analyses. A pickle keeps the absolute path of the dictionary file (none for the dictionary of the package) and the place of the analysis in the tables of that dictionary, which is looked up anew only with another dictionary: unpickling loads each dictionary once per process, so analyses unpickled one by one share one analyzer, an analysis whose dictionary file is gone or of another version of the format takes the dictionary of the package, and a damaged file raises <code>ValueError</code>. An analysis that the dictionary does not have, as one pickled with another version of it, keeps its fields, but <code>forms()</code> gives an empty list and <code>inflect</code> raises <code>FormNotFoundError</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="10:2"><input checked="checked" id="__tabbed_10_1" name="__tabbed_10" type="radio" /><input id="__tabbed_10_2" name="__tabbed_10" type="radio" /><div class="tabbed-labels"><label for="__tabbed_10_1">Code</label><label for="__tabbed_10_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>

@@ -782,6 +782,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#words" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Palabras propias
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#parallel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1040,6 +1051,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#words" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Palabras propias
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#parallel" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1071,15 +1093,15 @@
 
 
 <h1 id="analizador">Analizador<a class="headerlink" href="#analizador" title="Permanent link">&para;</a></h1>
-<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="signature highlight"><pre><span></span><code><span class="n">Analyzer</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">words</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
 </code></pre></div>
 <p>Analizador morfológico: para una forma de palabra busca todos sus <a href="../analysis/">análisis</a> en un diccionario creado a partir de Wiktionary - el lema, la categoría gramatical y los rasgos de <a href="https://universaldependencies.org/">Universal Dependencies</a> - y los ordena por probabilidad. Un token que el diccionario no tiene recibe los análisis de unas <a href="../analysis/#rules">reglas</a>, y una palabra desconocida en minúsculas se <a href="../analysis/#guess">estima</a>. El diccionario se carga al crear el analizador.</p>
 <p>Excepciones:</p>
 <ul>
 <li><code>FileNotFoundError</code> - el archivo del diccionario no existe;</li>
 <li><code>OSError</code> - el archivo del diccionario no se puede leer: sin acceso, la ruta es un directorio, una tubería o un dispositivo;</li>
-<li><code>ValueError</code> - el archivo no es un diccionario de esMorph o está dañado (con <code>verify=True</code>, también un archivo creado a propósito), la ruta tiene un carácter NUL;</li>
-<li><code>TypeError</code> - una ruta que no es una cadena ni <code>PathLike</code>, <code>verify</code> que no es <code>bool</code>.</li>
+<li><code>ValueError</code> - el archivo no es un diccionario de esMorph, es de otra versión del formato (un diccionario construido por una versión anterior se construye de nuevo) o está dañado (con <code>verify=True</code>, también un archivo creado a propósito), la ruta tiene un carácter NUL, una <a href="#words">palabra propia</a> no sigue a su modelo;</li>
+<li><code>TypeError</code> - una ruta que no es una cadena ni <code>PathLike</code>, <code>verify</code> que no es <code>bool</code>, <code>words</code> que no es un mapeo de cadenas a cadenas o a pares de cadenas.</li>
 </ul>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Código</label><label for="__tabbed_1_2">Resultado</label></div>
 <div class="tabbed-content">
@@ -1118,6 +1140,12 @@
 <td style="text-align: left;"><code>bool</code></td>
 <td style="text-align: left;"><code>False</code></td>
 <td style="text-align: left;">Comprobar el diccionario entero, para un archivo de una fuente no fiable; tarda decenas de milisegundos</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>words</code></td>
+<td style="text-align: left;"><code>Mapping[str, str \| tuple[str, str]]</code></td>
+<td style="text-align: left;"><code>None</code></td>
+<td style="text-align: left;"><a href="#words">Palabras propias</a> y sus modelos</td>
 </tr>
 </tbody>
 </table>
@@ -1212,7 +1240,23 @@
 <p class="metric-meta"><code>analyze_sentence</code> · <code>list[list[Analysis]]</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">analyze_sentence</span><span class="p">(</span><span class="n">words</span><span class="p">)</span>
 </code></pre></div>
-<p>Los análisis de los tokens de una oración, tal como los da <a href="#analyze"><code>analyze</code></a>, ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y <code>prob</code> es su puntuación en esta oración. Los tokens son los de una oración en orden, tal como los toma <code>analyze</code>: una contracción (<code>del</code>) o un verbo con clíticos (<code>dámelo</code>) es un solo token. Una oración de un token se analiza como con <code>analyze</code>, y una de más de 256 tokens, por partes de unos 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.</p>
+<p>Los análisis de los tokens de una oración, tal como los da <a href="#analyze"><code>analyze</code></a>, ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y <code>prob</code> es su puntuación en esta oración. Unas pocas reglas del español ponen después primero otro análisis donde solo él cabe, y las puntuaciones del modelo se conservan:</p>
+<ul>
+<li>un artículo ante un verbo en forma personal es el pronombre clítico (<code>no la descubras</code>), aunque no tras una preposición o un determinante (<code>de la luthiere</code>);</li>
+<li>un sustantivo justo tras un verbo que rige un infinitivo sin preposición es ese infinitivo (<code>puede ser</code>, <code>parecía pesar</code>), pero no tras otro verbo (<code>siento pesar</code>);</li>
+<li>una forma de <code>ser</code> e <code>ir</code> es <code>ir</code>:<ul>
+<li>tras un clítico reflexivo, salvo que siga un predicado (<code>se fue</code>, pero <code>me fue muy difícil</code>);</li>
+<li>ante <code>a</code> (<code>á</code> en la escritura antigua) y su destino, salvo que siga una locución prepositiva o adverbial o una hora (<code>fue a casa</code>, pero <code>fue a partir de 1990</code>, <code>fue al principio</code>, <code>fue a las cinco</code>);</li>
+<li>ante un gerundio (<code>fue cayendo</code>);</li>
+</ul>
+</li>
+<li>una palabra tras un clítico, la negación o <code>tú</code> es un verbo (<code>que te vayas</code>, <code>no vayas</code>), aunque no tras una preposición (<code>punto de no retorno</code>); tras un clítico también lo es un adverbio o un adjetivo (<code>se acerca</code>, <code>te quedas</code>);</li>
+<li>un imperativo con mayúscula que abre una oración no es un nombre (<code>Indique si desea</code>), salvo que el modelo ponga por encima un sustantivo del diccionario (<code>Sangre de Abel</code>);</li>
+<li>una palabra del diccionario que suele ser un verbo con clíticos lo es (<code>¡Cállate!</code>);</li>
+<li>un verbo raro cede ante uno frecuente con la misma forma (<code>aunque vengan</code> es <code>venir</code>, no <code>vengar</code>), salvo que el modelo haya elegido un participio (<code>había entrevisto</code>).</li>
+</ul>
+<p>El modelo y las reglas leen una grafía antigua o coloquial como la palabra que representa: <code>fué</code> como <code>fue</code>, <code>podia</code> como <code>podía</code>, <code>trabajao</code> como <code>trabajado</code>. Una palabra con mayúscula conserva su grafía, como un nombre (<code>Ramon</code>), salvo que abra la oración y el diccionario la lea como palabra antes que como nombre (<code>Fué</code>).</p>
+<p>Los tokens son los de una oración en orden, tal como los toma <code>analyze</code>: una contracción (<code>del</code>) o un verbo con clíticos (<code>dámelo</code>) es un solo token. Una oración de un token se analiza como con <code>analyze</code>, y una de más de 256 tokens, por partes de unos 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.</p>
 <table>
 <thead>
 <tr>
@@ -1357,7 +1401,7 @@
 <p class="metric-meta"><code>is_known</code> · <code>bool</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">is_known</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
 </code></pre></div>
-<p>Si el diccionario tiene la forma de palabra, tal como está escrita o como un verbo del diccionario con clíticos; como en <code>analyze</code>, las mayúsculas y las tildes perdidas no importan. Los tokens analizados por reglas y las palabras estimadas no están en el diccionario.</p>
+<p>Si el diccionario tiene la forma de palabra, tal como está escrita o como un verbo del diccionario con clíticos; como en <code>analyze</code>, las mayúsculas y las tildes perdidas no importan. Los tokens analizados por reglas, las palabras estimadas y las grafías coloquiales que solo las reglas leen como palabras del diccionario (<code>trabajao</code>, <a href="../analysis/#spelling">Análisis de palabras</a>) no están en el diccionario.</p>
 <table>
 <thead>
 <tr>
@@ -1394,8 +1438,8 @@
 </div>
 </div>
 <h2 id="dictionary">Diccionario<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
-<p>El diccionario del paquete se crea a partir del <a href="https://en.wiktionary.org">Wiktionary</a> en inglés de octubre de 2026: 676 mil formas de palabra de 117 mil lexemas. Los símbolos de unidades (<code>km</code>, <code>kg</code>) vienen de una tabla propia, y los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras, de una tabla según el treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, cuyas convenciones siguen los lemas y los rasgos (<a href="../analysis/#ud">Análisis de palabras</a>). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
-<p>La propiedad <code>dictionary_info</code> describe el diccionario del analizador: la fuente y su instantánea con su SHA-256, la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, para un diccionario con modelo de contexto la versión y los treebanks de su entrenamiento (<code>context</code>), el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es <code>esmorph.DictionaryInfo</code>, y el de <code>context</code>, <code>esmorph.ContextInfo</code>.</p>
+<p>El diccionario del paquete se crea a partir del <a href="https://en.wiktionary.org">Wiktionary</a> en inglés de octubre de 2026 con las palabras y las formas que solo tiene el <a href="https://es.wiktionary.org">Wikcionario</a> en español de noviembre de 2026: 717 mil formas de palabra de 136 mil lexemas. La edición en español aporta sustantivos, adjetivos, adverbios e interjecciones y formas nuevas de las palabras de la inglesa, pero no nombres propios ni verbos nuevos; su palabra cede ante una grafía coloquial de una palabra de la edición inglesa (<code>juera</code> es <code>fuera</code>) y ante un verbo con clíticos (<code>abrázala</code> es <code>abraza</code> + <code>la</code>), y con mayúscula es sobre todo un nombre propio (<code>Navas</code>). Los símbolos de unidades (<code>km</code>, <code>kg</code>) vienen de una tabla propia, y los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras, de una tabla según el treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, cuyas convenciones siguen los lemas y los rasgos (<a href="../analysis/#ud">Análisis de palabras</a>). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+<p>La propiedad <code>dictionary_info</code> describe el diccionario del analizador: la fuente y su instantánea principal con su SHA-256, las instantáneas de todas sus fuentes con las suyas (<code>snapshots</code>), la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, para un diccionario con modelo de contexto la versión y los treebanks de su entrenamiento (<code>context</code>), el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es <code>esmorph.DictionaryInfo</code>, y el de <code>context</code>, <code>esmorph.ContextInfo</code>.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Código</label><label for="__tabbed_8_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1409,9 +1453,35 @@
 </div>
 </div>
 </div>
-<h2 id="parallel">Hilos y procesos<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
-<p>Un mismo analizador se puede usar desde varios hilos. <code>lemmatize</code>, <code>analyze_sentence</code> y <code>annotate</code> liberan el GIL, así que los hilos los aceleran. <code>analyze_many</code> crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también en 3.14t sin GIL: para un texto grande, <code>lemmatize</code> o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con <code>multiprocessing</code> y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe o es de otra versión del formato toma el diccionario del paquete, y un archivo dañado lanza <code>ValueError</code>. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero <code>forms()</code> da una lista vacía e <code>inflect</code> lanza <code>FormNotFoundError</code>.</p>
+<h2 id="words">Palabras propias<a class="headerlink" href="#words" title="Permanent link">&para;</a></h2>
+<p>El parámetro <code>words</code> añade palabras que el diccionario no tiene. Cada palabra viene con su modelo: una palabra del diccionario en la misma forma, normalmente el lema.</p>
+<ul>
+<li>La palabra toma las formas de los lexemas de su modelo con sus rasgos, su orden y sus proporciones: <code>{"tiktokear": "bloguear"}</code> da <code>tiktokeo</code>, <code>tiktokeó</code> y <code>tiktokeando</code>.</li>
+<li>Un modelo con lexemas de varias categorías necesita la categoría, una etiqueta de UD en mayúsculas, en un par: <code>{"zajo": ("bajo", "NOUN")}</code>; el par puede ser una lista, y varias categorías se separan con comas: <code>{"tiktokero": ("bloguero", "ADJ,NOUN")}</code>.</li>
+<li>Una palabra propia puede tener letras que el diccionario no tiene.</li>
+<li>Una palabra del diccionario dada como palabra propia conserva sus análisis, y los nuevos se suman a ellos.</li>
+<li>Los análisis de las palabras propias son los de las palabras del diccionario, con <code>source</code> igual a <code>"dictionary"</code>, y se <a href="../inflection/">flexionan</a> como sus modelos.</li>
+</ul>
 <div class="tabbed-set tabbed-alternate" data-tabs="9:2"><input checked="checked" id="__tabbed_9_1" name="__tabbed_9" type="radio" /><input id="__tabbed_9_2" name="__tabbed_9" type="radio" /><div class="tabbed-labels"><label for="__tabbed_9_1">Código</label><label for="__tabbed_9_2">Resultado</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="n">own</span> <span class="o">=</span> <span class="n">Analyzer</span><span class="p">(</span><span class="n">words</span><span class="o">=</span><span class="p">{</span><span class="s2">"tiktokear"</span><span class="p">:</span> <span class="s2">"bloguear"</span><span class="p">,</span> <span class="s2">"zajo"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"bajo"</span><span class="p">,</span> <span class="s2">"NOUN"</span><span class="p">)})</span>
+<span class="p">[</span>
+    <span class="p">(</span><span class="n">analysis</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">analysis</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">analysis</span> <span class="ow">in</span> <span class="p">(</span><span class="n">own</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"tiktokeó"</span><span class="p">,</span> <span class="s2">"zajos"</span><span class="p">])</span>
+<span class="p">]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>[('tiktokear', 'VERB'), ('zajo', 'NOUN')]
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Un modelo que no está en el diccionario, un modelo con lexemas de varias categorías sin la categoría, una categoría que el modelo no tiene (<code>("bajo", "noun")</code>), una palabra sin la terminación de su modelo (<code>"tiuteo"</code> como <code>"bloguear"</code>) y una palabra con un espacio lanzan <code>ValueError</code>. El analizador comparte el diccionario proyectado en memoria con los analizadores del mismo archivo. Veinte mil palabras propias se añaden en menos de medio segundo, y el análisis es unos pocos por ciento más lento. Cada analizador guarda en memoria las formas de sus palabras propias: veinte mil palabras de los treebanks ocupan unos 50 MB, veinte mil verbos unos 220 MB. Pickle conserva las palabras propias, y un proceso que restaura muchas veces un analizador con palabras propias o sus análisis, como lo hace un proceso de un pool, crea el analizador una sola vez y conserva los dos últimos analizadores así creados hasta que termina el proceso. El <a href="../cli/#options">comando</a> toma las palabras propias de un archivo con <code>-w</code>, y el <a href="../spacy/#config">componente de spaCy</a> las toma con el parámetro <code>words</code>.</p>
+<h2 id="parallel">Hilos y procesos<a class="headerlink" href="#parallel" title="Permanent link">&para;</a></h2>
+<p>Un mismo analizador se puede usar desde varios hilos. <code>lemmatize</code>, <code>analyze_sentence</code> y <code>annotate</code> liberan el GIL, así que los hilos los aceleran. <code>analyze_many</code> crea los análisis como objetos de Python, así que los hilos lo aceleran poco en cualquier Python, también sin GIL (3.14t, 3.15t): para un texto grande, <code>lemmatize</code> o los procesos son más rápidos. El analizador y los análisis se serializan con pickle, así que funcionan con <code>multiprocessing</code> y joblib: los procesos comparten el diccionario proyectado en memoria. Serializar un análisis cuesta más que encontrarlo, así que los procesos que devuelven lemas o tuplas de campos son más rápidos que los que devuelven análisis. Pickle guarda la ruta absoluta del archivo del diccionario (ninguna para el diccionario del paquete) y el lugar del análisis en las tablas de ese diccionario, que solo se busca de nuevo con otro diccionario: al deserializar, cada diccionario se carga una vez por proceso, así que los análisis deserializados uno a uno comparten un mismo analizador, un análisis cuyo archivo de diccionario ya no existe o es de otra versión del formato toma el diccionario del paquete, y un archivo dañado lanza <code>ValueError</code>. Un análisis que el diccionario no tiene, como uno guardado con otra versión del diccionario, conserva sus campos, pero <code>forms()</code> da una lista vacía e <code>inflect</code> lanza <code>FormNotFoundError</code>.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="10:2"><input checked="checked" id="__tabbed_10_1" name="__tabbed_10" type="radio" /><input id="__tabbed_10_2" name="__tabbed_10" type="radio" /><div class="tabbed-labels"><label for="__tabbed_10_1">Código</label><label for="__tabbed_10_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
