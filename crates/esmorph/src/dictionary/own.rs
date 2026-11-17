@@ -7,11 +7,11 @@ use std::sync::Arc;
 use super::{Analysis, Dictionary, Entry, Lexeme, Source, analyses_at, normalized};
 use crate::Error;
 use crate::alphabet::{Key, MAX_KEY};
-use crate::format::{LEMMA_ONLY, OLD, SPOKEN, VARIANT};
+use crate::format::{LEMMA_ONLY, OLD, SPOKEN, UD_BITS, VARIANT};
 
 /// Sample of an own word: a word of the dictionary in the same form as the own word (mostly the
-/// lemma) and the UD part of speech if the sample has lexemes of several (`bajo` is ADJ, ADP, ADV,
-/// NOUN and VERB)
+/// lemma) and the UD part of speech if the sample has lexemes of several (`bajo` is ADJ, ADP, ADV
+/// and NOUN), or several parts of speech separated by commas (`"ADJ,NOUN"`)
 ///
 /// Made from a word (`"bloguear".into()`) or a pair of a word and a part of speech
 /// (`("bajo", "NOUN").into()`)
@@ -20,7 +20,8 @@ use crate::format::{LEMMA_ONLY, OLD, SPOKEN, VARIANT};
 pub struct Sample<'a> {
     /// The word of the dictionary
     pub word: &'a str,
-    /// The UD part of speech (`"VERB"`): needed if the sample has lexemes of several
+    /// The UD part of speech (`"VERB"`) or several separated by commas (`"ADJ,NOUN"`): needed if
+    /// the sample has lexemes of several
     pub pos: Option<&'a str>,
 }
 
@@ -42,15 +43,15 @@ impl<'a> From<(&'a str, &'a str)> for Sample<'a> {
 /// Own words by the bytes of their keys
 pub(super) type OwnWords = HashMap<Box<[u8]>, Vec<OwnForm>, BuildHasherDefault<KeyHasher>>;
 
-/// A form of an own word: the accents of its key, its spelling, the form of a table, and the share
-/// and the place of that form among the analyses of the spelling of the sample
+/// A form of an own word: the accents of its key, which with the key give its spelling, the form of
+/// a table, and the share and the place of that form among the analyses of the spelling of the
+/// sample
 #[derive(Clone)]
 pub(super) struct OwnForm {
     marks: u64,
-    spelling: String,
     entry: Entry,
-    share: f64,
-    place: usize,
+    share: f32,
+    place: u16,
 }
 
 /// Hash of the keys of own words: they are looked for on every token, so it is faster than
@@ -58,10 +59,23 @@ pub(super) struct OwnForm {
 #[derive(Clone, Default)]
 pub(super) struct KeyHasher(u64);
 
+impl KeyHasher {
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
 impl Hasher for KeyHasher {
+    // Eight bytes at a time: a token of a text takes a probe of the own words
     fn write(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            self.0 = (self.0.rotate_left(5) ^ u64::from(byte)).wrapping_mul(0x517c_c1b7_2722_0a95);
+        let (chunks, rest) = bytes.as_chunks::<8>();
+        for &chunk in chunks {
+            self.add(u64::from_le_bytes(chunk));
+        }
+        if !rest.is_empty() {
+            let mut word = [0; 8];
+            word[..rest.len()].copy_from_slice(rest);
+            self.add(u64::from_le_bytes(word));
         }
     }
 
@@ -91,9 +105,9 @@ impl Dictionary {
     /// # Errors
     ///
     /// [`Error::Word`] if the sample is not in the dictionary, has lexemes of several parts of
-    /// speech and none is given, the word does not inflect as the sample (the sample has another
-    /// ending or the word has no stem), or the word is no token: it has a space or a control
-    /// character
+    /// speech and none is given, has no lexemes of a given part of speech, the word does not
+    /// inflect as the sample (the sample has another ending or the word has no stem), or the word
+    /// is no token: it has a space or a control character
     pub fn with_words<'a, S: Into<Sample<'a>>>(
         mut self,
         words: impl IntoIterator<Item = (&'a str, S)>,
@@ -114,7 +128,8 @@ impl Dictionary {
                         (1.0 / analyses.len().max(1) as f64, analyses.len()),
                         |(at, found)| (found.prob, at),
                     );
-                forms.push((spelling, entry, share, place));
+                let place = u16::try_from(place).unwrap_or(u16::MAX);
+                forms.push((spelling, entry, share as f32, place));
             }
             let own = Arc::make_mut(&mut self.own_words);
             for (spelling, entry, share, place) in forms {
@@ -130,10 +145,11 @@ impl Dictionary {
                     )));
                 };
                 let forms = own.entry(key.bytes().into()).or_default();
-                if !(forms.iter()).any(|known| known.entry == entry && known.spelling == spelling) {
+                if !(forms.iter()).any(|known| known.entry == entry && known.marks == key.marks) {
+                    // A key has a form or two: a vector grows by four places at first
+                    forms.reserve_exact(1);
                     forms.push(OwnForm {
                         marks: key.marks,
-                        spelling,
                         entry,
                         share,
                         place,
@@ -166,36 +182,45 @@ impl Dictionary {
             .filter(|analysis| analysis.entry.is_some())
             .collect();
         if analyses.is_empty() {
-            return Err(Error::Word(format!(
-                "the sample {like:?} is not in the dictionary"
-            )));
+            // A reflexive infinitive is in the dictionary without `se`
+            let verb = (like.strip_suffix("se"))
+                .filter(|verb| verb.ends_with('r') && !self.found(verb).is_empty());
+            return Err(Error::Word(match verb {
+                Some(verb) => format!(
+                    "the sample {like:?} is not in the dictionary: give the verb without se, {verb:?}"
+                ),
+                None => format!("the sample {like:?} is not in the dictionary"),
+            }));
+        }
+        let mut found: Vec<&str> = analyses.iter().map(pos).collect();
+        found.sort_unstable();
+        found.dedup();
+        if let Some(wanted) = sample.pos {
+            let wanted: Vec<&str> = wanted.split(',').map(str::trim).collect();
+            if let Some(missing) = wanted.iter().find(|wanted| !found.contains(wanted)) {
+                return Err(Error::Word(format!(
+                    "the sample {like:?} has no lexemes of {missing}, only of {}",
+                    found.join(", ")
+                )));
+            }
+            analyses.retain(|analysis| wanted.contains(&pos(analysis)));
         }
         // A sample that is a lemma gives its lexemes of that lemma: `bajo` of `bajar` is no sample
         // of a noun
         if analyses.iter().any(|analysis| analysis.lemma == like) {
             analyses.retain(|analysis| analysis.lemma == like);
         }
-        let mut found: Vec<&str> = analyses.iter().map(pos).collect();
-        found.sort_unstable();
-        found.dedup();
-        match sample.pos {
-            Some(wanted) => {
-                analyses.retain(|analysis| pos(analysis) == wanted);
-                if analyses.is_empty() {
-                    return Err(Error::Word(format!(
-                        "the sample {like:?} has no lexemes of {wanted}, only of {}",
-                        found.join(", ")
-                    )));
-                }
-            }
-            None if found.len() > 1 => {
+        if sample.pos.is_none() {
+            let mut kept: Vec<&str> = analyses.iter().map(pos).collect();
+            kept.sort_unstable();
+            kept.dedup();
+            if kept.len() > 1 {
                 return Err(Error::Word(format!(
                     "the sample {like:?} has lexemes of several parts of speech ({}): give the \
                      part of speech",
-                    found.join(", ")
+                    kept.join(", ")
                 )));
             }
-            None => {}
         }
         let mut forms = Vec::new();
         let mut lexemes: Vec<(u16, &str)> = Vec::new();
@@ -228,8 +253,21 @@ impl Dictionary {
                 "VERB" | "AUX" => LEMMA_ONLY | SPOKEN | OLD,
                 _ => LEMMA_ONLY | SPOKEN | VARIANT,
             };
+            // A variant is kept if the sample is that form (`buen`) or it is the only form of its
+            // tag (`film` has no main singular)
+            let main = |form: usize| {
+                if form == usize::from(entry.form) {
+                    return false;
+                }
+                let cell = lexeme.cells[form];
+                (0..lexeme.cells.len()).any(|other| {
+                    let main = lexeme.cells[other];
+                    main & (LEMMA_ONLY | SPOKEN | VARIANT) == 0 && main & UD_BITS == cell & UD_BITS
+                })
+            };
             for form in 0..lexeme.cells.len() {
-                if lexeme.cells[form] & skipped != 0 {
+                let cell = lexeme.cells[form];
+                if cell & skipped != 0 && (cell & (LEMMA_ONLY | SPOKEN | OLD) != 0 || main(form)) {
                     continue;
                 }
                 if let (Some(spelling), Some(like)) = (
@@ -267,14 +305,13 @@ impl Dictionary {
         mut analyses: Vec<Analysis>,
         exact: bool,
     ) -> (Vec<Analysis>, bool) {
-        let Some((key, forms, as_written)) = self.own_forms(word) else {
-            return (analyses, exact);
-        };
         // A lost diaeresis is not looked for in a word the dictionary has as written: `guiso` is
         // no own `güiso`
-        if exact && !as_written {
+        let Some((key, forms, as_written)) =
+            (self.alphabet.input_key(word)).and_then(|key| self.own_forms_of(&key, !exact))
+        else {
             return (analyses, exact);
-        }
+        };
         let own_exact = as_written && forms.iter().any(|own| own.marks == key.marks);
         // The analyses of the dictionary with other accents give way to the exact own word
         if own_exact && !exact {
@@ -285,16 +322,17 @@ impl Dictionary {
             .filter(|own| !exact || own.marks == key.marks)
             .collect();
         chosen.sort_by_key(|own| own.place);
-        let total: f64 = chosen.iter().map(|own| own.share).sum();
+        let total: f64 = chosen.iter().map(|own| f64::from(own.share)).sum();
         let scale = chosen.len() as f64 / analyses.len().max(1) as f64;
         let known = analyses.len();
         for own in chosen {
             let share = if total > 0.0 {
-                own.share / total * scale
+                f64::from(own.share) / total * scale
             } else {
                 scale
             };
-            let Some(analysis) = self.analysis(own.spelling.clone(), own.entry, share) else {
+            let spelling = self.alphabet.spelling(&key, own.marks);
+            let Some(analysis) = self.analysis(spelling, own.entry, share) else {
                 continue;
             };
             let repeated = analyses[..known].iter().any(|other| {
@@ -319,11 +357,19 @@ impl Dictionary {
     /// The key of a word, the own words of it and whether the key is as written: the key as written,
     /// then with a lost diaeresis restored
     fn own_forms(&self, word: &str) -> Option<(Key, &[OwnForm], bool)> {
-        let key = self.alphabet.input_key(word)?;
+        self.own_forms_of(&self.alphabet.input_key(word)?, true)
+    }
+
+    /// The own words of a key as written and, with `diaeresis`, of the key with a lost diaeresis
+    /// restored: the key found, its own words and whether it is as written
+    fn own_forms_of(&self, key: &Key, diaeresis: bool) -> Option<(Key, &[OwnForm], bool)> {
         if let Some(forms) = self.own_words.get(key.bytes()) {
-            return Some((key, forms, true));
+            return Some((key.clone(), forms, true));
         }
-        (self.alphabet.diaeresis_keys(&key).into_iter()).find_map(|key| {
+        if !diaeresis {
+            return None;
+        }
+        (self.alphabet.diaeresis_keys(key).into_iter()).find_map(|key| {
             let forms = self.own_words.get(key.bytes())?;
             Some((key, forms.as_slice(), false))
         })
@@ -582,12 +628,96 @@ mod tests {
     }
 
     #[test]
+    fn a_variant_that_is_the_sample_or_alone_in_its_tag() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let (sing, plur) = ("Gender=Masc|Number=Sing", "Gender=Masc|Number=Plur");
+        let forms = [
+            ("film", "NOUN", "film", sing),
+            ("film", "NOUN", "films", plur),
+            ("gran", "ADJ", "gran", "Number=Sing"),
+            ("bueno", "ADJ", "bueno", sing),
+            ("bueno", "ADJ", "buen", sing),
+            ("bueno", "ADJ", "buenos", plur),
+        ];
+        for (lemma, pos, form, feats) in forms {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        builder.mark_variant("film", "NOUN", "film", sing).unwrap();
+        builder
+            .mark_variant("gran", "ADJ", "gran", "Number=Sing")
+            .unwrap();
+        builder.mark_variant("bueno", "ADJ", "buen", sing).unwrap();
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let own = (dictionary.clone())
+            .with_words([("podcast", "film"), ("zqgran", "gran"), ("zqbuen", "buen")])
+            .unwrap();
+        for word in ["podcast", "podcasts", "zqgran", "zqbuen", "zqbueno"] {
+            assert!(
+                (own.analyze(word).iter()).any(|a| a.source == Source::Dictionary),
+                "{word}"
+            );
+        }
+        // A variant beside a main form of its tag stays out
+        let dictionary = dictionary.with_words([("zqbueno", "bueno")]).unwrap();
+        let forms: Vec<String> = (dictionary
+            .forms(&dictionary.analyze("zqbuenos")[0])
+            .into_iter())
+        .map(|form| form.word)
+        .collect();
+        assert_eq!(forms, ["zqbueno", "zqbuenos"]);
+    }
+
+    #[test]
+    fn samples_of_several_parts_of_speech() {
+        let dictionary = dictionary();
+        // Both parts of speech of a sample
+        let both = (dictionary.clone())
+            .with_words([("cajo", ("bajo", "ADJ,NOUN"))])
+            .unwrap();
+        let mut found: Vec<String> = (both.analyze("cajos").into_iter())
+            .map(|analysis| both.ud_tag(analysis.ud).unwrap().pos().to_owned())
+            .collect();
+        found.sort();
+        assert_eq!(found, ["ADJ", "NOUN"]);
+        // A part of speech chooses among the analyses of the spelling before the lemma does: the
+        // sample need not be the lemma of its part of speech
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        let (sing, plur) = ("Gender=Masc|Number=Sing", "Gender=Masc|Number=Plur");
+        for (lemma, pos, form, feats) in [
+            ("buen", "ADJ", "buen", sing),
+            ("buen", "ADJ", "bueno", sing),
+            ("buen", "ADJ", "buenos", plur),
+            ("bueno", "INTJ", "bueno", ""),
+        ] {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        let own = (dictionary.with_words([("zqbueno", ("bueno", "ADJ"))])).unwrap();
+        assert_eq!(
+            first(&own, "zqbuenos"),
+            ("zqbuenos".into(), "zqbuen".into())
+        );
+    }
+
+    #[test]
     fn wrong_own_words() {
         let dictionary = dictionary();
         for (word, sample, wanted) in [
             ("tuitear", Sample::from("qzx"), "not in the dictionary"),
             ("bajo", Sample::from("bajo"), "several parts of speech"),
             ("cajo", Sample::from(("bajo", "VERB")), "no lexemes of VERB"),
+            (
+                "cajo",
+                Sample::from(("bajo", "NOUN,VERB")),
+                "no lexemes of VERB",
+            ),
+            (
+                "tuitearse",
+                Sample::from("bloguearse"),
+                "without se, \"bloguear\"",
+            ),
             ("tuiteo", Sample::from("bloguear"), "does not inflect"),
             ("ar", Sample::from("bloguear"), "does not inflect"),
             ("tui tear", Sample::from("bloguear"), "no token"),

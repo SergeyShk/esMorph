@@ -588,13 +588,14 @@ impl Dictionary {
         !analyses.is_empty()
             && analyses.iter().all(|analysis| {
                 analysis.source == Source::Dictionary
-                    && !self.is_own_analysis(analysis)
                     && (self.lexeme_of(analysis))
                         .zip(analysis.entry)
                         .and_then(|(lexeme, entry)| {
                             lexeme.cells.get(usize::from(entry.form)).copied()
                         })
                         .is_some_and(|cell| cell & EXTRA != 0)
+                    // The costlier check last: forms of the extra source are few
+                    && !self.is_own_analysis(analysis)
             })
     }
 

@@ -200,7 +200,7 @@ def test_spoken_spelling_keeps_other_words(morph):
 
 
 def test_own_words():
-    morph = Analyzer(words={"tiktokear": "bloguear", "cajo": ("bajo", "NOUN")})
+    morph = Analyzer(words={"tiktokear": "bloguear", "zajo": ("bajo", "NOUN")})
     analysis = morph.analyze("tiktokeamos")[0]
     assert (analysis.word, analysis.lemma, analysis.pos, analysis.source) == (
         "tiktokeamos",
@@ -211,15 +211,62 @@ def test_own_words():
     assert analysis.inflect(Tense="Past", Person="3", Number="Sing") == "tiktokeó"
     assert "tiktokeando" in {form.word for form in analysis.forms()}
     assert morph.analyze("tiktokearlo")[0].words == ("tiktokear", "lo")
-    assert morph.lemmatize(["Tiktokeó", "los", "cajos"]) == ["tiktokear", "el", "cajo"]
+    assert morph.lemmatize(["Tiktokeó", "los", "zajos"]) == ["tiktokear", "el", "zajo"]
     assert morph.is_known("tiktokeó")
     # Another analyzer does not have them
     assert Analyzer().analyze("tiktokeó")[0].source == "guess"
     # Pickle keeps the words of the analyzer; an analysis keeps its forms
     restored = pickle.loads(pickle.dumps(morph))
-    assert restored.analyze("cajos")[0].lemma == "cajo"
+    assert restored.analyze("zajos")[0].lemma == "zajo"
     analysis = pickle.loads(pickle.dumps(morph.analyze("tiktokeó")[0]))
     assert analysis.inflect(Mood="Ind", Tense="Pres", Person="1") == "tiktokeo"
+
+
+def test_own_words_of_a_pair_or_several_parts_of_speech():
+    # A pair as a list, as JSON gives it, and two parts of speech of the sample
+    morph = Analyzer(words={"zajo": ["bajo", "NOUN"], "tiktokero": ("bloguero", "ADJ,NOUN")})
+    assert morph.analyze("zajos")[0].lemma == "zajo"
+    assert {a.pos for a in morph.analyze("tiktokeros")} == {"ADJ", "NOUN"}
+    # The part of speech chooses among the analyses of the sample: bueno is a form of the ADJ buen
+    assert Analyzer(words={"zqbueno": ("bueno", "ADJ")}).analyze("zqbuenas")[0].pos == "ADJ"
+
+
+def test_own_words_like_a_variant():
+    # The sample is a variant of its lexeme, or the only form of its tag is one
+    morph = Analyzer(words={"podcastt": "film", "zqgran": "gran"})
+    assert morph.analyze("podcastt")[0].source == "dictionary"
+    assert morph.analyze("zqgran")[0].lemma == "zqgran"
+
+
+OWN_WORDS_PICKLE = """
+import pickle, sys
+data = sys.stdin.buffer.read()
+own, analyses = pickle.loads(data)
+again, _ = pickle.loads(data)
+print(own is again, [[form.word for form in analysis.forms()] for analysis in analyses])
+"""
+
+
+def test_pickle_keeps_own_words():
+    # An unpickled analysis of an own word has its forms, not those of its sample
+    morph = Analyzer(words={"zogur": "yogur", "sobretener": "tener"})
+    analyses = [morph.analyze("zogures")[0], morph.analyze("sobretuvo")[0]]
+    forms = [[form.word for form in analysis.forms()] for analysis in analyses]
+    assert forms[0] == ["zogur", "zogures"]
+    restored = pickle.loads(pickle.dumps(analyses))
+    assert [[form.word for form in analysis.forms()] for analysis in restored] == forms
+    single = pickle.loads(pickle.dumps(analyses[1]))
+    assert [form.word for form in single.forms()] == forms[1]
+    assert pickle.loads(pickle.dumps(morph)) is morph
+    # A new process makes the analyzer once, for the analyzer and the analyses of every pickle
+    result = subprocess.run(
+        [sys.executable, "-c", OWN_WORDS_PICKLE],
+        input=pickle.dumps((morph, analyses)),
+        capture_output=True,
+        check=True,
+        timeout=60,
+    )
+    assert result.stdout.decode().strip() == f"True {forms}"
 
 
 def test_own_words_keep_the_forms_of_other_words():
@@ -234,7 +281,10 @@ def test_own_words_keep_the_forms_of_other_words():
     [
         ({"tiktokear": "qzxw"}, ValueError, "is not in the dictionary"),
         ({"cajo": "bajo"}, ValueError, "lexemes of several parts of speech"),
-        ({"cajo": ("bajo", "VERB")}, ValueError, "has no lexemes of VERB"),
+        ({"cajo": ("bajo", "INTJ")}, ValueError, "has no lexemes of INTJ"),
+        ({"zajo": ("bajo", "NOUN,INTJ")}, ValueError, "has no lexemes of INTJ"),
+        ({"tuitearse": "bloguearse"}, ValueError, 'without se, "bloguear"'),
+        ({"zajo": ("bajo", "NOUN", "ADJ")}, TypeError, "words must map"),
         ({"tiktok ear": "bloguear"}, ValueError, "a space"),
         ({"tiktokear": 1}, TypeError, "words must map"),
         (["tiktokear"], TypeError, "words must map"),
