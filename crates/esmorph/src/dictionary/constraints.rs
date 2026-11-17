@@ -54,6 +54,21 @@ const LOCUTIONS: [&str; 18] = [
     "raíz",
     "través",
 ];
+/// Adverbial phrases `al ...`, which are no goal of `ir`: `fue al principio difícil`
+const AL_PHRASES: [&str; 12] = [
+    "cabo",
+    "contrario",
+    "fin",
+    "final",
+    "instante",
+    "menos",
+    "mismo",
+    "parecer",
+    "principio",
+    "propio",
+    "punto",
+    "revés",
+];
 /// Words a verb follows, not a noun without a determiner: the negation and the subject `tú`
 const BEFORE_VERB: [&str; 2] = ["no", "tú"];
 /// Lemmas of the verbs followed by a bare infinitive: `puede ser`, `suele parecer`, but `tiene
@@ -185,7 +200,8 @@ impl Dictionary {
 
     /// A form of `ser` and `ir` is `ir` after a reflexive clitic but before a predicate (`se fue`,
     /// `me fui de casa`, not `me fue muy útil`), before `a` and its goal (`fue a casa`, `fueron a
-    /// ver`, not `fue a partir de`, `fue a las cinco`) and before a gerund (`fue cayendo`)
+    /// ver`, not `fue a partir de`, `fue al principio`, `fue a las cinco`) and before a gerund
+    /// (`fue cayendo`)
     fn ser_ir(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         if !SER_IR.contains(&lower[at].as_str()) || list.first()?.lemma == "ir" {
@@ -202,7 +218,9 @@ impl Dictionary {
             && next != "de"
             && self.top_pos(sentence, predicate) != "ADJ"
             && !self.top_verb_form(sentence, predicate, "Part");
-        let locution = LOCUTIONS.contains(&word(at + 2)) && matches!(word(at + 3), "de" | "del");
+        let locution = (LOCUTIONS.contains(&word(at + 2)) && matches!(word(at + 3), "de" | "del"))
+            || (next == "al" && AL_PHRASES.contains(&word(at + 2)))
+            || (matches!(next, "a" | "á") && word(at + 2) == "la" && word(at + 3) == "vez");
         let hour = matches!(word(at + 2), "la" | "las") && self.top_pos(sentence, at + 3) == "NUM";
         // `á` is the preposition in older writing: `fué á ocultarse`
         let goal = matches!(next, "a" | "á" | "al")
@@ -217,7 +235,8 @@ impl Dictionary {
     }
 
     /// A word the model reads as a noun after a reflexive or a dative clitic, the negation or
-    /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`
+    /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`; so is one it reads as
+    /// an adverb or an adjective after such a clitic: `se acerca`, `te quedas`
     fn verb_after(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         let before = at.checked_sub(1)?;
@@ -226,7 +245,9 @@ impl Dictionary {
         // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
             && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"));
-        if !(clitic || negation) || !matches!(self.pos(list.first()?), "NOUN" | "PROPN") {
+        let read = self.pos(list.first()?);
+        let noun = matches!(read, "NOUN" | "PROPN");
+        if !(((clitic || negation) && noun) || (clitic && matches!(read, "ADV" | "ADJ"))) {
             return None;
         }
         list.iter().position(|analysis| {

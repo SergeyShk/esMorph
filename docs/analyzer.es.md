@@ -129,9 +129,9 @@ Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyz
 - un sustantivo justo tras un verbo que rige un infinitivo sin preposición es ese infinitivo (`puede ser`, `parecía pesar`), pero no tras otro verbo (`siento pesar`);
 - una forma de `ser` e `ir` es `ir`:
     - tras un clítico reflexivo, salvo que siga un predicado (`se fue`, pero `me fue muy difícil`);
-    - ante `a` (`á` en la escritura antigua) y su destino, salvo que siga una locución prepositiva o una hora (`fue a casa`, pero `fue a partir de 1990`, `fue a las cinco`);
+    - ante `a` (`á` en la escritura antigua) y su destino, salvo que siga una locución prepositiva o adverbial o una hora (`fue a casa`, pero `fue a partir de 1990`, `fue al principio`, `fue a las cinco`);
     - ante un gerundio (`fue cayendo`);
-- una palabra tras un clítico, la negación o `tú` es un verbo (`que te vayas`, `no vayas`), aunque no tras una preposición (`punto de no retorno`);
+- una palabra tras un clítico, la negación o `tú` es un verbo (`que te vayas`, `no vayas`), aunque no tras una preposición (`punto de no retorno`); tras un clítico también lo es un adverbio o un adjetivo (`se acerca`, `te quedas`);
 - un imperativo con mayúscula que abre una oración no es un nombre (`Indique si desea`), salvo que el modelo ponga por encima un sustantivo del diccionario (`Sangre de Abel`);
 - una palabra del diccionario que suele ser un verbo con clíticos lo es (`¡Cállate!`);
 - un verbo raro cede ante uno frecuente con la misma forma (`aunque vengan` es `venir`, no `vengar`), salvo que el modelo haya elegido un participio (`había entrevisto`).

@@ -871,6 +871,8 @@ def test_analyze_sentence(morph):
         ("Fue a finales del siglo XIX .", 0, ("ser", "AUX")),
         ("Fue a las cinco .", 0, ("ser", "AUX")),
         ("Fue a ella a quien vi .", 0, ("ser", "AUX")),
+        ("Aquello fue al principio difícil .", 1, ("ser", "AUX")),
+        ("Fue a la vez maestro y amigo .", 0, ("ser", "AUX")),
         # An older spelling is read as the word it stands for, and á as the preposition
         ("Ese fué el hombre .", 1, ("ser", "AUX")),
         ("Fué el duque .", 0, ("ser", "AUX")),
@@ -883,6 +885,7 @@ def test_analyze_sentence(morph):
         ("No comas , que es tarde .", 1, ("comer", "VERB")),
         ("No temas , descuida .", 1, ("temer", "VERB")),
         ("Adonde tú vayas , voy .", 2, ("ir", "VERB")),
+        ("Se acerca a él .", 1, ("acercar", "VERB")),
         ("Es el punto de no retorno .", 5, ("retorno", "NOUN")),
         # An imperative opening a sentence is no name; a name and a noun stay
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
