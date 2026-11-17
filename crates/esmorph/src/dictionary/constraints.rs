@@ -123,7 +123,10 @@ impl Dictionary {
                 promote(&mut sentence[at], index);
             }
             // Also of the verb a rule chose: `no temas` is `temer`, not `temar`
-            if let Some(index) = self.frequent_lemma(&sentence[at], &shares[at]) {
+            let after_clitic = at > 0
+                && PROCLITICS.contains(&lower[at - 1].as_str())
+                && self.top_pos(sentence, at - 1) == "PRON";
+            if let Some(index) = self.frequent_lemma(&sentence[at], &shares[at], after_clitic) {
                 promote(&mut sentence[at], index);
             }
         }
@@ -329,9 +332,15 @@ impl Dictionary {
     }
 
     /// The analysis of the frequent verb the model ranks highest when the model chose a finite form
-    /// of a rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`; a
-    /// form of the same kind, so `me visto` is no participle of `ver`
-    fn frequent_lemma(&self, list: &[Analysis], shares: &[(String, f64)]) -> Option<usize> {
+    /// of a rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`.
+    /// After a clitic, which no participle follows, a form of the same kind: `me visto` is `vestir`,
+    /// no participle of `ver`
+    fn frequent_lemma(
+        &self,
+        list: &[Analysis],
+        shares: &[(String, f64)],
+        after_clitic: bool,
+    ) -> Option<usize> {
         let top = list.first()?;
         let share = |lemma: &str| {
             shares
@@ -352,7 +361,7 @@ impl Dictionary {
         list.iter().position(|analysis| {
             analysis.lemma != top.lemma
                 && self.pos(analysis) == "VERB"
-                && form(analysis) == form(top)
+                && (!after_clitic || form(analysis) == form(top))
                 && share(&analysis.lemma) > FREQUENT
         })
     }
