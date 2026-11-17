@@ -459,17 +459,19 @@ impl Dictionary {
     /// clitics of a guessed host or by the dictionary words with its ending
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
+        let upper = word.chars().any(char::is_uppercase);
         let (found, exact) = self.spelled(&word);
         // A word absent as written is a verb with clitics before it is a word with other accents:
         // `verte` is `ver` + `te`, not `verté`; a few words of the dictionary are such verbs
         // mostly (`verse`). Clitics follow a verb: a token without letters has none
         let homonym = exact && clitics::homonym(&word);
+        let extra_only = self.extra_only(&found);
         // A word of only the extra source whose lemma is such a verb is one first too: `abrázala`
         // is `abraza` + `la`, while `fresales` stays the plural of `fresal`
         let extra = exact
             && !homonym
+            && extra_only
             && clitics::may_split(&word)
-            && self.extra_only(&found)
             && (found.iter()).any(|analysis| !self.with_clitics(&analysis.lemma).is_empty());
         if (!exact || homonym || extra) && word.chars().any(char::is_alphabetic) {
             let mut analyses = self.with_clitics(&word);
@@ -487,7 +489,7 @@ impl Dictionary {
                     }));
                     analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
                 }
-                if word.chars().any(char::is_uppercase) {
+                if upper {
                     let share = if known {
                         CAPS_NAME[2]
                     } else {
@@ -530,10 +532,10 @@ impl Dictionary {
         // The accent of a participle without its `d` is no lost one: `perdío` is `perdido`, not
         // `perdió`, `marío` is `marido`, not `Mario`; a word of only the extra source is no
         // colloquial spelling of a word of the main one only if it has none: `juera` is `fuera`
-        if !word.chars().any(char::is_uppercase)
+        if !upper
             && (analyses.is_empty()
                 || (!exact && colloquial::is_participle(&word))
-                || (colloquial::may_be_spelling(&word) && self.extra_only(&analyses)))
+                || (extra_only && colloquial::may_be_spelling(&word)))
         {
             let standard = self.colloquial(&word);
             if !standard.is_empty() {
@@ -560,7 +562,7 @@ impl Dictionary {
             let [number, name] = ROMAN_LETTER;
             let rules = [(Rule::Roman, number), (Rule::Name, name)];
             self.add_rules(&word, &rules, &mut analyses);
-        } else if word.chars().any(char::is_uppercase) {
+        } else if upper {
             self.add_capital_name(&word, &mut analyses, exact);
         } else {
             self.lower_names(&mut analyses);
@@ -588,15 +590,21 @@ impl Dictionary {
         !analyses.is_empty()
             && analyses.iter().all(|analysis| {
                 analysis.source == Source::Dictionary
-                    && (self.lexeme_of(analysis))
-                        .zip(analysis.entry)
-                        .and_then(|(lexeme, entry)| {
-                            lexeme.cells.get(usize::from(entry.form)).copied()
-                        })
+                    && (analysis.entry)
+                        .and_then(|entry| self.cell(entry))
                         .is_some_and(|cell| cell & EXTRA != 0)
                     // The costlier check last: forms of the extra source are few
                     && !self.is_own_analysis(analysis)
             })
+    }
+
+    /// The cell of a form that a record of the dictionary gives, without decoding its lexeme: the
+    /// records are checked on loading to give forms of their tables
+    fn cell(&self, entry: Entry) -> Option<u32> {
+        let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
+        (self.tables())
+            .get(start + 1 + usize::from(entry.form))
+            .copied()
     }
 
     fn is_name(&self, analysis: &Analysis) -> bool {
@@ -676,24 +684,11 @@ impl Dictionary {
         let Some(tags) = &self.rule_tags else {
             return Vec::new();
         };
-        // A unit with its period and a number is two words, and its analyses are those of the unit
-        if let Some((unit, number)) = rules::unit_and_number(token) {
-            return (self.analyze(unit).into_iter())
-                .map(|analysis| Analysis {
-                    words: vec![unit.to_owned(), number.to_owned()],
-                    ..analysis
-                })
-                .collect();
-        }
-        // A number with a sign or a unit is two words, and its analyses are those of the number
-        if let Some((number, sign)) = rules::number_and_unit(token) {
-            return (self.ruled(number).into_iter())
-                .map(|analysis| Analysis {
-                    word: token.to_owned(),
-                    words: vec![number.to_owned(), sign.to_owned()],
-                    ..analysis
-                })
-                .collect();
+        // Only a token with a digit is a number with a sign or a unit
+        if token.bytes().any(|b| b.is_ascii_digit())
+            && let Some(analyses) = self.number_with_unit(token)
+        {
+            return analyses;
         }
         rules::rules(token)
             .into_iter()
@@ -707,6 +702,32 @@ impl Dictionary {
                 words: Vec::new(),
             })
             .collect()
+    }
+
+    /// Analyses of a token of a number and a sign or a unit, two words; `None` for another token
+    fn number_with_unit(&self, token: &str) -> Option<Vec<Analysis>> {
+        // A unit with its period and a number: its analyses are those of the unit
+        if let Some((unit, number)) = rules::unit_and_number(token) {
+            return Some(
+                (self.analyze(unit).into_iter())
+                    .map(|analysis| Analysis {
+                        words: vec![unit.to_owned(), number.to_owned()],
+                        ..analysis
+                    })
+                    .collect(),
+            );
+        }
+        // A number with a sign or a unit: its analyses are those of the number
+        let (number, sign) = rules::number_and_unit(token)?;
+        Some(
+            (self.ruled(number).into_iter())
+                .map(|analysis| Analysis {
+                    word: token.to_owned(),
+                    words: vec![number.to_owned(), sign.to_owned()],
+                    ..analysis
+                })
+                .collect(),
+        )
     }
 
     /// Adds the analysis of a name to the analyses of a word in capitals that has none, by its
