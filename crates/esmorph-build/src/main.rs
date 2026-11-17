@@ -6,7 +6,8 @@
 //! `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and `sources.json`,
 //! written by `scripts/export_ud.py`; the context model is the file of weights of
 //! `scripts/train_context.py`. A form of the extra source that the treebanks have only as a name
-//! is left out, but an interjection: `ciu` is `CiU`
+//! is left out, but an interjection: `ciu` is `CiU`; so are all the forms of the extra source of a
+//! lexeme with such a lemma (`cius`)
 
 mod frequencies;
 
@@ -252,7 +253,11 @@ fn build(
                 fields.len()
             ))));
         };
-        if kind.starts_with("extra") && pos != "INTJ" && counts.only_name(form) {
+        // A lexeme whose lemma the treebanks have only as a name is left out whole
+        if kind.starts_with("extra")
+            && pos != "INTJ"
+            && (counts.only_name(form) || counts.only_name(lemma))
+        {
             continue;
         }
         builder
@@ -529,13 +534,16 @@ mod tests {
         fs::write(counts.join("pos.tsv"), "ciu\tPROPN\t3\nchist\tPROPN\t1\n").unwrap();
         fs::write(counts.join("sources.json"), "{}").unwrap();
         let lexemes = "casa\tNOUN\tcasa\t_\t_\t_\nciu\tNOUN\tciu\t_\textra\t_\n\
+                       ciu\tNOUN\tcius\tNumber=Plur\textra\t_\n\
                        chist\tINTJ\tchist\t_\textra\t_\n";
         fs::write(export.join("lexemes.tsv"), lexemes).unwrap();
         let output = dir.join("es.dict");
         build(&export, &counts, &output, None).unwrap();
         let dictionary = esmorph::Dictionary::open(&output).unwrap();
-        // The treebanks have `ciu` only as the name `CiU`; an interjection stays
+        // The treebanks have `ciu` only as the name `CiU`, so its lexeme is left out; an
+        // interjection stays
         assert!(dictionary.analyze("ciu").iter().all(|a| a.lemma != "ciu"));
+        assert!(dictionary.analyze("cius").iter().all(|a| a.lemma != "ciu"));
         assert!(
             dictionary
                 .analyze("chist")
