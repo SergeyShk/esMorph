@@ -101,11 +101,21 @@ const ORDINAL_FEATS: [(&str, &str); 4] = [
     ("Fem", "Plur"),
 ];
 
-/// Symbols of units after a number in one token: `500cc` is the number `500`
+/// Symbols of units after a number in one token: `500cc` is the number `500`. A symbol of one
+/// letter is one as written (`3G` is no gram), a longer one in any case (`5Kg`, `8GB`, `-5ºC`)
 const UNITS: &[&str] = &[
-    "cc", "cm", "g", "gb", "h", "hz", "kb", "kg", "km", "kw", "l", "m", "mb", "mg", "min", "ml",
-    "mm", "w",
+    "cc", "cm", "g", "gb", "ghz", "h", "hz", "kb", "kg", "km", "kw", "l", "L", "m", "mb", "mg",
+    "mhz", "min", "ml", "mm", "w", "W", "°c", "ºc",
 ];
+
+/// Whether `text` is the symbol of a unit of `UNITS`
+fn is_unit(text: &str, unit: &str) -> bool {
+    if unit.chars().nth(1).is_none() {
+        text == unit
+    } else {
+        text.eq_ignore_ascii_case(unit)
+    }
+}
 
 /// UD tags of the analyses by the rules, by their numbers in the tags of the dictionary
 #[derive(Clone, Debug)]
@@ -186,7 +196,7 @@ impl RuleTags {
 }
 
 /// Signs that follow a number in one token as a word of their own
-const NUMBER_SIGNS: [char; 3] = ['%', '‰', '‱'];
+const NUMBER_SIGNS: [char; 4] = ['%', '‰', '‱', '°'];
 
 /// A number and a sign or a unit after it in one token, two words: `60%` is `60` and `%`, `-3,5‰`
 /// is `-3,5` and `‰`, `5kg` is `5` and `kg`
@@ -196,9 +206,11 @@ pub(crate) fn number_and_unit(token: &str) -> Option<(&str, &str)> {
         _ => {
             // Of the units that end the token, the one after a number: `kg`, not `g`, in `5kg`
             let unit = UNITS.iter().find(|unit| {
-                (token.strip_suffix(**unit)).is_some_and(|digits| {
+                let at = token.len().saturating_sub(unit.len());
+                token.is_char_boundary(at) && is_unit(&token[at..], unit) && {
+                    let digits = &token[..at];
                     digits.ends_with(|c: char| c.is_ascii_digit()) && number(digits).is_some()
-                })
+                }
             })?;
             token.len() - unit.len()
         }
@@ -211,8 +223,10 @@ pub(crate) fn number_and_unit(token: &str) -> Option<(&str, &str)> {
 /// A unit with its period and a number in one token, two words: `km.24` is `km.` and `24`
 pub(crate) fn unit_and_number(token: &str) -> Option<(&str, &str)> {
     let (unit, digits) = token.rsplit_once('.')?;
-    (UNITS.contains(&unit) && !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
-        .then(|| token.split_at(unit.len() + 1))
+    (UNITS.iter().any(|known| is_unit(unit, known))
+        && !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit()))
+    .then(|| token.split_at(unit.len() + 1))
 }
 
 /// Analyses of a token by the rules: the lemma, the rule and the share; empty if no rule fits
@@ -583,15 +597,22 @@ mod tests {
             ("+10mm", "+10", "mm"),
             ("2,5kg", "2,5", "kg"),
             ("1.200m", "1.200", "m"),
+            ("5Kg", "5", "Kg"),
+            ("8GB", "8", "GB"),
+            ("20W", "20", "W"),
+            ("900MHz", "900", "MHz"),
+            ("-5ºC", "-5", "ºC"),
+            ("40°", "40", "°"),
         ] {
             assert_eq!(number_and_unit(token), Some((number, sign)), "{token}");
         }
         for token in [
-            "%", "a%", "1..2%", "--5%", "5", "5k", "kg", "--5kg", "½kg", "5²m",
+            "%", "a%", "1..2%", "--5%", "5", "5k", "kg", "--5kg", "½kg", "5²m", "3G", "4B",
         ] {
             assert_eq!(number_and_unit(token), None, "{token}");
         }
         assert_eq!(unit_and_number("km.24"), Some(("km.", "24")));
+        assert_eq!(unit_and_number("KM.24"), Some(("KM.", "24")));
         for token in ["km.", "km.2a", "art.24", "24.km"] {
             assert_eq!(unit_and_number(token), None, "{token}");
         }

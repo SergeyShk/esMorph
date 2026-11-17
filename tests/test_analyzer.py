@@ -133,6 +133,9 @@ def test_word_absent_as_written_looks_through_accents(morph):
         ("caridá", "caridad", "caridad"),
         ("juerza", "fuerza", "fuerza"),
         ("ajuera", "afuera", "afuera"),
+        # An aspirated `h`, and no old form: `juy` is no `fuy` of `ser`
+        ("juyendo", "huyendo", "huir"),
+        ("juy", "huy", "huy"),
     ],
 )
 def test_colloquial_spelling_has_the_analyses_of_the_standard_word(morph, token, word, lemma):
@@ -872,12 +875,21 @@ def test_analyze_sentence(morph):
         ("Fue a finales del siglo XIX .", 0, ("ser", "AUX")),
         ("Fue a las cinco .", 0, ("ser", "AUX")),
         ("Fue a ella a quien vi .", 0, ("ser", "AUX")),
+        ("Aquello fue al principio difícil .", 1, ("ser", "AUX")),
+        ("Fue a la vez maestro y amigo .", 0, ("ser", "AUX")),
+        # An older spelling is read as the word it stands for, and á as the preposition
+        ("Ese fué el hombre .", 1, ("ser", "AUX")),
+        ("Fué el duque .", 0, ("ser", "AUX")),
+        ("No podia venir .", 1, ("poder", "AUX")),
+        ("Así fueron á visitar al santo .", 1, ("ir", "VERB")),
+        ("Angel , ven .", 0, ("Angel", "PROPN")),
         # A word after a clitic, the negation or tú is a verb, of the frequent one of its form;
         # after a preposition no makes a noun negative
         ("¿ Te figuras lo que dijo ?", 2, ("figurar", "VERB")),
         ("No comas , que es tarde .", 1, ("comer", "VERB")),
         ("No temas , descuida .", 1, ("temer", "VERB")),
         ("Adonde tú vayas , voy .", 2, ("ir", "VERB")),
+        ("Se acerca a él .", 1, ("acercar", "VERB")),
         ("Es el punto de no retorno .", 5, ("retorno", "NOUN")),
         # An imperative opening a sentence is no name; a name and a noun stay
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
@@ -892,6 +904,11 @@ def test_analyze_sentence(morph):
         ("Aunque vengan tarde .", 1, ("venir", "VERB")),
         ("Ojalá venga pronto .", 1, ("venir", "VERB")),
         ("La fuerza crea leyes nuevas .", 2, ("crear", "VERB")),
+        # After a clitic the frequent verb in a form of the same kind: no participle of `ver`;
+        # elsewhere a participle of the frequent one
+        ("Yo me visto rápido .", 2, ("vestir", "VERB")),
+        ("Te vistas como quieras .", 1, ("vestir", "VERB")),
+        ("Y desde que rota cayó la venda , lo supo .", 3, ("romper", "VERB")),
     ],
 )
 def test_constraints_of_the_context(morph, words, at, expected):
@@ -1726,6 +1743,9 @@ def test_roman_numerals(morph):
         ("-3,5‰", "-3,5", ("-3,5", "‰")),
         ("5kg", "5", ("5", "kg")),
         ("2,5kg", "2,5", ("2,5", "kg")),
+        ("8GB", "8", ("8", "GB")),
+        ("-5ºC", "-5", ("-5", "ºC")),
+        ("40°", "40", ("40", "°")),
     ],
 )
 def test_number_with_a_sign_or_a_unit_is_two_words(morph, token, lemma, words):
@@ -1737,6 +1757,9 @@ def test_number_with_a_sign_or_a_unit_is_two_words(morph, token, lemma, words):
 def test_unit_with_a_number_is_two_words(morph):
     first = morph.analyze("km.24")[0]
     assert (first.lemma, first.pos, first.words) == ("km", "NOUN", ("km.", "24"))
+    # The minute of a match is no adjective `masculino`, and 3G is no gram
+    assert {analysis.pos for analysis in morph.analyze("m.36")} <= {"NOUN", "SYM"}
+    assert morph.analyze("3G")[0].pos == "PROPN"
 
 
 def test_a_clitic_inflects_to_a_clitic(morph):

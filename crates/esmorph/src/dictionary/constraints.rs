@@ -54,6 +54,21 @@ const LOCUTIONS: [&str; 18] = [
     "raíz",
     "través",
 ];
+/// Adverbial phrases `al ...`, which are no goal of `ir`: `fue al principio difícil`
+const AL_PHRASES: [&str; 12] = [
+    "cabo",
+    "contrario",
+    "fin",
+    "final",
+    "instante",
+    "menos",
+    "mismo",
+    "parecer",
+    "principio",
+    "propio",
+    "punto",
+    "revés",
+];
 /// Words a verb follows, not a noun without a determiner: the negation and the subject `tú`
 const BEFORE_VERB: [&str; 2] = ["no", "tú"];
 /// Lemmas of the verbs followed by a bare infinitive: `puede ser`, `suele parecer`, but `tiene
@@ -108,7 +123,10 @@ impl Dictionary {
                 promote(&mut sentence[at], index);
             }
             // Also of the verb a rule chose: `no temas` is `temer`, not `temar`
-            if let Some(index) = self.frequent_lemma(&sentence[at], &shares[at]) {
+            let after_clitic = at > 0
+                && PROCLITICS.contains(&lower[at - 1].as_str())
+                && self.top_pos(sentence, at - 1) == "PRON";
+            if let Some(index) = self.frequent_lemma(&sentence[at], &shares[at], after_clitic) {
                 promote(&mut sentence[at], index);
             }
         }
@@ -185,7 +203,8 @@ impl Dictionary {
 
     /// A form of `ser` and `ir` is `ir` after a reflexive clitic but before a predicate (`se fue`,
     /// `me fui de casa`, not `me fue muy útil`), before `a` and its goal (`fue a casa`, `fueron a
-    /// ver`, not `fue a partir de`, `fue a las cinco`) and before a gerund (`fue cayendo`)
+    /// ver`, not `fue a partir de`, `fue al principio`, `fue a las cinco`) and before a gerund
+    /// (`fue cayendo`)
     fn ser_ir(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         if !SER_IR.contains(&lower[at].as_str()) || list.first()?.lemma == "ir" {
@@ -202,9 +221,12 @@ impl Dictionary {
             && next != "de"
             && self.top_pos(sentence, predicate) != "ADJ"
             && !self.top_verb_form(sentence, predicate, "Part");
-        let locution = LOCUTIONS.contains(&word(at + 2)) && matches!(word(at + 3), "de" | "del");
+        let locution = (LOCUTIONS.contains(&word(at + 2)) && matches!(word(at + 3), "de" | "del"))
+            || (next == "al" && AL_PHRASES.contains(&word(at + 2)))
+            || (matches!(next, "a" | "á") && word(at + 2) == "la" && word(at + 3) == "vez");
         let hour = matches!(word(at + 2), "la" | "las") && self.top_pos(sentence, at + 3) == "NUM";
-        let goal = matches!(next, "a" | "al")
+        // `á` is the preposition in older writing: `fué á ocultarse`
+        let goal = matches!(next, "a" | "á" | "al")
             && !locution
             && !hour
             && (next == "al" || GOAL.contains(&self.top_pos(sentence, at + 2)));
@@ -216,7 +238,8 @@ impl Dictionary {
     }
 
     /// A word the model reads as a noun after a reflexive or a dative clitic, the negation or
-    /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`
+    /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`; so is one it reads as
+    /// an adverb or an adjective after such a clitic: `se acerca`, `te quedas`
     fn verb_after(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         let before = at.checked_sub(1)?;
@@ -225,7 +248,9 @@ impl Dictionary {
         // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
             && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"));
-        if !(clitic || negation) || !matches!(self.pos(list.first()?), "NOUN" | "PROPN") {
+        let read = self.pos(list.first()?);
+        let noun = matches!(read, "NOUN" | "PROPN");
+        if !(((clitic || negation) && noun) || (clitic && matches!(read, "ADV" | "ADJ"))) {
             return None;
         }
         list.iter().position(|analysis| {
@@ -307,8 +332,15 @@ impl Dictionary {
     }
 
     /// The analysis of the frequent verb the model ranks highest when the model chose a finite form
-    /// of a rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`
-    fn frequent_lemma(&self, list: &[Analysis], shares: &[(String, f64)]) -> Option<usize> {
+    /// of a rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`.
+    /// After a clitic, which no participle follows, a form of the same kind: `me visto` is `vestir`,
+    /// no participle of `ver`
+    fn frequent_lemma(
+        &self,
+        list: &[Analysis],
+        shares: &[(String, f64)],
+        after_clitic: bool,
+    ) -> Option<usize> {
         let top = list.first()?;
         let share = |lemma: &str| {
             shares
@@ -321,9 +353,15 @@ impl Dictionary {
         {
             return None;
         }
+        let form = |analysis: &Analysis| {
+            (self.ud_tag(analysis.ud))
+                .and_then(|tag| tag.feats().find(|&(name, _)| name == "VerbForm"))
+                .map(|(_, value)| value)
+        };
         list.iter().position(|analysis| {
             analysis.lemma != top.lemma
                 && self.pos(analysis) == "VERB"
+                && (!after_clitic || form(analysis) == form(top))
                 && share(&analysis.lemma) > FREQUENT
         })
     }

@@ -451,7 +451,7 @@ impl Dictionary {
     /// gives the analyses of that spelling; a word absent as written is a verb with clitics
     /// (`dámelo`) or is looked for without its accents and with a lost diaeresis; a lowercase word
     /// that is neither may be a colloquial spelling of a word of the dictionary (`trabajao`,
-    /// `caridá`, `juera`), as a participle without its `d` is before other accents (`perdío` is
+    /// `caridá`, `juerza`), as a participle without its `d` is before other accents (`perdío` is
     /// `perdido`, not `perdió`). A token that is none of these gets the analyses of the rules:
     /// punctuation, a symbol, a number, an ordinal number in digits, a Roman numeral, a name with a
     /// capital letter, an address, an abbreviation. A lowercase word that is none of these is
@@ -459,17 +459,19 @@ impl Dictionary {
     /// clitics of a guessed host or by the dictionary words with its ending
     pub fn analyze(&self, word: &str) -> Vec<Analysis> {
         let word = normalized(word);
+        let upper = word.chars().any(char::is_uppercase);
         let (found, exact) = self.spelled(&word);
         // A word absent as written is a verb with clitics before it is a word with other accents:
         // `verte` is `ver` + `te`, not `verté`; a few words of the dictionary are such verbs
         // mostly (`verse`). Clitics follow a verb: a token without letters has none
         let homonym = exact && clitics::homonym(&word);
+        let extra_only = self.extra_only(&found);
         // A word of only the extra source whose lemma is such a verb is one first too: `abrázala`
         // is `abraza` + `la`, while `fresales` stays the plural of `fresal`
         let extra = exact
             && !homonym
+            && extra_only
             && clitics::may_split(&word)
-            && self.extra_only(&found)
             && (found.iter()).any(|analysis| !self.with_clitics(&analysis.lemma).is_empty());
         if (!exact || homonym || extra) && word.chars().any(char::is_alphabetic) {
             let mut analyses = self.with_clitics(&word);
@@ -487,7 +489,7 @@ impl Dictionary {
                     }));
                     analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
                 }
-                if word.chars().any(char::is_uppercase) {
+                if upper {
                     let share = if known {
                         CAPS_NAME[2]
                     } else {
@@ -530,10 +532,10 @@ impl Dictionary {
         // The accent of a participle without its `d` is no lost one: `perdío` is `perdido`, not
         // `perdió`, `marío` is `marido`, not `Mario`; a word of only the extra source is no
         // colloquial spelling of a word of the main one only if it has none: `juera` is `fuera`
-        if !word.chars().any(char::is_uppercase)
+        if !upper
             && (analyses.is_empty()
                 || (!exact && colloquial::is_participle(&word))
-                || (colloquial::may_be_spelling(&word) && self.extra_only(&analyses)))
+                || (extra_only && colloquial::may_be_spelling(&word)))
         {
             let standard = self.colloquial(&word);
             if !standard.is_empty() {
@@ -560,7 +562,7 @@ impl Dictionary {
             let [number, name] = ROMAN_LETTER;
             let rules = [(Rule::Roman, number), (Rule::Name, name)];
             self.add_rules(&word, &rules, &mut analyses);
-        } else if word.chars().any(char::is_uppercase) {
+        } else if upper {
             self.add_capital_name(&word, &mut analyses, exact);
         } else {
             self.lower_names(&mut analyses);
@@ -574,12 +576,19 @@ impl Dictionary {
     }
 
     /// Analyses of a lowercase word that the dictionary has not as a colloquial spelling: those of
-    /// the first standard spelling it has (`trabajao` is `trabajado`, `caridá` is `caridad`). A
-    /// word with a capital letter is mostly a name: `Julita` is no `fulita`
+    /// the first standard spelling it has that is not only an old form (`trabajao` is `trabajado`,
+    /// `caridá` is `caridad`, `juy` is `huy`, not `fuy` of `ser`). A word with a capital letter is
+    /// mostly a name: `Julita` is no `fulita`
     fn colloquial(&self, word: &str) -> Vec<Analysis> {
         colloquial::standard(word)
             .map(|standard| self.found(&standard))
-            .find(|analyses| !analyses.is_empty())
+            .find(|analyses| {
+                analyses.iter().any(|analysis| {
+                    (analysis.entry)
+                        .and_then(|entry| self.cell(entry))
+                        .is_some_and(|cell| cell & OLD == 0)
+                })
+            })
             .unwrap_or_default()
     }
 
@@ -588,15 +597,21 @@ impl Dictionary {
         !analyses.is_empty()
             && analyses.iter().all(|analysis| {
                 analysis.source == Source::Dictionary
-                    && (self.lexeme_of(analysis))
-                        .zip(analysis.entry)
-                        .and_then(|(lexeme, entry)| {
-                            lexeme.cells.get(usize::from(entry.form)).copied()
-                        })
+                    && (analysis.entry)
+                        .and_then(|entry| self.cell(entry))
                         .is_some_and(|cell| cell & EXTRA != 0)
                     // The costlier check last: forms of the extra source are few
                     && !self.is_own_analysis(analysis)
             })
+    }
+
+    /// The cell of a form that a record of the dictionary gives, without decoding its lexeme: the
+    /// records are checked on loading to give forms of their tables
+    fn cell(&self, entry: Entry) -> Option<u32> {
+        let start = *self.table_offsets.get(usize::from(entry.table))? as usize;
+        (self.tables())
+            .get(start + 1 + usize::from(entry.form))
+            .copied()
     }
 
     fn is_name(&self, analysis: &Analysis) -> bool {
@@ -676,24 +691,11 @@ impl Dictionary {
         let Some(tags) = &self.rule_tags else {
             return Vec::new();
         };
-        // A unit with its period and a number is two words, and its analyses are those of the unit
-        if let Some((unit, number)) = rules::unit_and_number(token) {
-            return (self.analyze(unit).into_iter())
-                .map(|analysis| Analysis {
-                    words: vec![unit.to_owned(), number.to_owned()],
-                    ..analysis
-                })
-                .collect();
-        }
-        // A number with a sign or a unit is two words, and its analyses are those of the number
-        if let Some((number, sign)) = rules::number_and_unit(token) {
-            return (self.ruled(number).into_iter())
-                .map(|analysis| Analysis {
-                    word: token.to_owned(),
-                    words: vec![number.to_owned(), sign.to_owned()],
-                    ..analysis
-                })
-                .collect();
+        // Only a token with a digit is a number with a sign or a unit
+        if token.bytes().any(|b| b.is_ascii_digit())
+            && let Some(analyses) = self.number_with_unit(token)
+        {
+            return analyses;
         }
         rules::rules(token)
             .into_iter()
@@ -707,6 +709,42 @@ impl Dictionary {
                 words: Vec::new(),
             })
             .collect()
+    }
+
+    /// Analyses of a token of a number and a sign or a unit, two words; `None` for another token
+    fn number_with_unit(&self, token: &str) -> Option<Vec<Analysis>> {
+        // A unit with its period and a number: its analyses are those of the unit as a noun or a
+        // symbol, `m.` of `m.36` is no adjective `masculino`
+        if let Some((unit, number)) = rules::unit_and_number(token) {
+            let mut analyses: Vec<Analysis> = (self.analyze(unit).into_iter())
+                .filter(|analysis| {
+                    (self.ud.get(analysis.ud))
+                        .is_some_and(|tag| matches!(tag.pos(), "NOUN" | "SYM"))
+                })
+                .map(|analysis| Analysis {
+                    words: vec![unit.to_owned(), number.to_owned()],
+                    ..analysis
+                })
+                .collect();
+            let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+            for analysis in &mut analyses {
+                analysis.prob /= total;
+            }
+            if !analyses.is_empty() {
+                return Some(analyses);
+            }
+        }
+        // A number with a sign or a unit: its analyses are those of the number
+        let (number, sign) = rules::number_and_unit(token)?;
+        Some(
+            (self.ruled(number).into_iter())
+                .map(|analysis| Analysis {
+                    word: token.to_owned(),
+                    words: vec![number.to_owned(), sign.to_owned()],
+                    ..analysis
+                })
+                .collect(),
+        )
     }
 
     /// Adds the analysis of a name to the analyses of a word in capitals that has none, by its
@@ -778,8 +816,10 @@ impl Dictionary {
     }
 
     /// Analyses of the tokens of a sentence, the most probable in the context first: the analyses
-    /// of `analyze` ordered by the context model of the dictionary, the probability is its score.
-    /// The tokens are those of one sentence in order, as `analyze` takes them (`del`, `dámelo`);
+    /// of `analyze` ordered by the context model of the dictionary, the probability is its score;
+    /// a few rules of Spanish then put first another analysis where only it fits, with the scores
+    /// of the model kept. The model and the rules read an older or colloquial spelling as the word
+    /// it stands for (`fué` as `fue`). The tokens are those of one sentence in order, as `analyze` takes them (`del`, `dámelo`);
     /// a sentence of one token is analyzed as `analyze`, one longer than `SENTENCE_CHUNK` tokens
     /// by parts of about `SENTENCE_CHUNK` ([`sentence_parts`]). The model is read on the first call
     ///
@@ -817,7 +857,11 @@ impl Dictionary {
         // The model sees a token as `analyze` reads it: without invisible characters and with
         // combined accents
         let normal: Vec<Cow<str>> = words.iter().map(|word| normalized(word.as_ref())).collect();
-        let normal: Vec<&str> = normal.iter().map(AsRef::as_ref).collect();
+        // ... and an older or colloquial spelling as the word it stands for: `fué` as `fue`
+        let mut seen: Vec<Cow<str>> = Vec::with_capacity(words.len());
+        let opening = (normal.iter())
+            .position(|word| word.chars().any(char::is_alphanumeric))
+            .filter(|_| start);
         let mut sentence = Vec::with_capacity(words.len());
         // The shares of the verbs of every word in the counts, before the model scores
         let mut shares = Vec::with_capacity(words.len());
@@ -827,15 +871,24 @@ impl Dictionary {
                 .map(|word| self.analyze(word.as_ref()))
                 .collect();
             shares.extend(analyses.iter().map(|list| self.verb_shares(list)));
+            for (at, list) in range.clone().zip(&analyses) {
+                let word = normal[at].as_ref();
+                seen.push(match standard_word(word, list, opening == Some(at)) {
+                    Some(standard) => Cow::Owned(standard),
+                    None => Cow::Borrowed(word),
+                });
+            }
             // Without neighbors the model chooses worse than the counts of the dictionary
             if range.len() < 2 {
                 sentence.extend(analyses);
                 continue;
             }
-            sentence.extend(context.rank(&normal[range], analyses, start && number == 0));
+            let part: Vec<&str> = seen[range].iter().map(AsRef::as_ref).collect();
+            sentence.extend(context.rank(&part, analyses, start && number == 0));
         }
         if words.len() > 1 {
-            self.constrain(&normal, &mut sentence, &shares, start);
+            let seen: Vec<&str> = seen.iter().map(AsRef::as_ref).collect();
+            self.constrain(&seen, &mut sentence, &shares, start);
         }
         Ok(sentence)
     }
@@ -1882,6 +1935,35 @@ pub fn sentence_parts(len: usize, size: usize) -> impl Iterator<Item = Range<usi
     (0..count).map(move |part| bound(part * size)..bound(((part + 1) * size).min(len)))
 }
 
+/// The spelling of the dictionary that a token stands for: the one word of all its analyses but
+/// those of the rules, if it is spelled otherwise (`fué` is `fue`, `trabajao` is `trabajado`). A
+/// capital letter keeps the spelling of a name (`Ramon`, `Joe`) unless it starts the sentence and
+/// is a name less likely than a word (`Fué` is `Fue`, `Angel` stays); a token with a period, as an
+/// abbreviation, keeps its own
+fn standard_word(token: &str, analyses: &[Analysis], opening: bool) -> Option<String> {
+    let mut words = (analyses.iter())
+        .filter(|analysis| analysis.source != Source::Rule)
+        .map(|analysis| analysis.word.as_str());
+    let word = words.next()?;
+    if token.contains('.') || words.any(|other| other != word) || lower_eq(token, word) {
+        return None;
+    }
+    let mut letters = token.chars().filter(|c| c.is_alphabetic());
+    let first = letters.next()?.is_uppercase();
+    if letters.any(char::is_uppercase) {
+        return None;
+    }
+    if !first {
+        return Some(word.to_owned());
+    }
+    if !opening || analyses.first()?.source == Source::Rule {
+        return None;
+    }
+    let mut chars = word.chars();
+    let initial = chars.next()?;
+    Some(initial.to_uppercase().chain(chars).collect())
+}
+
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
 /// joins its letter, and a hyphen of Unicode is the hyphen-minus. Tokens of a text keep them
 fn normalized(word: &str) -> Cow<'_, str> {
@@ -2053,6 +2135,32 @@ pub(crate) mod tests {
                 .collect();
             assert_eq!(pieces, parts(len), "{len}");
         }
+    }
+
+    #[test]
+    fn the_model_sees_the_word_a_spelling_stands_for() {
+        let of = |word: &str, source| {
+            Analysis::new(word.into(), word.into(), 0, 0.5, source, None, Vec::new())
+        };
+        let fue = [of("fue", Source::Dictionary), of("fue", Source::Dictionary)];
+        assert_eq!(standard_word("fué", &fue, false).as_deref(), Some("fue"));
+        // A capital letter is a name's, unless the word opens the sentence and no rule goes first
+        assert_eq!(standard_word("Fué", &fue, true).as_deref(), Some("Fue"));
+        assert_eq!(standard_word("Fué", &fue, false), None);
+        assert_eq!(standard_word("FUÉ", &fue, true), None);
+        let name = [of("Ramon", Source::Rule), of("ramón", Source::Dictionary)];
+        assert_eq!(standard_word("Ramon", &name, true), None);
+        // Analyses of different words, a word as written and an abbreviation stay
+        let tos = [
+            of("tos", Source::Dictionary),
+            of("todos", Source::Dictionary),
+        ];
+        assert_eq!(standard_word("tos", &tos, false), None);
+        assert_eq!(standard_word("fue", &fue, false), None);
+        assert_eq!(
+            standard_word("kg.", &[of("kg", Source::Dictionary)], false),
+            None
+        );
     }
 
     #[test]

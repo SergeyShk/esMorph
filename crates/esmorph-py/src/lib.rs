@@ -758,7 +758,7 @@ fn verified(analyzer: &Bound<'_, Analyzer>, verify: bool) -> PyResult<()> {
 ///     spelled as in the dictionary gives the analyses of that spelling; a word absent as written
 ///     is looked for without its accents and with a lost diaeresis. A word absent from the
 ///     dictionary may be a verb with clitics (`dámelo`) or, in lower case, a colloquial spelling of
-///     a word of the dictionary (`trabajao`, `caridá`, `juera`; `perdío` is `perdido`, not
+///     a word of the dictionary (`trabajao`, `caridá`, `juerza`; `perdío` is `perdido`, not
 ///     `perdió`); other tokens get the analyses of rules (punctuation, symbols, numbers, Roman
 ///     numerals and names), and other lowercase words are guessed. The dictionary is loaded once
 ///     when the analyzer is created; an analyzer can be used from several threads
@@ -1049,8 +1049,11 @@ impl Analyzer {
     ///
     /// Description:
     ///     The analyses of analyze ordered by the context model: the first is the one the model
-    ///     chose by the tokens around, the probability is its score in this sentence. The tokens
-    ///     are those of one sentence in order, as analyze takes them ("del", "dámelo"); a sentence
+    ///     chose by the tokens around, the probability is its score in this sentence; a few rules
+    ///     of Spanish then put first another analysis where only it fits, with the scores of the
+    ///     model kept. The model and the rules read an older or colloquial spelling as the word it
+    ///     stands for ("fué" as "fue"). The tokens are those of one sentence in order, as analyze
+    ///     takes them ("del", "dámelo"); a sentence
     ///     of one token is analyzed as analyze, one longer than 256 tokens by parts of about 256.
     ///     The analysis goes without the GIL
     ///

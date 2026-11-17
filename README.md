@@ -177,7 +177,7 @@ See the documentation: [tokens out of the dictionary](https://sergeyshk.github.i
 
 <br>
 
-A lowercase word out of the dictionary may be a colloquial spelling of a word of the dictionary: a participle without its `d` (`trabajao`), a final `-á` for `-ad` (`caridá`), an aspirated `f` or `h` (`juera`); the dictionary also has spellings of words as they sound (`na`, `pos`, `güeno`). Such a word gets the analyses of the standard word, and `word` is its standard spelling. Own words take the forms of a sample word of the dictionary: `Analyzer(words=...)`, the `-w` option of the command and the `words` parameter of the spaCy component.
+A lowercase word out of the dictionary may be a colloquial spelling of a word of the dictionary: a participle without its `d` (`trabajao`), a final `-á` for `-ad` (`caridá`), an aspirated `f` or `h` (`juerza`); the dictionary also has spellings of words as they sound (`na`, `pos`, `güeno`). Such a word gets the analyses of the standard word, and `word` is its standard spelling. Own words take the forms of a sample word of the dictionary: `Analyzer(words=...)`, the `-w` option of the command and the `words` parameter of the spaCy component.
 
 ```python
 >>> [(a.word, a.lemma) for a in (morph.analyze(w)[0] for w in ["trabajao", "caridá", "na"])]

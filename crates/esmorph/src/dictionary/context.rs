@@ -1072,6 +1072,10 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "Miri perturbs `exp` on purpose, so equal scores differ in the last bits"
+    )]
     fn long_sentence_in_chunks() {
         let dictionary = dictionary(Some(weights(&[("P=PRON", 2.0)])));
         let words: Vec<&str> = ["la", "vio"]

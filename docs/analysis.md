@@ -27,7 +27,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 
 | Attribute | Type | Description |
 | :-------- | :--- | :---------- |
-| `word` | `str` | The word form as the dictionary spells it, with its accents; a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters and with `-` for the hyphens U+2010 and U+2011 |
+| `word` | `str` | The word form as the dictionary spells it, with its accents; for a [colloquial spelling](#spelling) its standard spelling (`trabajado` of `trabajao`); a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters and with `-` for the hyphens U+2010 and U+2011 |
 | `lemma` | `str` | The lemma |
 | `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
 | `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
@@ -101,11 +101,11 @@ A lowercase word that the dictionary has not, even without its accents, may be a
 
 - a participle without its `d`: `trabajao` is `trabajado`, `sío` is `sido`; its accent is not lost, so `perdío` is `perdido`, not `perdió`;
 - a final `-á`, `-é` or `-ú` for `-ad`, `-ed` or `-ud`: `caridá` is `caridad`, `virtú` is `virtud`;
-- an aspirated `f` or `h`: `juera` is `fuera`, `juevo` is `huevo`.
+- an aspirated `f` or `h`: `juerza` is `fuerza`, `juevo` is `huevo`, `juyendo` is `huyendo`.
 
 A word with a capital letter is no such spelling: `Trabajao` and `Julita` are names, not `trabajado` and `fulita`.
 
-The dictionary also has spellings of words as they sound and common shortened forms: `na` and `naa` are `nada`, `pos` is `pues`, `to` is `todo`, `mu` is `muy`, `güeno` is `bueno`, `er` is `el`. They have the analyses of the standard word with its lemma and features, and `word` is the standard spelling; the context chooses among them and the other words of the same spelling (`mu` is also an interjection). As words of the dictionary, they are found in any case: `Güeno` is `bueno` too.
+The dictionary also has spellings of words as they sound and common shortened forms: `na` and `naa` are `nada`, `pos` is `pues`, `to` is `todo`, `mu` is `muy`, `güeno` is `bueno`, `er` is `el`. They have the analyses of the standard word with its lemma and features, and `word` is the standard spelling; the context chooses among them and the other words of the same spelling (`mu` is also an interjection). As words of the dictionary, they are found in any case: `Güeno` is `bueno` too. The analyses of all these spellings have `source` equal to `"dictionary"`, while [`is_known`](analyzer.md#is_known) tells only the spellings of the dictionary: `na` is known, `trabajao` is not.
 
 === "Code"
 
@@ -113,7 +113,7 @@ The dictionary also has spellings of words as they sound and common shortened fo
     [
         (analysis.word, analysis.lemma)
         for analysis in (
-            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juerza", "na", "er"]
         )
     ]
     ```
@@ -121,7 +121,7 @@ The dictionary also has spellings of words as they sound and common shortened fo
 === "Result"
 
     ```
-    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuera', 'fuera'), ('nada', 'nada'), ('el', 'el')]
+    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuerza', 'fuerza'), ('nada', 'nada'), ('el', 'el')]
     ```
 
 ## Tokens out of the dictionary { #rules }
@@ -129,14 +129,14 @@ The dictionary also has spellings of words as they sound and common shortened fo
 A token that the dictionary does not have gets the analyses of rules, with `source` equal to `"rule"` and `word` as written:
 
 - a sign of punctuation is `PUNCT` with the `PunctType` of its signs if they are of one kind, and `PunctSide` for brackets and question and exclamation marks; a symbol such as `%`, `€` or `²` is `SYM`;
-- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too, also with a sign, a fraction, a power or spaces between thousands (`-5`, `37½`, `10²`, `10 000`); the lemma drops the periods between thousands (`10.000` is `10000`); a number with a percent sign or a unit is two words, and the analysis is that of the number (`60%` is `60` and `%`, `500cc` is `500` and `cc`);
+- a number in digits is `NUM` with `NumForm=Digit|NumType=Card`, a year too, also with a sign, a fraction, a power or spaces between thousands (`-5`, `37½`, `10²`, `10 000`); the lemma drops the periods between thousands (`10.000` is `10000`); a number with a percent sign, a degree sign or a unit is two words, and the analysis is that of the number (`60%` is `60` and `%`, `500cc` is `500` and `cc`, `-5ºC` is `-5` and `ºC`); a unit of one letter is one only as written (`3G` is a name), a longer one in any case (`5Kg`, `8GB`);
 - an ordinal number in digits is `ADJ` with `NumForm=Digit|NumType=Ord`, its gender and number, and the masculine singular as the lemma: `2.ª` is `2.º`;
 - a Roman numeral is `NUM` with `NumForm=Roman`, less often a name; in lower case it is a numeral only: `xii`;
 - a token with a capital letter is a name, `PROPN`, with itself as the lemma: `Josep`, `CiU`, `W.`, `TV-3`;
 - a link, an email, a hashtag or a mention in lower case is `SYM`: `www.aeat.es`, `#hola`;
 - an abbreviation with a period in lower case that the dictionary does not have is a noun with itself as the lemma (`fig.`), and so is a lowercase letter (`b`).
 
-A lowercase abbreviation with a period that the dictionary has without the period gets the nouns and the symbols of that word, with `source` equal to `"dictionary"`: `kg.` is `kg`. A unit with its period and a number in one token is two words with these analyses: `km.24` is `km` with the words `km.` and `24`. A word of the dictionary with a period of another part of speech gets no analyses: `come.` is a verb with the period of a sentence.
+A lowercase abbreviation with a period that the dictionary has without the period gets the nouns and the symbols of that word, with `source` equal to `"dictionary"`: `kg.` is `kg`. A unit with its period and a number in one token is two words with these analyses: `km.24` is `km` with the words `km.` and `24`, and only its nouns and symbols count (`m.36` is no adjective). A word of the dictionary with a period of another part of speech gets no analyses: `come.` is a verb with the period of a sentence.
 
 A word with a capital letter that the dictionary knows may be a name too, with its share. An initial (`D.`) and a word without accents that the dictionary has only with them (`Angel`, `Perez`) are mostly names, so their name goes first, while another word with a capital letter is a name less often (`Estados`, `Comisión`), so its name usually goes after the analyses of the dictionary. Of the words in capitals, a word of up to four letters is mostly an acronym (`ETA`, `PP`), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (`CAMIONES`, `EL`), so their name usually goes after the analyses of the dictionary. A Roman numeral that the dictionary knows as a word, such as `VI`, `XI` or `X`, is a numeral first. A token with a capital letter that splits as a verb with clitics may be a name too: an imperative without an accent mostly is one (`Mandela` is first of all `PROPN`), while an infinitive, a gerund, an imperative with an accent and a finite form mostly are verbs (`Hacerlo`, `Déjame`, `Levantóse`). A lowercase word is a name rarely: `miró` is first of all `mirar`, `Miró` a name. An analysis of a rule has no other forms: `forms()` gives the analysis itself. `is_known` tells only the words of the dictionary.
 

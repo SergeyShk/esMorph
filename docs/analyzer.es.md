@@ -129,12 +129,14 @@ Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyz
 - un sustantivo justo tras un verbo que rige un infinitivo sin preposición es ese infinitivo (`puede ser`, `parecía pesar`), pero no tras otro verbo (`siento pesar`);
 - una forma de `ser` e `ir` es `ir`:
     - tras un clítico reflexivo, salvo que siga un predicado (`se fue`, pero `me fue muy difícil`);
-    - ante `a` y su destino, salvo que siga una locución prepositiva o una hora (`fue a casa`, pero `fue a partir de 1990`, `fue a las cinco`);
+    - ante `a` (`á` en la escritura antigua) y su destino, salvo que siga una locución prepositiva o adverbial o una hora (`fue a casa`, pero `fue a partir de 1990`, `fue al principio`, `fue a las cinco`);
     - ante un gerundio (`fue cayendo`);
-- una palabra tras un clítico, la negación o `tú` es un verbo (`que te vayas`, `no vayas`), aunque no tras una preposición (`punto de no retorno`);
+- una palabra tras un clítico, la negación o `tú` es un verbo (`que te vayas`, `no vayas`), aunque no tras una preposición (`punto de no retorno`); tras un clítico también lo es un adverbio o un adjetivo (`se acerca`, `te quedas`);
 - un imperativo con mayúscula que abre una oración no es un nombre (`Indique si desea`), salvo que el modelo ponga por encima un sustantivo del diccionario (`Sangre de Abel`);
 - una palabra del diccionario que suele ser un verbo con clíticos lo es (`¡Cállate!`);
 - un verbo raro cede ante uno frecuente con la misma forma (`aunque vengan` es `venir`, no `vengar`), salvo que el modelo haya elegido un participio (`había entrevisto`).
+
+El modelo y las reglas leen una grafía antigua o coloquial como la palabra que representa: `fué` como `fue`, `podia` como `podía`, `trabajao` como `trabajado`. Una palabra con mayúscula conserva su grafía, como un nombre (`Ramon`), salvo que abra la oración y el diccionario la lea como palabra antes que como nombre (`Fué`).
 
 Los tokens son los de una oración en orden, tal como los toma `analyze`: una contracción (`del`) o un verbo con clíticos (`dámelo`) es un solo token. Una oración de un token se analiza como con `analyze`, y una de más de 256 tokens, por partes de unos 256. El modelo - una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD - se lee en la primera llamada, en un par de milisegundos; el método libera el GIL.
 
@@ -258,7 +260,7 @@ Excepciones:
 is_known(word)
 ```
 
-Si el diccionario tiene la forma de palabra, tal como está escrita o como un verbo del diccionario con clíticos; como en `analyze`, las mayúsculas y las tildes perdidas no importan. Los tokens analizados por reglas y las palabras estimadas no están en el diccionario.
+Si el diccionario tiene la forma de palabra, tal como está escrita o como un verbo del diccionario con clíticos; como en `analyze`, las mayúsculas y las tildes perdidas no importan. Los tokens analizados por reglas, las palabras estimadas y las grafías coloquiales que solo las reglas leen como palabras del diccionario (`trabajao`, [Análisis de palabras](analysis.md#spelling)) no están en el diccionario.
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |

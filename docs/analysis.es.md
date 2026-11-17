@@ -27,7 +27,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 
 | Atributo | Tipo | Descripción |
 | :------- | :--- | :---------- |
-| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con `-` en lugar de los guiones U+2010 y U+2011 |
+| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; para una [grafía coloquial](#spelling), su grafía estándar (`trabajado` de `trabajao`); un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con `-` en lugar de los guiones U+2010 y U+2011 |
 | `lemma` | `str` | El lema |
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
@@ -101,11 +101,11 @@ Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tild
 
 - un participio sin su `d`: `trabajao` es `trabajado`, `sío` es `sido`; su tilde no es una tilde perdida, así que `perdío` es `perdido`, no `perdió`;
 - una `-á`, `-é` o `-ú` final en lugar de `-ad`, `-ed` o `-ud`: `caridá` es `caridad`, `virtú` es `virtud`;
-- una `f` o una `h` aspiradas: `juera` es `fuera`, `juevo` es `huevo`.
+- una `f` o una `h` aspiradas: `juerza` es `fuerza`, `juevo` es `huevo`, `juyendo` es `huyendo`.
 
 Una palabra con mayúscula no es una grafía así: `Trabajao` y `Julita` son nombres, no `trabajado` y `fulita`.
 
-El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: `na` y `naa` son `nada`, `pos` es `pues`, `to` es `todo`, `mu` es `muy`, `güeno` es `bueno`, `er` es `el`. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y `word` es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (`mu` también es una interjección). Como palabras del diccionario, se encuentran con cualquier uso de mayúsculas: `Güeno` también es `bueno`.
+El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: `na` y `naa` son `nada`, `pos` es `pues`, `to` es `todo`, `mu` es `muy`, `güeno` es `bueno`, `er` es `el`. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y `word` es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (`mu` también es una interjección). Como palabras del diccionario, se encuentran con cualquier uso de mayúsculas: `Güeno` también es `bueno`. Los análisis de todas estas grafías tienen `source` igual a `"dictionary"`, mientras que [`is_known`](analyzer.md#is_known) solo reconoce las grafías del diccionario: `na` es conocida, `trabajao` no.
 
 === "Código"
 
@@ -113,7 +113,7 @@ El diccionario tiene además grafías de palabras tal como suenan y formas abrev
     [
         (analysis.word, analysis.lemma)
         for analysis in (
-            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juera", "na", "er"]
+            morph.analyze(word)[0] for word in ["trabajao", "perdío", "caridá", "juerza", "na", "er"]
         )
     ]
     ```
@@ -121,7 +121,7 @@ El diccionario tiene además grafías de palabras tal como suenan y formas abrev
 === "Resultado"
 
     ```
-    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuera', 'fuera'), ('nada', 'nada'), ('el', 'el')]
+    [('trabajado', 'trabajar'), ('perdido', 'perder'), ('caridad', 'caridad'), ('fuerza', 'fuerza'), ('nada', 'nada'), ('el', 'el')]
     ```
 
 ## Tokens fuera del diccionario { #rules }
@@ -129,14 +129,14 @@ El diccionario tiene además grafías de palabras tal como suenan y formas abrev
 Un token que el diccionario no tiene recibe los análisis de unas reglas, con `source` igual a `"rule"` y `word` tal como está escrito:
 
 - un signo de puntuación es `PUNCT` con el `PunctType` de sus signos si son de una misma clase, y `PunctSide` para los paréntesis, los corchetes, las llaves y los signos de interrogación y de exclamación; un símbolo como `%`, `€` o `²` es `SYM`;
-- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año, también con signo, fracción, potencia o espacios entre los millares (`-5`, `37½`, `10²`, `10 000`); el lema quita los puntos entre los millares (`10.000` es `10000`); un número con signo de porcentaje o con unidad son dos palabras, y el análisis es el del número (`60%` es `60` y `%`, `500cc` es `500` y `cc`);
+- un número en cifras es `NUM` con `NumForm=Digit|NumType=Card`, también un año, también con signo, fracción, potencia o espacios entre los millares (`-5`, `37½`, `10²`, `10 000`); el lema quita los puntos entre los millares (`10.000` es `10000`); un número con signo de porcentaje, signo de grado o unidad son dos palabras, y el análisis es el del número (`60%` es `60` y `%`, `500cc` es `500` y `cc`, `-5ºC` es `-5` y `ºC`); una unidad de una letra lo es solo tal como se escribe (`3G` es un nombre), una más larga con cualquier uso de mayúsculas (`5Kg`, `8GB`);
 - un número ordinal en cifras es `ADJ` con `NumForm=Digit|NumType=Ord`, su género y su número, y el masculino singular como lema: `2.ª` es `2.º`;
 - un número romano es `NUM` con `NumForm=Roman`, con menos frecuencia un nombre; en minúsculas es solo un numeral: `xii`;
 - un token con una letra mayúscula es un nombre, `PROPN`, con él mismo como lema: `Josep`, `CiU`, `W.`, `TV-3`;
 - un enlace, un correo, una etiqueta o una mención en minúsculas es `SYM`: `www.aeat.es`, `#hola`;
 - una abreviatura con punto en minúsculas que el diccionario no tiene es un sustantivo con ella misma como lema (`fig.`), y lo mismo una letra minúscula (`b`).
 
-Una abreviatura con punto en minúsculas que el diccionario tiene sin el punto recibe los sustantivos y los símbolos de esa palabra, con `source` igual a `"dictionary"`: `kg.` es `kg`. Una unidad con su punto y un número en un solo token son dos palabras con estos análisis: `km.24` es `km` con las palabras `km.` y `24`. Una palabra del diccionario de otra categoría con un punto no recibe análisis: `come.` es un verbo con el punto de una oración.
+Una abreviatura con punto en minúsculas que el diccionario tiene sin el punto recibe los sustantivos y los símbolos de esa palabra, con `source` igual a `"dictionary"`: `kg.` es `kg`. Una unidad con su punto y un número en un solo token son dos palabras con estos análisis: `km.24` es `km` con las palabras `km.` y `24`, y solo cuentan sus sustantivos y símbolos (`m.36` no es un adjetivo). Una palabra del diccionario de otra categoría con un punto no recibe análisis: `come.` es un verbo con el punto de una oración.
 
 Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una inicial (`D.`) y una palabra sin tildes que el diccionario solo tiene con ellas (`Angel`, `Perez`) suelen ser nombres, así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (`Estados`, `Comisión`), así que su nombre suele ir después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (`ETA`, `PP`), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (`CAMIONES`, `EL`), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como `VI`, `XI` o `X`, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (`Mandela` es ante todo `PROPN`), mientras que un infinitivo, un gerundio, un imperativo con tilde y una forma personal suelen ser verbos (`Hacerlo`, `Déjame`, `Levantóse`). Una palabra en minúsculas rara vez es un nombre: `miró` es ante todo `mirar`, `Miró` es un nombre. Un análisis de una regla no tiene otras formas: `forms()` da el propio análisis. `is_known` solo indica las palabras del diccionario.
 
