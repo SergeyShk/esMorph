@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from os import PathLike
 from pathlib import Path
 from typing import Literal, Protocol, final
@@ -70,11 +70,15 @@ def _analysis(
 def _analyzer(
     path: str | PathLike[str] | None = None,
     verify: bool = False,
-    words: Mapping[str, str | tuple[str, str]] | None = None,
+    words: Mapping[str, str | Sequence[str]] | None = None,
 ) -> Analyzer:
     """Restores an analyzer from pickle"""
 
-def _analyses_analyzer(path: str | PathLike[str] | None = None, verify: bool = False) -> Analyzer:
+def _analyses_analyzer(
+    path: str | PathLike[str] | None = None,
+    verify: bool = False,
+    words: Mapping[str, str | Sequence[str]] | None = None,
+) -> Analyzer:
     """Restores the analyzer of analyses from pickle"""
 
 def _main(args: list[str]) -> int:
@@ -112,7 +116,7 @@ class Analyzer:
         path: str | PathLike[str] | None = None,
         *,
         verify: bool = False,
-        words: Mapping[str, str | tuple[str, str]] | None = None,
+        words: Mapping[str, str | Sequence[str]] | None = None,
     ) -> Analyzer: ...
     @property
     def path(self) -> Path:

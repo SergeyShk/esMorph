@@ -1,7 +1,7 @@
 //! Python module `esmorph._esmorph`
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -36,6 +36,14 @@ static PACKAGE: PyOnceLock<Py<Analyzer>> = PyOnceLock::new();
 /// Analyzers of dictionary files that pickle saved or restored, by path; a weak reference lets an
 /// analyzer go with its file
 static FILES: Mutex<BTreeMap<PathBuf, Py<PyWeakrefReference>>> = Mutex::new(BTreeMap::new());
+/// Analyzers with own words that pickle saved or restored: the path that pickle keeps, the words
+/// and a weak reference
+static OWN: Mutex<Vec<OwnAnalyzer>> = Mutex::new(Vec::new());
+/// Analyzers with own words that unpickling made, kept: a worker of a pool unpickles the analyzer
+/// of every task, and making it anew takes long
+static KEPT: Mutex<VecDeque<Py<Analyzer>>> = Mutex::new(VecDeque::new());
+/// How many analyzers with own words unpickling keeps
+const KEPT_ANALYZERS: usize = 2;
 /// The functions that restore an analysis and an analyzer from pickle
 static RESTORE_ANALYSIS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static RESTORE_ANALYZER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -514,11 +522,12 @@ fn _analysis(
                     py,
                     saved.path.clone().map(PathBuf::from),
                     saved.verify.load(Ordering::Relaxed),
+                    saved.words.as_ref().map(|words| words.bind(py).as_any()),
                 )?
             }
-            _ => _analyses_analyzer(py, Some(path.extract()?), verify)?,
+            _ => _analyses_analyzer(py, Some(path.extract()?), verify, None)?,
         },
-        None => _analyses_analyzer(py, None, verify)?,
+        None => _analyses_analyzer(py, None, verify, None)?,
     }
     .into_bound(py);
     // The tag of the dictionary is shared by its analyses
@@ -568,8 +577,8 @@ fn _analysis(
 }
 
 /// Restores an analyzer from pickle: the analyzer of the dictionary of the package or of the file
-/// at `path` that the process has, otherwise a new one; `verify` - the dictionary is verified; an
-/// analyzer with own words `words` is a new one
+/// at `path`, with own words `words`, that the process has, otherwise a new one; `verify` - the
+/// dictionary is verified
 #[pyfunction]
 #[pyo3(signature = (path=None, verify=false, words=None))]
 fn _analyzer(
@@ -578,57 +587,119 @@ fn _analyzer(
     verify: bool,
     words: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Py<Analyzer>> {
-    match words.filter(|words| !words.is_none()) {
-        Some(words) => Py::new(py, Analyzer::new(py, path, verify, Some(words))?),
-        None => shared(py, path, verify),
+    let words = own_words(words)?;
+    if words.is_empty() {
+        return shared(py, path, verify);
     }
+    with_own_words(py, path, verify, words)
+}
+
+/// An analyzer with own words that pickle saved or restored: the path that pickle keeps (`None`
+/// for the dictionary of the package) and the words identify it
+struct OwnAnalyzer {
+    path: Option<PathBuf>,
+    words: Arc<[OwnWord]>,
+    analyzer: Py<PyWeakrefReference>,
+}
+
+/// The analyzer with own words `words` of the dictionary of the package or of the file at `path`
+/// that the process has, otherwise a new one, kept for later unpickling
+fn with_own_words(
+    py: Python<'_>,
+    path: Option<PathBuf>,
+    verify: bool,
+    words: Vec<OwnWord>,
+) -> PyResult<Py<Analyzer>> {
+    let found = (OWN.lock_py_attached(py))
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .filter(|own| own.path == path && *own.words == *words)
+        .find_map(|own| own.analyzer.bind(py).upgrade());
+    let analyzer = match found {
+        Some(analyzer) => analyzer.cast_into::<Analyzer>()?,
+        None => {
+            // The analyzer is made without the lock: adding many words lets other threads run
+            let analyzer = Bound::new(py, Analyzer::create(py, path, verify, words)?)?;
+            Analyzer::saved_path(&analyzer)?;
+            let mut kept = KEPT
+                .lock_py_attached(py)
+                .unwrap_or_else(PoisonError::into_inner);
+            let dropped = (kept.len() == KEPT_ANALYZERS)
+                .then(|| kept.pop_front())
+                .flatten();
+            kept.push_back(analyzer.clone().unbind());
+            // An analyzer is let go after the lock: freeing it runs code of Python
+            drop(kept);
+            drop(dropped);
+            analyzer
+        }
+    };
+    verified(&analyzer, verify)?;
+    Ok(analyzer.unbind())
 }
 
 /// The analyzer of analyses in pickle: kept once for all the analyses of a list, it restores the
-/// analyzer of the dictionary of the package or of the file at `path`, and if that file cannot be
-/// read, the analyzer of the dictionary of the package
+/// analyzer of the dictionary of the package or of the file at `path` with its own words, and if
+/// that file cannot be read, the analyzer of the dictionary of the package
 #[pyclass(frozen, module = "esmorph")]
 struct SavedAnalyzer {
     /// A string, as a path of `pathlib` of one system does not unpickle on another
     path: Option<OsString>,
     /// Set when the analyzer is verified, also after the first pickle
     verify: AtomicBool,
+    /// The own words of the analyzer, one object for all its analyses
+    words: Option<Py<PyDict>>,
 }
 
 #[pymethods]
 impl SavedAnalyzer {
-    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, SavedState)> {
+    fn __reduce__<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyTuple>)> {
         let restore = restorer(py, &RESTORE_ANALYSES_ANALYZER, "_analyses_analyzer")?;
-        Ok((
-            restore,
-            (self.path.clone(), self.verify.load(Ordering::Relaxed)),
-        ))
+        let (path, verify) = (self.path.clone(), self.verify.load(Ordering::Relaxed));
+        // Without own words the arguments are those of earlier versions
+        let state = match &self.words {
+            Some(words) => (path, verify, words.clone_ref(py)).into_pyobject(py)?,
+            None => (path, verify).into_pyobject(py)?,
+        };
+        Ok((restore, state))
     }
 }
 
-/// Arguments of `_analyses_analyzer`: the path of the dictionary of a file and whether it is
-/// verified
-type SavedState = (Option<OsString>, bool);
-
 /// Restores the analyzer of analyses from pickle, as `SavedAnalyzer` describes it
 #[pyfunction]
-#[pyo3(signature = (path=None, verify=false))]
+#[pyo3(signature = (path=None, verify=false, words=None))]
 fn _analyses_analyzer(
     py: Python<'_>,
     path: Option<PathBuf>,
     verify: bool,
+    words: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Py<Analyzer>> {
-    let Some(path) = path else {
-        return shared(py, None, verify);
+    let words = own_words(words)?;
+    let restore = |path: Option<PathBuf>| match words.is_empty() {
+        true => shared(py, path, verify),
+        false => with_own_words(py, path, verify, words.clone()),
     };
-    match shared(py, Some(path.clone()), verify) {
+    let Some(path) = path else {
+        return restore(None);
+    };
+    match restore(Some(path.clone())) {
         Ok(analyzer) => Ok(analyzer),
         // A file that is gone or of another version of the format: the dictionary of the package
-        Err(err) if err.is_instance_of::<PyOSError>(py) || other_version(&path) => {
-            shared(py, None, verify)
-        }
+        Err(err) if err.is_instance_of::<PyOSError>(py) || other_version(&path) => restore(None),
         Err(err) => Err(err),
     }
+}
+
+/// The checksum in the header of a dictionary file
+fn file_checksum(path: &Path) -> Option<u32> {
+    let mut header = [0; 16];
+    (File::open(path).and_then(|mut file| file.read_exact(&mut header))).ok()?;
+    Some(u32::from_le_bytes([
+        header[12], header[13], header[14], header[15],
+    ]))
 }
 
 /// Whether the file is a dictionary of another version of the format
@@ -661,7 +732,13 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
             }
         }
     };
-    let this = analyzer.get();
+    verified(analyzer.bind(py), verify)?;
+    Ok(analyzer)
+}
+
+/// Verifies the dictionary of an analyzer with `verify`, once
+fn verified(analyzer: &Bound<'_, Analyzer>, verify: bool) -> PyResult<()> {
+    let (py, this) = (analyzer.py(), analyzer.get());
     if verify && !this.verified.load(Ordering::Relaxed) {
         py.detach(|| this.dictionary.verify())
             .map_err(|err| load_error(&this.path, err))?;
@@ -670,7 +747,7 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
             saved.get().verify.store(true, Ordering::Relaxed);
         }
     }
-    Ok(analyzer)
+    Ok(())
 }
 
 /// Morphological analyzer of Spanish
@@ -692,10 +769,11 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
 ///     verify (bool): Check the whole dictionary, for a file of a source that is not trusted: a
 ///         deliberately crafted file with a right checksum may otherwise make the analysis fail.
 ///         Takes tens of milliseconds; pickle keeps it
-///     words (Mapping[str, str | tuple[str, str]] | None): Own words and their samples: a word
+///     words (Mapping[str, str | Sequence[str]] | None): Own words and their samples: a word
 ///         takes the forms of the lexemes of a word of the dictionary in the same form, usually the
 ///         lemma (`{"tiktokear": "bloguear"}` gives `tiktokeo`, `tiktokeó`), with the part of
-///         speech if the sample has lexemes of several (`{"cajo": ("bajo", "NOUN")}`). The
+///         speech in a pair, a tuple or a list, if the sample has lexemes of several
+///         (`{"zajo": ("bajo", "NOUN")}`; several are separated by commas: `"ADJ,NOUN"`). The
 ///         analyses of own words are those of words of the dictionary; pickle keeps the words
 ///
 /// Raises:
@@ -703,8 +781,8 @@ fn shared(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Py<An
 ///     OSError: If the dictionary file cannot be read or is not a file
 ///     ValueError: If the file is no dictionary of esMorph or is damaged, the path has a NUL
 ///         character, or an own word does not follow its sample (the sample is not in the
-///         dictionary, has lexemes of several parts of speech and none is given, has another
-///         ending, or the word has a space)
+///         dictionary, has lexemes of several parts of speech and none is given, has no lexemes
+///         of a given part of speech, has another ending, or the word has a space)
 ///     TypeError: If the path is neither a string nor os.PathLike, verify is not a bool, or words
 ///         is no mapping of strings to strings or pairs of strings
 ///
@@ -735,13 +813,19 @@ struct Analyzer {
     /// The dictionary is verified: pickle keeps it
     verified: AtomicBool,
     /// Own words with their samples and parts of speech, in the order given
-    words: Vec<OwnWord>,
+    words: Arc<[OwnWord]>,
+    /// The own words for pickle, made once: one object for the analyzer and all its analyses
+    words_object: PyOnceLock<Py<PyDict>>,
+    /// The analyzer of the dictionary whose copy has the own words, kept: they share the mapped
+    /// file and the context model, and unpickling its analyses finds it
+    _base: Option<Py<Analyzer>>,
 }
 
 /// An own word, its sample and the part of speech of the sample
 type OwnWord = (String, String, Option<String>);
 
-/// Own words of a mapping "word - sample or (sample, part of speech)"
+/// Own words of a mapping "word - sample or (sample, part of speech)"; the pair is a tuple or a list,
+/// as JSON gives it
 fn own_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<OwnWord>> {
     let Some(words) = words.filter(|words| !words.is_none()) else {
         return Ok(Vec::new());
@@ -757,7 +841,8 @@ fn own_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<OwnWord>> {
         let (sample, pos) = match sample.extract::<String>() {
             Ok(sample) => (sample, None),
             Err(_) => {
-                let (sample, pos): (String, String) = sample.extract().map_err(|_| wrong())?;
+                let pair: Vec<String> = sample.extract().map_err(|_| wrong())?;
+                let [sample, pos] = <[String; 2]>::try_from(pair).map_err(|_| wrong())?;
                 (sample, Some(pos))
             }
         };
@@ -777,81 +862,7 @@ impl Analyzer {
         words: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let words = own_words(words)?;
-        let explicit = path.is_some();
-        let path = match path {
-            // An absolute path: pickle may restore the analyzer in another working directory
-            Some(path) => std::path::absolute(&path).unwrap_or(path),
-            None => default_path(py)?,
-        };
-        if path.as_os_str().as_encoded_bytes().contains(&0) {
-            return Err(PyValueError::new_err(
-                "The path to the dictionary has a NUL character",
-            ));
-        }
-        // Opening a pipe or a device would wait for its writer
-        if std::fs::metadata(&path).is_ok_and(|meta| !meta.is_file() && !meta.is_dir()) {
-            return Err(PyOSError::new_err((
-                EINVAL,
-                "The path to the dictionary is not a file",
-                path.display().to_string(),
-            )));
-        }
-        let dictionary = py
-            .detach(|| {
-                let dictionary = esmorph::Dictionary::open(&path)?;
-                if verify {
-                    dictionary.verify()?;
-                }
-                Ok(dictionary)
-            })
-            .map_err(|err| load_error(&path, err))?;
-        let dictionary = if words.is_empty() {
-            dictionary
-        } else {
-            let samples = words.iter().map(|(word, sample, pos)| {
-                let sample = match pos {
-                    Some(pos) => esmorph::Sample::from((sample.as_str(), pos.as_str())),
-                    None => esmorph::Sample::from(sample.as_str()),
-                };
-                (word.as_str(), sample)
-            });
-            // Many words take a while: other threads run meanwhile
-            (py.detach(|| dictionary.with_words(samples)))
-                .map_err(|err| PyValueError::new_err(err.to_string()))?
-        };
-        let tags: Vec<Arc<Tag>> = dictionary
-            .ud_tags()
-            .map(|tag| {
-                Arc::new(Tag {
-                    pos: tag.pos().to_owned(),
-                    feats: tag.feats_string(),
-                })
-            })
-            .collect();
-        let mut features: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        for tag in dictionary.ud_tags() {
-            for (name, value) in tag.feats() {
-                let values = features.entry(name.to_owned()).or_default();
-                values.insert(value.to_owned());
-                values.extend(value.split(',').map(str::to_owned));
-            }
-        }
-        let tag_numbers = (tags.iter().enumerate())
-            .filter_map(|(ud, tag)| Some((Arc::clone(tag), u16::try_from(ud).ok()?)))
-            .collect();
-        Ok(Analyzer {
-            dictionary: Arc::new(dictionary),
-            tags,
-            tag_numbers,
-            features,
-            path,
-            explicit,
-            saved: PyOnceLock::new(),
-            saved_for_analyses: PyOnceLock::new(),
-            tag_strings: PyOnceLock::new(),
-            verified: AtomicBool::new(verify),
-            words,
-        })
+        Analyzer::create(py, path, verify, words)
     }
 
     fn __reduce__<'py>(
@@ -868,13 +879,7 @@ impl Analyzer {
         if this.words.is_empty() {
             return Ok((restore, (path, verified).into_pyobject(py)?));
         }
-        let words = PyDict::new(py);
-        for (word, sample, pos) in &this.words {
-            match pos {
-                Some(pos) => words.set_item(word, (sample, pos))?,
-                None => words.set_item(word, sample)?,
-            }
-        }
+        let words = this.words_object(py)?;
         Ok((restore, (path, verified, words).into_pyobject(py)?))
     }
 
@@ -1390,6 +1395,138 @@ impl Analyzer {
 }
 
 impl Analyzer {
+    /// An analyzer of the dictionary of the package or of the file at `path` with own words
+    /// `words`: they go to a copy of the dictionary of the analyzer of the file that the process
+    /// shares
+    fn create(
+        py: Python<'_>,
+        path: Option<PathBuf>,
+        verify: bool,
+        words: Vec<OwnWord>,
+    ) -> PyResult<Self> {
+        if words.is_empty() {
+            return Analyzer::load(py, path, verify);
+        }
+        let explicit = path.is_some();
+        let path = path.map(|path| std::path::absolute(&path).unwrap_or(path));
+        let mut base = shared(py, path.clone(), verify)?;
+        // A file built again since the shared analyzer loaded it is loaded anew
+        if let Some(path) = path
+            && file_checksum(&path).is_some_and(|sum| sum != base.get().dictionary.checksum())
+        {
+            base = Py::new(py, Analyzer::load(py, Some(path), verify)?)?;
+        }
+        let this = base.get();
+        let samples = words.iter().map(|(word, sample, pos)| {
+            let sample = match pos {
+                Some(pos) => esmorph::Sample::from((sample.as_str(), pos.as_str())),
+                None => esmorph::Sample::from(sample.as_str()),
+            };
+            (word.as_str(), sample)
+        });
+        // Many words take a while: other threads run meanwhile
+        let dictionary = (py.detach(|| (*this.dictionary).clone().with_words(samples)))
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        Ok(Analyzer {
+            dictionary: Arc::new(dictionary),
+            tags: this.tags.clone(),
+            tag_numbers: this.tag_numbers.clone(),
+            features: this.features.clone(),
+            path: this.path.clone(),
+            explicit,
+            saved: PyOnceLock::new(),
+            saved_for_analyses: PyOnceLock::new(),
+            tag_strings: PyOnceLock::new(),
+            verified: AtomicBool::new(this.verified.load(Ordering::Relaxed)),
+            words: words.into(),
+            words_object: PyOnceLock::new(),
+            _base: Some(base),
+        })
+    }
+
+    /// An analyzer of the dictionary of the package or of the file at `path`, loaded anew
+    fn load(py: Python<'_>, path: Option<PathBuf>, verify: bool) -> PyResult<Self> {
+        let explicit = path.is_some();
+
+        let path = match path {
+            // An absolute path: pickle may restore the analyzer in another working directory
+            Some(path) => std::path::absolute(&path).unwrap_or(path),
+            None => default_path(py)?,
+        };
+        if path.as_os_str().as_encoded_bytes().contains(&0) {
+            return Err(PyValueError::new_err(
+                "The path to the dictionary has a NUL character",
+            ));
+        }
+        // Opening a pipe or a device would wait for its writer
+        if std::fs::metadata(&path).is_ok_and(|meta| !meta.is_file() && !meta.is_dir()) {
+            return Err(PyOSError::new_err((
+                EINVAL,
+                "The path to the dictionary is not a file",
+                path.display().to_string(),
+            )));
+        }
+        let dictionary = py
+            .detach(|| {
+                let dictionary = esmorph::Dictionary::open(&path)?;
+                if verify {
+                    dictionary.verify()?;
+                }
+                Ok(dictionary)
+            })
+            .map_err(|err| load_error(&path, err))?;
+        let tags: Vec<Arc<Tag>> = dictionary
+            .ud_tags()
+            .map(|tag| {
+                Arc::new(Tag {
+                    pos: tag.pos().to_owned(),
+                    feats: tag.feats_string(),
+                })
+            })
+            .collect();
+        let mut features: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for tag in dictionary.ud_tags() {
+            for (name, value) in tag.feats() {
+                let values = features.entry(name.to_owned()).or_default();
+                values.insert(value.to_owned());
+                values.extend(value.split(',').map(str::to_owned));
+            }
+        }
+        let tag_numbers = (tags.iter().enumerate())
+            .filter_map(|(ud, tag)| Some((Arc::clone(tag), u16::try_from(ud).ok()?)))
+            .collect();
+        Ok(Analyzer {
+            dictionary: Arc::new(dictionary),
+            tags,
+            tag_numbers,
+            features,
+            path,
+            explicit,
+            saved: PyOnceLock::new(),
+            saved_for_analyses: PyOnceLock::new(),
+            tag_strings: PyOnceLock::new(),
+            verified: AtomicBool::new(verify),
+            words: Arc::default(),
+            words_object: PyOnceLock::new(),
+            _base: None,
+        })
+    }
+
+    /// The own words for pickle as a mapping, made once
+    fn words_object(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        let words = self.words_object.get_or_try_init(py, || -> PyResult<_> {
+            let words = PyDict::new(py);
+            for (word, sample, pos) in self.words.iter() {
+                match pos {
+                    Some(pos) => words.set_item(word, (sample, pos))?,
+                    None => words.set_item(word, sample)?,
+                }
+            }
+            Ok(words.unbind())
+        })?;
+        Ok(words.clone_ref(py))
+    }
+
     /// The handle of the analyzer for the analyses of this thread: one per analyzer and thread
     /// while its analyses live
     fn handle(slf: &Bound<'_, Self>) -> Arc<Handle> {
@@ -1432,12 +1569,24 @@ impl Analyzer {
         let py = analyzer.py();
         let this = analyzer.get();
         let saved = this.saved.get_or_try_init(py, || -> PyResult<_> {
+            // An analyzer with own words is found by them and its path, not as one of its file
+            if !this.words.is_empty() {
+                let reference = PyWeakrefReference::new(analyzer)?.unbind();
+                let mut own = OWN
+                    .lock_py_attached(py)
+                    .unwrap_or_else(PoisonError::into_inner);
+                own.retain(|known| known.analyzer.bind(py).upgrade().is_some());
+                own.push(OwnAnalyzer {
+                    path: this.explicit.then(|| this.path.clone()),
+                    words: Arc::clone(&this.words),
+                    analyzer: reference,
+                });
+            }
             if !this.explicit {
                 return Ok(None);
             }
             // A string, as a path of `pathlib` of one system does not unpickle on another
             let path = this.path.as_os_str().into_pyobject(py)?.into_any().unbind();
-            // An analyzer with own words is no analyzer of its file for unpickling
             if this.words.is_empty() {
                 // Python objects are made before the lock: the code they run may wait for another
                 // thread, and the lock is taken detached from the interpreter
@@ -1475,11 +1624,16 @@ impl Analyzer {
         let this = analyzer.get();
         let saved = this.saved_for_analyses.get_or_try_init(py, || {
             let path = Analyzer::saved_path(analyzer)?.and(Some(this.path.clone().into()));
+            let words = match this.words.is_empty() {
+                true => None,
+                false => Some(this.words_object(py)?),
+            };
             Py::new(
                 py,
                 SavedAnalyzer {
                     path,
                     verify: AtomicBool::new(this.verified.load(Ordering::Relaxed)),
+                    words,
                 },
             )
         })?;

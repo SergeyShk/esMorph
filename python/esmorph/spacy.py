@@ -35,7 +35,7 @@ import unicodedata
 from collections import OrderedDict
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from spacy.language import Language
 from spacy.scorer import Scorer
@@ -263,12 +263,7 @@ def analyzer(dictionary: str | None, digest: str | None = None) -> Analyzer:
         if found is not None:
             _analyzers.move_to_end(key)
             return found
-    # A pair of a wrong length gets to the analyzer, which tells of it
-    own = {
-        word: sample if isinstance(sample, str) else cast(tuple[str, str], tuple(sample))
-        for word, sample in (_words[digest] if digest is not None else {}).items()
-    }
-    created = Analyzer(dictionary, words=own or None)
+    created = Analyzer(dictionary, words=_words[digest] if digest is not None else None)
     with _analyzers_lock:
         _analyzers[key] = created
         _analyzers.move_to_end(key)

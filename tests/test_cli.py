@@ -99,12 +99,15 @@ def test_dictionary_option(tmp_path):
 
 def test_words_option(tmp_path):
     words = tmp_path / "words.tsv"
-    words.write_text("# own words\ntiktokear\tbloguear\n\ncajo\tbajo\tNOUN\n", encoding="utf-8")
-    result = run("-w", str(words), text="Tiktokeamos con los cajos.")
+    words.write_text(
+        "# own words\ntiktokear\tbloguear\n\nzajo\tbajo\tNOUN\ntiktokero\tbloguero\tADJ,NOUN\n",
+        encoding="utf-8",
+    )
+    result = run("-w", str(words), text="Tiktokeamos con los zajos tiktokeros.")
     assert (result.returncode, result.stderr) == (0, "")
-    assert result.stdout == "tiktokear con el cajo .\n"
-    words.write_text("cajo\tbajo\n", encoding="utf-8")
-    result = run("--words", str(words), text="Cajos.")
+    assert result.stdout == "tiktokear con el zajo tiktokero .\n"
+    words.write_text("zajo\tbajo\n", encoding="utf-8")
+    result = run("--words", str(words), text="Zajos.")
     assert result.returncode == 1
     assert 'words.tsv: line 1: the sample "bajo" has lexemes of several parts' in result.stderr
     words.write_text("tiktokear\n", encoding="utf-8")
