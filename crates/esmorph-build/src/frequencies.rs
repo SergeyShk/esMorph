@@ -52,6 +52,8 @@ pub struct Counts {
     tags: HashMap<(String, String), u32>,
     /// Form: all treebanks
     forms: HashMap<String, u32>,
+    /// Forms that the treebanks have only as a name: PROPN or X
+    names: HashSet<String>,
 }
 
 fn number(line: &str, text: &str) -> Result<u32, Error> {
@@ -128,6 +130,8 @@ impl Counts {
                 count,
             );
         }
+        // Forms that the treebanks have as another part of speech than a name
+        let mut other: HashSet<String> = HashSet::new();
         for (at, line) in parts.lines().enumerate() {
             let line_error = |err| at_line("pos.tsv", at, err);
             let &[form, pos, count] = line.split('\t').collect::<Vec<_>>().as_slice() else {
@@ -145,6 +149,13 @@ impl Counts {
             )
             .map_err(line_error)?;
             add(counts.forms.entry(form.to_owned()).or_default(), count).map_err(line_error)?;
+            if matches!(pos, "PROPN" | "X") {
+                if !other.contains(form) {
+                    counts.names.insert(form.to_owned());
+                }
+            } else if other.insert(form.to_owned()) {
+                counts.names.remove(form);
+            }
         }
         Ok(counts)
     }
@@ -154,6 +165,11 @@ impl Counts {
         self.tags
             .iter()
             .map(|((pos, feats), &count)| (pos.as_str(), feats.as_str(), count))
+    }
+
+    /// Whether the treebanks have a form only as a name: `ciu` of `CiU`
+    pub fn only_name(&self, form: &str) -> bool {
+        self.names.contains(form)
     }
 
     /// How many times the treebanks have a form
@@ -438,6 +454,15 @@ mod tests {
     fn frequency_sums_the_parts_of_speech() {
         assert_eq!(counts().frequency("que"), 200);
         assert_eq!(counts().frequency("qzxw"), 0);
+    }
+
+    #[test]
+    fn forms_only_of_names() {
+        let parts = "ciu\tPROPN\t3\nciu\tX\t1\nluna\tPROPN\t2\nluna\tNOUN\t5\nsol\tNOUN\t1\nsol\tPROPN\t9\n";
+        let counts = Counts::read("", parts).unwrap();
+        assert!(counts.only_name("ciu"));
+        assert!(!counts.only_name("luna") && !counts.only_name("sol"));
+        assert!(!counts.only_name("nada"));
     }
 
     #[test]

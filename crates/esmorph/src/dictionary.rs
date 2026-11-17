@@ -3327,6 +3327,32 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn forms_of_the_extra_source_part_no_lexeme_from_its_table_in_guessing() {
+        // Three nouns of one table guess `trapela`, though one of them has a form of the extra
+        // source and so a table of its own
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        for lemma in ["carapela", "sopela", "tomapela"] {
+            for (form, feats) in [
+                (lemma.to_owned(), "Gender=Fem|Number=Sing"),
+                (format!("{lemma}s"), "Gender=Fem|Number=Plur"),
+            ] {
+                builder.add_form(lemma, "NOUN", &form, feats).unwrap();
+            }
+        }
+        let feats = "Gender=Fem|Number=Sing";
+        builder
+            .add_form("sopela", "NOUN", "sopiela", feats)
+            .unwrap();
+        builder
+            .mark_extra("sopela", "NOUN", "sopiela", feats)
+            .unwrap();
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        assert_eq!(lemmas(&dictionary, "trapelas"), ["trapela"]);
+        assert_eq!(lemmas(&dictionary, "sopiela"), ["sopela"]);
+    }
+
+    #[test]
     fn a_roman_letter_of_the_dictionary_is_a_number_too() {
         let dictionary = name_dictionary();
         let poses: Vec<String> = (summary(&dictionary, "X").into_iter())

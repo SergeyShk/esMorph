@@ -471,51 +471,41 @@ impl Builder {
             if rows.len() > 1 << 16 {
                 return Err(Error::Build(format!("lexeme {lemma:?} has too many forms")));
             }
-            let stem = common_start(rows.iter().map(|row| row.word));
-            let mut paradigm = Vec::with_capacity(rows.len());
-            for row in &rows {
-                let suffix = row.word[stem..].to_owned();
-                paradigm.push(suffixes.number(suffix, "suffixes", u32::MAX)?);
-            }
-            let paradigm = paradigms.number(paradigm, "paradigms", u32::MAX)?;
-            let mut cells = Vec::with_capacity(rows.len());
-            for row in &rows {
-                let mut cell = row.flags | u32::from(row.ud);
-                // The analysis of a spoken spelling is the form it stands for
-                if let Some(standard) = row.standard.filter(|_| row.flags & SPOKEN != 0) {
-                    let at = (rows.iter())
-                        .position(|other| {
-                            other.word == standard
-                                && other.ud == row.ud
-                                && other.flags & (SPOKEN | LEMMA_ONLY) == 0
-                        })
-                        .filter(|&at| at <= MAX_SPOKEN_FORM)
-                        .ok_or_else(|| {
-                            Error::Build(format!(
-                                "spoken form {:?} of lexeme {lemma:?} {pos} has no form {standard:?} \
-                                 with its features in the first {MAX_SPOKEN_FORM} forms",
-                                row.word
-                            ))
-                        })?;
-                    cell |= (at as u32) << SPOKEN_FORM_SHIFT;
-                }
-                cells.push(cell);
-            }
+            let (paradigm, cells) = table_of(&rows, lemma, pos, &mut suffixes, &mut paradigms)?;
             let table = tables.number((paradigm, cells), "inflection tables", u16::MAX)?;
-            *lexemes_of.entry(table).or_default() += 1;
             for (form, row) in rows.iter().enumerate() {
                 if row.flags & LEMMA_ONLY == 0 {
                     words.entry(row.word).or_default().push(Listed {
                         record: table << 16 | form as u32,
                         place: row.place,
                     });
-                    if row.flags & (VARIANT | SPOKEN | EXTRA) == 0
-                        && GUESSED.contains(&pos.as_str())
-                    {
-                        let key = (pos.clone(), row.feats.to_owned());
-                        let weight = self.tag_frequencies.get(&key).copied().unwrap_or(0);
-                        samples.push((row.word, table << 16 | form as u32, u64::from(weight) + 1));
-                    }
+                }
+            }
+            if !GUESSED.contains(&pos.as_str()) {
+                continue;
+            }
+            // Unknown words are guessed by the tables without the forms of the extra source: such a
+            // form parts no lexeme from the lexemes of its table
+            let extra = rows.iter().any(|row| row.flags & EXTRA != 0);
+            let rows: Vec<Row> = rows
+                .into_iter()
+                .filter(|row| row.flags & EXTRA == 0)
+                .collect();
+            if rows.is_empty() {
+                continue;
+            }
+            let table = if extra {
+                let (paradigm, cells) = table_of(&rows, lemma, pos, &mut suffixes, &mut paradigms)?;
+                tables.number((paradigm, cells), "inflection tables", u16::MAX)?
+            } else {
+                table
+            };
+            *lexemes_of.entry(table).or_default() += 1;
+            for (form, row) in rows.iter().enumerate() {
+                if row.flags & (LEMMA_ONLY | VARIANT | SPOKEN | EXTRA) == 0 {
+                    let key = (pos.clone(), row.feats.to_owned());
+                    let weight = self.tag_frequencies.get(&key).copied().unwrap_or(0);
+                    samples.push((row.word, table << 16 | form as u32, u64::from(weight) + 1));
                 }
             }
         }
@@ -622,6 +612,47 @@ impl Builder {
             context: self.context.clone(),
         }))
     }
+}
+
+/// The paradigm and the cells of the table of the rows of a lexeme
+fn table_of(
+    rows: &[Row],
+    lemma: &str,
+    pos: &str,
+    suffixes: &mut Interned<String>,
+    paradigms: &mut Interned<Vec<u32>>,
+) -> Result<(u32, Vec<u32>), Error> {
+    let stem = common_start(rows.iter().map(|row| row.word));
+    let mut paradigm = Vec::with_capacity(rows.len());
+    for row in rows {
+        let suffix = row.word[stem..].to_owned();
+        paradigm.push(suffixes.number(suffix, "suffixes", u32::MAX)?);
+    }
+    let paradigm = paradigms.number(paradigm, "paradigms", u32::MAX)?;
+    let mut cells = Vec::with_capacity(rows.len());
+    for row in rows {
+        let mut cell = row.flags | u32::from(row.ud);
+        // The analysis of a spoken spelling is the form it stands for
+        if let Some(standard) = row.standard.filter(|_| row.flags & SPOKEN != 0) {
+            let at = (rows.iter())
+                .position(|other| {
+                    other.word == standard
+                        && other.ud == row.ud
+                        && other.flags & (SPOKEN | LEMMA_ONLY) == 0
+                })
+                .filter(|&at| at <= MAX_SPOKEN_FORM)
+                .ok_or_else(|| {
+                    Error::Build(format!(
+                        "spoken form {:?} of lexeme {lemma:?} {pos} has no form {standard:?} \
+                         with its features in the first {MAX_SPOKEN_FORM} forms",
+                        row.word
+                    ))
+                })?;
+            cell |= (at as u32) << SPOKEN_FORM_SHIFT;
+        }
+        cells.push(cell);
+    }
+    Ok((paradigm, cells))
 }
 
 /// The index of guessing: an automaton of endings of word forms and the lists of the forms of
