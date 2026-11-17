@@ -40,7 +40,7 @@ nlp.add_pipe("esmorph", before="attribute_ruler")
 
 ## Tokens de varias palabras { #multiword }
 
-Un token de spaCy es un token del texto: una contracción (`del`, `al`) o un verbo con clíticos (`dámelo`) es un solo token. Recibe el análisis de su primera palabra: `del` es ADP `de`, `dámelo` es VERB `dar` en imperativo. Con el tokenizador de anySeg, que da las palabras de un token, es el análisis más probable con esas palabras, tal como lo elige [`annotate`](analyzer.md#annotate), y con otro tokenizador, el análisis más probable del token en la oración. Las palabras del token están en su [análisis de esMorph](#extension).
+Un token de spaCy es un token del texto: una contracción (`del`, `al`), un verbo con clíticos (`dámelo`) o un número con su signo (`60%`) es un solo token. Recibe el análisis de su primera palabra: `del` es ADP `de`, `dámelo` es VERB `dar` en imperativo, `60%` es NUM `60`. Con el tokenizador de anySeg, que da las palabras de un token, es el análisis más probable con esas palabras, tal como lo elige [`annotate`](analyzer.md#annotate), y con otro tokenizador, el análisis más probable del token en la oración. Las palabras del token están en su [análisis de esMorph](#extension).
 
 ## Oraciones { #sentences }
 
@@ -70,7 +70,7 @@ Los tokens, sus palabras y los inicios de oración según las convenciones de Un
 | :-------- | :--- | :---------- | :---------- |
 | `dictionary` | `str` | `None` | Ruta al archivo del diccionario; por defecto, el diccionario del paquete |
 | `context` | `bool` | `True` | Elegir el análisis por los tokens de alrededor; `False` - el análisis más probable de la forma, como con [`analyze`](analyzer.md#analyze) |
-| `words` | `dict` | `None` | [Palabras propias](analyzer.md#words) y sus modelos; un modelo con su categoría es una lista: `{"cajo": ["bajo", "NOUN"]}` |
+| `words` | `dict` | `None` | [Palabras propias](analyzer.md#words) y sus modelos; un modelo con su categoría es una lista: `{"zajo": ["bajo", "NOUN"]}` |
 
 `nlp.evaluate` y `spacy evaluate` evalúan el componente como al morfologizador y al lematizador: `pos_acc`, `morph_acc`, `morph_per_feat` y `lemma_acc`. `spacy package` no encuentra esmorph entre los requisitos de una cadena: añada `"requirements": ["esmorph>=0.4,<0.5"]` a su `meta.json` antes de empaquetarla. El parámetro `dictionary` guarda una ruta, así que un diccionario propio debe estar en esa ruta donde se instale el paquete.
 

@@ -40,7 +40,7 @@ nlp.add_pipe("esmorph", before="attribute_ruler")
 
 ## Tokens of several words { #multiword }
 
-A spaCy token is a token of the text: a contraction (`del`, `al`) or a verb with clitics (`dámelo`) is one token. It gets the analysis of its first word: `del` is ADP `de`, `dámelo` is VERB `dar` in the imperative. With the tokenizer of anySeg, which gives the words of a token, it is the most probable analysis with these words, as [`annotate`](analyzer.md#annotate) chooses it, and with another tokenizer the most probable analysis of the token in the sentence. The words of the token are in its [esMorph analysis](#extension).
+A spaCy token is a token of the text: a contraction (`del`, `al`), a verb with clitics (`dámelo`) or a number with its sign (`60%`) is one token. It gets the analysis of its first word: `del` is ADP `de`, `dámelo` is VERB `dar` in the imperative, `60%` is NUM `60`. With the tokenizer of anySeg, which gives the words of a token, it is the most probable analysis with these words, as [`annotate`](analyzer.md#annotate) chooses it, and with another tokenizer the most probable analysis of the token in the sentence. The words of the token are in its [esMorph analysis](#extension).
 
 ## Sentences { #sentences }
 
@@ -70,7 +70,7 @@ Tokens, their words and sentence starts by the conventions of Universal Dependen
 | :-------- | :--- | :------ | :---------- |
 | `dictionary` | `str` | `None` | Path to the dictionary file; by default - the dictionary of the package |
 | `context` | `bool` | `True` | Choose the analysis by the tokens around; `False` - the most probable analysis of the word form, as with [`analyze`](analyzer.md#analyze) |
-| `words` | `dict` | `None` | [Own words](analyzer.md#words) and their samples; a sample with its part of speech is a list: `{"cajo": ["bajo", "NOUN"]}` |
+| `words` | `dict` | `None` | [Own words](analyzer.md#words) and their samples; a sample with its part of speech is a list: `{"zajo": ["bajo", "NOUN"]}` |
 
 `nlp.evaluate` and `spacy evaluate` score the component as the morphologizer and the lemmatizer: `pos_acc`, `morph_acc`, `morph_per_feat` and `lemma_acc`. `spacy package` does not find esmorph among the requirements of a pipeline: add `"requirements": ["esmorph>=0.4,<0.5"]` to its `meta.json` before packaging. The parameter `dictionary` keeps a path, so a dictionary of its own must be at that path where the package is installed.
 

@@ -21,7 +21,7 @@ decir yo el verdad de el caso .
 | `-f`, `--format` | `lemmas` | [Formato de salida](#formats): `lemmas`, `conllu`, `tsv`, `jsonl` |
 | `-i`, `--input` | `text` | [Entrada](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | el diccionario del paquete | Un archivo de diccionario de esMorph, comprobado entero como con [`verify=True`](analyzer.md#parameters) |
-| `-w`, `--words` | | Un archivo de [palabras propias](analyzer.md#words): en cada línea una palabra y su modelo separados por un tabulador, y la categoría si el modelo tiene lexemas de varias; la opción puede repetirse |
+| `-w`, `--words` | | Un archivo de [palabras propias](analyzer.md#words): en cada línea una palabra y su modelo separados por un tabulador, y la categoría si el modelo tiene lexemas de varias (varias se separan con comas: `ADJ,NOUN`); la opción puede repetirse |
 | `--no-context` | | Ordenar los análisis de una palabra como [`analyze`](analyzer.md#analyze), sin el modelo de contexto: más rápido; para una lista de palabras y un diccionario sin modelo |
 | `-o`, `--output` | la salida estándar | El archivo del resultado; `-` es la salida estándar |
 | `-h`, `--help` | | Mostrar la ayuda |
@@ -34,7 +34,7 @@ Un archivo de palabras propias está en UTF-8; las líneas en blanco y las que e
 ```
 # new verbs
 tiktokear	bloguear
-cajo	bajo	NOUN
+zajo	bajo	NOUN
 ```
 
 Con él, `esmorph -w words.tsv text.txt` analiza `tiktokeó` como una forma de `tiktokear`, como lo hace [`Analyzer(words=...)`](analyzer.md#words).
