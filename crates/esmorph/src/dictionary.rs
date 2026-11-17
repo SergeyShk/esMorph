@@ -451,7 +451,7 @@ impl Dictionary {
     /// gives the analyses of that spelling; a word absent as written is a verb with clitics
     /// (`dámelo`) or is looked for without its accents and with a lost diaeresis; a lowercase word
     /// that is neither may be a colloquial spelling of a word of the dictionary (`trabajao`,
-    /// `caridá`, `juera`), as a participle without its `d` is before other accents (`perdío` is
+    /// `caridá`, `juerza`), as a participle without its `d` is before other accents (`perdío` is
     /// `perdido`, not `perdió`). A token that is none of these gets the analyses of the rules:
     /// punctuation, a symbol, a number, an ordinal number in digits, a Roman numeral, a name with a
     /// capital letter, an address, an abbreviation. A lowercase word that is none of these is

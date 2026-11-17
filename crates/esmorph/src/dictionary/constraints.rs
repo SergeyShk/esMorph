@@ -329,7 +329,8 @@ impl Dictionary {
     }
 
     /// The analysis of the frequent verb the model ranks highest when the model chose a finite form
-    /// of a rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`
+    /// of a rare one: `aunque vengan` is `venir`, whose subjunctive is the present of `vengar`; a
+    /// form of the same kind, so `me visto` is no participle of `ver`
     fn frequent_lemma(&self, list: &[Analysis], shares: &[(String, f64)]) -> Option<usize> {
         let top = list.first()?;
         let share = |lemma: &str| {
@@ -343,9 +344,15 @@ impl Dictionary {
         {
             return None;
         }
+        let form = |analysis: &Analysis| {
+            (self.ud_tag(analysis.ud))
+                .and_then(|tag| tag.feats().find(|&(name, _)| name == "VerbForm"))
+                .map(|(_, value)| value)
+        };
         list.iter().position(|analysis| {
             analysis.lemma != top.lemma
                 && self.pos(analysis) == "VERB"
+                && form(analysis) == form(top)
                 && share(&analysis.lemma) > FREQUENT
         })
     }

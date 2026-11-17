@@ -758,7 +758,7 @@ fn verified(analyzer: &Bound<'_, Analyzer>, verify: bool) -> PyResult<()> {
 ///     spelled as in the dictionary gives the analyses of that spelling; a word absent as written
 ///     is looked for without its accents and with a lost diaeresis. A word absent from the
 ///     dictionary may be a verb with clitics (`dámelo`) or, in lower case, a colloquial spelling of
-///     a word of the dictionary (`trabajao`, `caridá`, `juera`; `perdío` is `perdido`, not
+///     a word of the dictionary (`trabajao`, `caridá`, `juerza`; `perdío` is `perdido`, not
 ///     `perdió`); other tokens get the analyses of rules (punctuation, symbols, numbers, Roman
 ///     numerals and names), and other lowercase words are guessed. The dictionary is loaded once
 ///     when the analyzer is created; an analyzer can be used from several threads

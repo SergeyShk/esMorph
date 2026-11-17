@@ -904,6 +904,9 @@ def test_analyze_sentence(morph):
         ("Aunque vengan tarde .", 1, ("venir", "VERB")),
         ("Ojalá venga pronto .", 1, ("venir", "VERB")),
         ("La fuerza crea leyes nuevas .", 2, ("crear", "VERB")),
+        # The frequent verb in a form of the same kind: no participle of `ver`
+        ("Yo me visto rápido .", 2, ("vestir", "VERB")),
+        ("Te vistas como quieras .", 1, ("vestir", "VERB")),
     ],
 )
 def test_constraints_of_the_context(morph, words, at, expected):
