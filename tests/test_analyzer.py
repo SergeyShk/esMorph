@@ -871,6 +871,12 @@ def test_analyze_sentence(morph):
         ("Fue a finales del siglo XIX .", 0, ("ser", "AUX")),
         ("Fue a las cinco .", 0, ("ser", "AUX")),
         ("Fue a ella a quien vi .", 0, ("ser", "AUX")),
+        # An older spelling is read as the word it stands for, and á as the preposition
+        ("Ese fué el hombre .", 1, ("ser", "AUX")),
+        ("Fué el duque .", 0, ("ser", "AUX")),
+        ("No podia venir .", 1, ("poder", "AUX")),
+        ("Así fueron á visitar al santo .", 1, ("ir", "VERB")),
+        ("Angel , ven .", 0, ("Angel", "PROPN")),
         # A word after a clitic, the negation or tú is a verb, of the frequent one of its form;
         # after a preposition no makes a noun negative
         ("¿ Te figuras lo que dijo ?", 2, ("figurar", "VERB")),

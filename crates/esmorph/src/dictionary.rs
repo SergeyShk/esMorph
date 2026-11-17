@@ -838,7 +838,11 @@ impl Dictionary {
         // The model sees a token as `analyze` reads it: without invisible characters and with
         // combined accents
         let normal: Vec<Cow<str>> = words.iter().map(|word| normalized(word.as_ref())).collect();
-        let normal: Vec<&str> = normal.iter().map(AsRef::as_ref).collect();
+        // ... and an older or colloquial spelling as the word it stands for: `fué` as `fue`
+        let mut seen: Vec<Cow<str>> = Vec::with_capacity(words.len());
+        let opening = (normal.iter())
+            .position(|word| word.chars().any(char::is_alphanumeric))
+            .filter(|_| start);
         let mut sentence = Vec::with_capacity(words.len());
         // The shares of the verbs of every word in the counts, before the model scores
         let mut shares = Vec::with_capacity(words.len());
@@ -848,15 +852,24 @@ impl Dictionary {
                 .map(|word| self.analyze(word.as_ref()))
                 .collect();
             shares.extend(analyses.iter().map(|list| self.verb_shares(list)));
+            for (at, list) in range.clone().zip(&analyses) {
+                let word = normal[at].as_ref();
+                seen.push(match standard_word(word, list, opening == Some(at)) {
+                    Some(standard) => Cow::Owned(standard),
+                    None => Cow::Borrowed(word),
+                });
+            }
             // Without neighbors the model chooses worse than the counts of the dictionary
             if range.len() < 2 {
                 sentence.extend(analyses);
                 continue;
             }
-            sentence.extend(context.rank(&normal[range], analyses, start && number == 0));
+            let part: Vec<&str> = seen[range].iter().map(AsRef::as_ref).collect();
+            sentence.extend(context.rank(&part, analyses, start && number == 0));
         }
         if words.len() > 1 {
-            self.constrain(&normal, &mut sentence, &shares, start);
+            let seen: Vec<&str> = seen.iter().map(AsRef::as_ref).collect();
+            self.constrain(&seen, &mut sentence, &shares, start);
         }
         Ok(sentence)
     }
@@ -1903,6 +1916,35 @@ pub fn sentence_parts(len: usize, size: usize) -> impl Iterator<Item = Range<usi
     (0..count).map(move |part| bound(part * size)..bound(((part + 1) * size).min(len)))
 }
 
+/// The spelling of the dictionary that a token stands for: the one word of all its analyses but
+/// those of the rules, if it is spelled otherwise (`fué` is `fue`, `trabajao` is `trabajado`). A
+/// capital letter keeps the spelling of a name (`Ramon`, `Joe`) unless it starts the sentence and
+/// is a name less likely than a word (`Fué` is `Fue`, `Angel` stays); a token with a period, as an
+/// abbreviation, keeps its own
+fn standard_word(token: &str, analyses: &[Analysis], opening: bool) -> Option<String> {
+    let mut words = (analyses.iter())
+        .filter(|analysis| analysis.source != Source::Rule)
+        .map(|analysis| analysis.word.as_str());
+    let word = words.next()?;
+    if token.contains('.') || words.any(|other| other != word) || lower_eq(token, word) {
+        return None;
+    }
+    let mut letters = token.chars().filter(|c| c.is_alphabetic());
+    let first = letters.next()?.is_uppercase();
+    if letters.any(char::is_uppercase) {
+        return None;
+    }
+    if !first {
+        return Some(word.to_owned());
+    }
+    if !opening || analyses.first()?.source == Source::Rule {
+        return None;
+    }
+    let mut chars = word.chars();
+    let initial = chars.next()?;
+    Some(initial.to_uppercase().chain(chars).collect())
+}
+
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
 /// joins its letter, and a hyphen of Unicode is the hyphen-minus. Tokens of a text keep them
 fn normalized(word: &str) -> Cow<'_, str> {
@@ -2074,6 +2116,32 @@ pub(crate) mod tests {
                 .collect();
             assert_eq!(pieces, parts(len), "{len}");
         }
+    }
+
+    #[test]
+    fn the_model_sees_the_word_a_spelling_stands_for() {
+        let of = |word: &str, source| {
+            Analysis::new(word.into(), word.into(), 0, 0.5, source, None, Vec::new())
+        };
+        let fue = [of("fue", Source::Dictionary), of("fue", Source::Dictionary)];
+        assert_eq!(standard_word("fué", &fue, false).as_deref(), Some("fue"));
+        // A capital letter is a name's, unless the word opens the sentence and no rule goes first
+        assert_eq!(standard_word("Fué", &fue, true).as_deref(), Some("Fue"));
+        assert_eq!(standard_word("Fué", &fue, false), None);
+        assert_eq!(standard_word("FUÉ", &fue, true), None);
+        let name = [of("Ramon", Source::Rule), of("ramón", Source::Dictionary)];
+        assert_eq!(standard_word("Ramon", &name, true), None);
+        // Analyses of different words, a word as written and an abbreviation stay
+        let tos = [
+            of("tos", Source::Dictionary),
+            of("todos", Source::Dictionary),
+        ];
+        assert_eq!(standard_word("tos", &tos, false), None);
+        assert_eq!(standard_word("fue", &fue, false), None);
+        assert_eq!(
+            standard_word("kg.", &[of("kg", Source::Dictionary)], false),
+            None
+        );
     }
 
     #[test]

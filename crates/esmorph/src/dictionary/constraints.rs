@@ -204,7 +204,8 @@ impl Dictionary {
             && !self.top_verb_form(sentence, predicate, "Part");
         let locution = LOCUTIONS.contains(&word(at + 2)) && matches!(word(at + 3), "de" | "del");
         let hour = matches!(word(at + 2), "la" | "las") && self.top_pos(sentence, at + 3) == "NUM";
-        let goal = matches!(next, "a" | "al")
+        // `á` is the preposition in older writing: `fué á ocultarse`
+        let goal = matches!(next, "a" | "á" | "al")
             && !locution
             && !hour
             && (next == "al" || GOAL.contains(&self.top_pos(sentence, at + 2)));
