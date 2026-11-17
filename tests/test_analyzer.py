@@ -237,6 +237,7 @@ def test_own_words_of_a_pair_or_several_parts_of_speech():
     }
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows replaces no open file")
 def test_own_words_of_a_file_built_again(tmp_path):
     path = tmp_path / "es.dict"
     data = Analyzer().path.read_bytes()
@@ -285,7 +286,7 @@ def test_pickle_keeps_own_words():
     assert pickle.loads(pickle.dumps(morph)) is morph
     # A new process makes the analyzer once, for the analyzer and the analyses of every pickle
     result = subprocess.run(
-        [sys.executable, "-c", OWN_WORDS_PICKLE],
+        [sys.executable, "-X", "utf8", "-c", OWN_WORDS_PICKLE],
         input=pickle.dumps((morph, analyses)),
         capture_output=True,
         check=True,
