@@ -133,6 +133,9 @@ def test_word_absent_as_written_looks_through_accents(morph):
         ("caridá", "caridad", "caridad"),
         ("juerza", "fuerza", "fuerza"),
         ("ajuera", "afuera", "afuera"),
+        # An aspirated `h`, and no old form: `juy` is no `fuy` of `ser`
+        ("juyendo", "huyendo", "huir"),
+        ("juy", "huy", "huy"),
     ],
 )
 def test_colloquial_spelling_has_the_analyses_of_the_standard_word(morph, token, word, lemma):

@@ -14,8 +14,8 @@ const ENDINGS: [(&str, &str); 7] = [
 ];
 
 /// Starts of such spellings and of their standard words: `ju` is mostly `fu`, so it goes before
-/// `hue` (`juera` is `fuera`, not `huera`)
-const STARTS: [(&str, &str); 3] = [("ju", "fu"), ("jue", "hue"), ("aju", "afu")];
+/// `hue` (`juera` is `fuera`, not `huera`), and `hu` last (`juyendo` is `huyendo`)
+const STARTS: [(&str, &str); 4] = [("ju", "fu"), ("jue", "hue"), ("aju", "afu"), ("ju", "hu")];
 
 /// Standard spellings that a lowercase word may stand for, the likelier first; the word itself
 /// is no spelling of a standard word unless the dictionary has one of them
@@ -63,10 +63,11 @@ mod tests {
         assert_eq!(spellings("verdá"), ["verdad"]);
         assert_eq!(spellings("usté"), ["usted"]);
         assert_eq!(spellings("virtú"), ["virtud"]);
-        assert_eq!(spellings("juerza"), ["fuerza", "huerza"]);
-        assert_eq!(spellings("juera"), ["fuera", "huera"]);
+        assert_eq!(spellings("juerza"), ["fuerza", "huerza", "huerza"]);
+        assert_eq!(spellings("juera"), ["fuera", "huera", "huera"]);
+        assert_eq!(spellings("juyendo"), ["fuyendo", "huyendo"]);
         assert_eq!(spellings("ajuera"), ["afuera"]);
-        assert_eq!(spellings("jugao"), ["jugado", "fugao"]);
+        assert_eq!(spellings("jugao"), ["jugado", "fugao", "hugao"]);
     }
 
     #[test]

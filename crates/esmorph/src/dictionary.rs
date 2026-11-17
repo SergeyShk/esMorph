@@ -576,12 +576,19 @@ impl Dictionary {
     }
 
     /// Analyses of a lowercase word that the dictionary has not as a colloquial spelling: those of
-    /// the first standard spelling it has (`trabajao` is `trabajado`, `caridá` is `caridad`). A
-    /// word with a capital letter is mostly a name: `Julita` is no `fulita`
+    /// the first standard spelling it has that is not only an old form (`trabajao` is `trabajado`,
+    /// `caridá` is `caridad`, `juy` is `huy`, not `fuy` of `ser`). A word with a capital letter is
+    /// mostly a name: `Julita` is no `fulita`
     fn colloquial(&self, word: &str) -> Vec<Analysis> {
         colloquial::standard(word)
             .map(|standard| self.found(&standard))
-            .find(|analyses| !analyses.is_empty())
+            .find(|analyses| {
+                analyses.iter().any(|analysis| {
+                    (analysis.entry)
+                        .and_then(|entry| self.cell(entry))
+                        .is_some_and(|cell| cell & OLD == 0)
+                })
+            })
             .unwrap_or_default()
     }
 
