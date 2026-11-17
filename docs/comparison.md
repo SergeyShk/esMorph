@@ -1,6 +1,6 @@
 # Comparison
 
-esMorph gives all the analyses of a word, the most probable first, and orders them by the sentence with its context model. In context its first analysis has the right part of speech, features and lemma all together for 95.67 % of the words of AnCora, almost as often as spaCy `es_core_news_sm` trained on it (95.92 %), and more often than spaCy and Stanza on PUD and COSER, new to all of them; its lemma is right more often than that of every other system on AnCora and COSER. Without context its first lemma is right more often than that of simplemma on all three UD test sets, and an analysis with the right part of speech and lemma is among its analyses for 96-99 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 177 thousand tokens per second in context, 3.5 times faster than spaCy, and 1.9 million without, answers a short text together with loading in 3.0 ms, and every further process with the same dictionary adds 3.6 MB of memory.
+esMorph gives all the analyses of a word, the most probable first, and orders them by the sentence with its context model. In context its first analysis has the right part of speech, features and lemma all together for 95.66 % of the words of AnCora, almost as often as spaCy `es_core_news_sm` trained on it (95.92 %), and more often than spaCy and Stanza on PUD and COSER, new to all of them; its lemma is right more often than that of every other system on AnCora and COSER. Without context its first lemma is right more often than that of simplemma on all three UD test sets, and an analysis with the right part of speech and lemma is among its analyses for 97-99 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 176 thousand tokens per second in context, 4.0 times faster than spaCy, and 1.8 million without, answers a short text together with loading in 3.2 ms, and every further process with the same dictionary adds 3.6 MB of memory.
 
 ## Quality { #quality }
 
@@ -14,8 +14,8 @@ The share of words with the right lemma, %; for esMorph - the lemma of the first
 
 | System | AnCora | PUD | COSER |
 | :----- | :----- | :-- | :---- |
-| esMorph | 97.80 | 97.74 | 94.49 |
-| esMorph in context | **99.29** | 97.71 | **95.66** |
+| esMorph | 97.79 | 97.73 | 94.94 |
+| esMorph in context | **99.29** | 97.72 | **96.83** |
 | simplemma | 96.94 | 96.96 | 93.50 |
 | spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 |
 | Stanza | 99.16 | **97.80** | 94.98 |
@@ -32,8 +32,8 @@ The share of words with the right part of speech, features (gender, number, pers
 
     | System | Part of speech | Features | All together | Oracle |
     | :----- | :------------- | :------- | :----------- | :----- |
-    | esMorph | 92.22 | 96.14 | 90.05 | 98.94 |
-    | esMorph in context | 97.77 | 97.20 | 95.67 | - |
+    | esMorph | 92.23 | 96.12 | 90.05 | 98.94 |
+    | esMorph in context | 97.77 | 97.19 | 95.66 | - |
     | spaCy es_core_news_sm | 97.12 | 97.90 | 95.92 | - |
     | Stanza | **98.57** | **99.06** | **97.50** | - |
 
@@ -41,8 +41,8 @@ The share of words with the right part of speech, features (gender, number, pers
 
     | System | Part of speech | Features | All together | Oracle |
     | :----- | :------------- | :------- | :----------- | :----- |
-    | esMorph | 91.57 | **92.06** | **87.90** | 97.19 |
-    | esMorph in context | 92.15 | 90.94 | 87.52 | - |
+    | esMorph | 91.57 | **92.07** | **87.90** | 97.20 |
+    | esMorph in context | 92.15 | 90.97 | 87.54 | - |
     | spaCy es_core_news_sm | 90.31 | 88.38 | 83.59 | - |
     | Stanza | **92.94** | 89.82 | 86.34 | - |
 
@@ -50,17 +50,17 @@ The share of words with the right part of speech, features (gender, number, pers
 
     | System | Part of speech | Features | All together | Oracle |
     | :----- | :------------- | :------- | :----------- | :----- |
-    | esMorph | 90.11 | 93.25 | 86.87 | 96.41 |
-    | esMorph in context | 92.83 | **94.74** | **89.76** | - |
+    | esMorph | 90.38 | 93.54 | 87.26 | 97.26 |
+    | esMorph in context | **93.76** | **95.52** | **90.88** | - |
     | spaCy es_core_news_sm | 90.00 | 93.14 | 85.79 | - |
-    | Stanza | **93.60** | 94.64 | 89.16 | - |
+    | Stanza | 93.60 | 94.64 | 89.16 | - |
 
 === "GSD"
 
     | System | Part of speech |
     | :----- | :------------- |
-    | esMorph | 92.43 |
-    | esMorph in context | 92.58 |
+    | esMorph | 92.42 |
+    | esMorph in context | 92.62 |
     | spaCy es_core_news_sm | 90.29 |
     | Stanza | **93.39** |
 
@@ -84,17 +84,17 @@ The time to analyze a text together with importing and loading the system in a n
 
 ![Text analysis time with loading by text size](img/speed.svg)
 
-On a short text almost all the time goes to loading: esMorph answers in 3.0 ms and in 4.9 ms in context, simplemma in 0.33 s, spaCy in 0.81 s, Stanza in 1.7 s. On a long text the analysis speed decides, tokens per second without loading, more is better:
+On a short text almost all the time goes to loading: esMorph answers in 3.2 ms and in 5.2 ms in context, simplemma in 0.32 s, spaCy in 0.84 s, Stanza in 1.7 s. On a long text the analysis speed decides, tokens per second without loading, more is better:
 
 | System | Tokens per second |
 | :----- | :---------------- |
-| simplemma, lemmas only | 2,455,730 |
-| esMorph | 1,877,869 |
-| esMorph in context | 177,200 |
-| spaCy es_core_news_sm | 50,175 |
-| Stanza | 3,171 |
+| simplemma, lemmas only | 2,587,487 |
+| esMorph | 1,775,707 |
+| esMorph in context | 175,705 |
+| spaCy es_core_news_sm | 44,413 |
+| Stanza | 3,097 |
 
-esMorph gives all the analyses of a word, with features and probabilities; its lemmatization alone is almost as fast as simplemma, see [Operations](#operations). In a spaCy pipeline the [component](spacy.md) analyzes 112,817 tokens per second, and on the gold words its part of speech, features and lemma are right together for 95.61, 87.51 and 89.56 % of the words of AnCora, PUD and COSER.
+esMorph gives all the analyses of a word, with features and probabilities; its lemmatization alone is almost as fast as simplemma, see [Operations](#operations). In a spaCy pipeline the [component](spacy.md) analyzes 110,291 tokens per second, and on the gold words its part of speech, features and lemma are right together for 95.62, 87.53 and 90.72 % of the words of AnCora, PUD and COSER.
 
 ### Operations { #operations }
 
@@ -102,30 +102,30 @@ Thousands of words, analyses or tables per second, more is better:
 
 | Operation | esMorph | simplemma | ablaut | verbecc |
 | :-------- | :------ | :-------- | :----- | :------ |
-| Analysis of a word form: `analyze` in a loop | 1,005 | - | - | - |
-| Analysis of a list: `analyze_many` | 1,718 | - | - | - |
-| Analysis of sentences in context: `analyze_sentence`, tokens | 157 | - | - | - |
-| Lemmatization: `lemmatize`, `lemmatize(word, lang="es")` | 1,941 | 2,107 | - | - |
-| Lemmatization in 4 threads: `lemmatize` | 6,541 | - | - | - |
-| Form of a noun or an adjective: `inflect(Number="Plur")` | 1,594 | - | - | - |
-| Form of a verb: `inflect(Mood="Sub", Tense="Pres", Person="1", Number="Sing")` | 607 | - | - | - |
-| Conjugation table: `forms()`, `conjugate(lemma)` | 116 | - | 1.7 | 0.8 |
+| Analysis of a word form: `analyze` in a loop | 1,069 | - | - | - |
+| Analysis of a list: `analyze_many` | 1,692 | - | - | - |
+| Analysis of sentences in context: `analyze_sentence`, tokens | 169 | - | - | - |
+| Lemmatization: `lemmatize`, `lemmatize(word, lang="es")` | 1,941 | 2,184 | - | - |
+| Lemmatization in 4 threads: `lemmatize` | 6,389 | - | - | - |
+| Form of a noun or an adjective: `inflect(Number="Plur")` | 1,588 | - | - | - |
+| Form of a verb: `inflect(Mood="Sub", Tense="Pres", Person="1", Number="Sing")` | 572 | - | - | - |
+| Conjugation table: `forms()`, `conjugate(lemma)` | 111 | - | 1.8 | 1.0 |
 
-simplemma keeps its answers in a cache: with the cache filled by an earlier run over the same words it lemmatizes 4.7 million words per second. ablaut and verbecc build a form only as part of the whole table. `lemmatize` releases the GIL, so threads sharing one analyzer run in parallel.
+simplemma keeps its answers in a cache: with the cache filled by an earlier run over the same words it lemmatizes 5.1 million words per second. ablaut and verbecc build a form only as part of the whole table. `lemmatize` releases the GIL, so threads sharing one analyzer run in parallel.
 
 ## Loading and memory { #memory }
 
 | | esMorph | simplemma | spaCy es_core_news_sm | Stanza |
 | :- | :------ | :-------- | :-------------------- | :----- |
-| Import and loading | 3.2 ms | 0.38 s | 0.95 s | 1.9 s |
-| Growth of process memory | 10.1 MB | 131 MB | 305 MB | 578 MB |
-| Every further process | 3.6 MB | 129 MB | 359 MB | 1.6 GB |
+| Import and loading | 3.0 ms | 0.33 s | 0.87 s | 1.8 s |
+| Growth of process memory | 10.8 MB | 131 MB | 305 MB | 578 MB |
+| Every further process | 3.6 MB | 129 MB | 359 MB | 1.8 GB |
 
-The dictionary file of esMorph is mapped into memory, so `multiprocessing` or joblib processes and web server workers share it: most of the 10.1 MB of the first process is the dictionary, and every further process adds only its own tables and analyses. The context model is read on the first analysis of a sentence: about 2 ms and 4 MB more.
+The dictionary file of esMorph is mapped into memory, so `multiprocessing` or joblib processes and web server workers share it: most of the 10.8 MB of the first process is the dictionary, and every further process adds only its own tables and analyses. The context model is read on the first analysis of a sentence: about 2 ms and 4 MB more.
 
 ## How it was measured { #method }
 
 - Quality, inflection and text analysis - the [`scripts/compare.py`](https://github.com/SergeyShk/esMorph/blob/master/scripts/compare.py) script: `uv run scripts/compare.py target/compare --chart docs/img/speed.svg`. It installs the systems into a separate environment with the versions of all packages pinned in `scripts/compare.py.lock` (esMorph - the version from it, or a wheel with `uv run --with dist/esmorph-*.whl`, as for this page), downloads the treebank test parts and the Stanza model with checksum verification before measuring and analyzes the gold words; esMorph in context annotates a document of the gold tokens, with the words of the multiword tokens and the gold sentences, and spaCy with esmorph is `spacy.blank("es")` with the component alone, a document of the gold words per gold sentence. Inflection - the 5,939, 2,893 and 1,237 verbs of AnCora, PUD and COSER whose lemma is an infinitive, without typos and foreign words.
-- Versions: Python 3.11, esMorph 0.3.0, simplemma 2.0.0, spaCy 3.8.16 with the es_core_news_sm 3.8.0 model without the parser and NER, Stanza 1.15.0 with the default model on the CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (the package has no model and trains one at the first run, so its figures vary by up to 0.2 between installations). Computer - Apple M3 Pro, macOS 26, with other applications running (load average 3-8), so the speeds are an order of magnitude.
+- Versions: Python 3.11, esMorph 0.4.0, simplemma 2.0.0, spaCy 3.8.16 with the es_core_news_sm 3.8.0 model without the parser and NER, Stanza 1.15.0 with the default model on the CPU (torch 2.15.0), ablaut 0.11.0, verbecc 2.0.3 (the package has no model and trains one at the first run, so its figures vary by up to 0.2 between installations). Computer - Apple M3 Pro, macOS 26, with other applications running (load average 3-4), so the speeds are an order of magnitude.
 - Text analysis speed - the 53,622 tokens of the AnCora test part with punctuation: tokens per second - the best of two analyses of the whole part after loading, chart points - the best of three runs of importing, loading and analyzing the first 10-50,000 tokens in a new process. Only the call of the system is measured: esMorph `analyze_many` of all the words and in context `annotate` of the document, simplemma `lemmatize` of each word with an empty cache, spaCy `nlp.pipe` of the sentences, Stanza the whole text; esMorph and simplemma run in one thread, spaCy and Stanza with their default settings.
 - Operations - 47,288 words of the AnCora test part without punctuation, for `analyze_sentence` its 1,721 sentences of 52,454 tokens with punctuation, a multiword token as one token; the best of three runs in one thread, except the row with threads; verbs - the lexemes of the 4,634 gold verbs whose lemma is an infinitive (verbecc - the first 2,000, one run). Loading and memory - importing, creating the analyzer and the first analysis, the growth of the resident memory of the process (`ps -o rss`), the median of six runs (of seven for esMorph); a further process - the growth of the memory the process does not share with others (USS), in each of four `multiprocessing` processes that load the system and analyze 200 sentences.
