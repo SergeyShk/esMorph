@@ -12,6 +12,9 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 - The forms of a lexeme in the order of its paradigm and the form with given features: conjugation, gender and number.
 - Tokens out of the dictionary by rules: punctuation, symbols, numbers, Roman numerals, names and acronyms.
 - Unknown lowercase words guessed by their last part after a hyphen, a known prefix or their ending, with their forms.
+- Colloquial spellings of words of the dictionary analyzed as the standard words: `trabajao` is `trabajado`, `caridá`
+  is `caridad`, `na` is `nada`.
+- Own words with the forms of a sample word of the dictionary: `Dictionary::with_words`.
 - The dictionary is mapped into memory or read from the data of the program without copies.
 - Documents of the [anySeg](https://crates.io/crates/anyseg) segmenter get the lemma, the part of speech and the features of every word in one call.
 
@@ -19,7 +22,7 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 
 ```toml
 [dependencies]
-esmorph = "0.3"
+esmorph = "0.4"
 ```
 
 The dictionary is in the crate [`esmorph-dict-es`](https://crates.io/crates/esmorph-dict-es), used through the feature `bundled` (on by default). Without it the dictionary is read from a file:
@@ -77,7 +80,7 @@ With the feature `anyseg` the dictionary fills the columns of the words of a doc
 
 ```toml
 [dependencies]
-esmorph = { version = "0.3", features = ["anyseg"] }
+esmorph = { version = "0.4", features = ["anyseg"] }
 ```
 
 ```rust
