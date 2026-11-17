@@ -1,6 +1,6 @@
 # Comparison
 
-esMorph gives all the analyses of a word, the most probable first, and orders them by the sentence with its context model. In context its first analysis has the right part of speech, features and lemma all together for 95.66 % of the words of AnCora, almost as often as spaCy `es_core_news_sm` trained on it (95.92 %), and more often than spaCy and Stanza on PUD and COSER, new to all of them; its lemma is right more often than that of every other system on AnCora and COSER. Without context its first lemma is right more often than that of simplemma on all three UD test sets, and an analysis with the right part of speech and lemma is among its analyses for 97-99 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 176 thousand tokens per second in context, 4.0 times faster than spaCy, and 1.8 million without, answers a short text together with loading in 3.3 ms, and every further process with the same dictionary adds 3.6 MB of memory.
+esMorph gives all the analyses of a word, the most probable first, and orders them by the sentence with its context model. In context its first analysis has the right part of speech, features and lemma all together for 95.66 % of the words of AnCora, almost as often as spaCy `es_core_news_sm` trained on it (95.92 %), and more often than spaCy and Stanza on PUD and COSER, new to all of them; its lemma is right more often than that of every other system on AnCora and COSER. Without context its first lemma is right more often than that of simplemma on all three UD test sets, and an analysis with the right part of speech and lemma is among its analyses for 97-99 % of words. It conjugates verbs more accurately than ablaut and verbecc. It analyzes 176 thousand tokens per second in context, 4.0 times faster than spaCy, and 1.8 million without, answers a short text together with loading in 3.2 ms, and every further process with the same dictionary adds 3.6 MB of memory.
 
 ## Quality { #quality }
 
@@ -84,7 +84,7 @@ The time to analyze a text together with importing and loading the system in a n
 
 ![Text analysis time with loading by text size](img/speed.svg)
 
-On a short text almost all the time goes to loading: esMorph answers in 3.3 ms and in 5.2 ms in context, simplemma in 0.32 s, spaCy in 0.84 s, Stanza in 1.7 s. On a long text the analysis speed decides, tokens per second without loading, more is better:
+On a short text almost all the time goes to loading: esMorph answers in 3.2 ms and in 5.2 ms in context, simplemma in 0.32 s, spaCy in 0.84 s, Stanza in 1.7 s. On a long text the analysis speed decides, tokens per second without loading, more is better:
 
 | System | Tokens per second |
 | :----- | :---------------- |

@@ -1,6 +1,6 @@
 # Comparación
 
-esMorph da todos los análisis de una palabra, primero el más probable, y los ordena según la oración con su modelo de contexto. En contexto su primer análisis tiene la categoría, los rasgos y el lema correctos a la vez para el 95.66 % de las palabras de AnCora, casi tan a menudo como spaCy `es_core_news_sm`, entrenado con él (95.92 %), y más a menudo que spaCy y Stanza en PUD y COSER, nuevos para todos ellos; su lema acierta más a menudo que el de cualquier otro sistema en AnCora y COSER. Sin contexto su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD, y un análisis con la categoría y el lema correctos está entre sus análisis para el 97-99 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 176 mil tokens por segundo en contexto, 4.0 veces más rápido que spaCy, y 1.8 millones sin él, responde a un texto corto junto con la carga en 3.3 ms, y cada proceso más con el mismo diccionario añade 3.6 MB de memoria.
+esMorph da todos los análisis de una palabra, primero el más probable, y los ordena según la oración con su modelo de contexto. En contexto su primer análisis tiene la categoría, los rasgos y el lema correctos a la vez para el 95.66 % de las palabras de AnCora, casi tan a menudo como spaCy `es_core_news_sm`, entrenado con él (95.92 %), y más a menudo que spaCy y Stanza en PUD y COSER, nuevos para todos ellos; su lema acierta más a menudo que el de cualquier otro sistema en AnCora y COSER. Sin contexto su primer lema acierta más a menudo que el de simplemma en los tres conjuntos de prueba de UD, y un análisis con la categoría y el lema correctos está entre sus análisis para el 97-99 % de las palabras. Conjuga los verbos con más precisión que ablaut y verbecc. Analiza 176 mil tokens por segundo en contexto, 4.0 veces más rápido que spaCy, y 1.8 millones sin él, responde a un texto corto junto con la carga en 3.2 ms, y cada proceso más con el mismo diccionario añade 3.6 MB de memoria.
 
 ## Calidad { #quality }
 
@@ -84,7 +84,7 @@ El tiempo de análisis de un texto junto con la importación y la carga del sist
 
 ![Tiempo de análisis de un texto con la carga según su tamaño](img/speed.es.svg)
 
-En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3.3 ms y en 5.2 ms en contexto, simplemma en 0.32 s, spaCy en 0.84 s y Stanza en 1.7 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:
+En un texto corto casi todo el tiempo se va en la carga: esMorph responde en 3.2 ms y en 5.2 ms en contexto, simplemma en 0.32 s, spaCy en 0.84 s y Stanza en 1.7 s. En un texto largo decide la velocidad del análisis, en tokens por segundo sin la carga; más es mejor:
 
 | Sistema | Tokens por segundo |
 | :------ | :----------------- |
