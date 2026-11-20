@@ -1,6 +1,7 @@
 //! The `esmorph` command: morphological analysis of text from files and the standard input
 
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
@@ -449,7 +450,9 @@ fn load(path: Option<&Path>, verify: bool, context: bool) -> Result<Dictionary, 
 
 /// The dictionary with the own words of the files `paths`: per line a word, its sample and, if
 /// needed, the part of speech, separated by tabs; blank lines and lines of `#` are skipped
-fn add_words(mut dictionary: Dictionary, paths: &[PathBuf]) -> Result<Dictionary, String> {
+fn add_words(dictionary: Dictionary, paths: &[PathBuf]) -> Result<Dictionary, String> {
+    // The lines of all files, then the words in one call: every call builds the lookup anew
+    let mut texts = Vec::with_capacity(paths.len());
     for path in paths {
         let name = path.display();
         let bytes =
@@ -459,24 +462,41 @@ fn add_words(mut dictionary: Dictionary, paths: &[PathBuf]) -> Result<Dictionary
             let line = valid.iter().filter(|&&byte| byte == b'\n').count() + 1;
             format!("{name}: line {line}: not UTF-8")
         })?;
-        let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+        texts.push((path, text));
+    }
+    let mut words = Vec::new();
+    for (path, text) in &texts {
+        let text = text.strip_prefix('\u{feff}').unwrap_or(text);
         for (number, line) in text.lines().enumerate() {
             if line.trim().is_empty() || line.trim_start().starts_with('#') {
                 continue;
             }
-            let at =
-                |message: &dyn std::fmt::Display| format!("{name}: line {}: {message}", number + 1);
             // Spaces around the fields align the columns; an empty part of speech is none
             let fields: Vec<&str> = line.split('\t').map(str::trim).collect();
             let word = match *fields.as_slice() {
                 [word, like] | [word, like, ""] => (word, Sample::from(like)),
                 [word, like, pos] => (word, Sample::from((like, pos))),
-                _ => return Err(at(&"a word and its sample separated by a tab are needed")),
+                _ => {
+                    return Err(format!(
+                        "{}: line {}: a word and its sample separated by a tab are needed",
+                        path.display(),
+                        number + 1
+                    ));
+                }
             };
-            dictionary = dictionary.with_words([word]).map_err(|err| at(&err))?;
+            words.push((path, number + 1, word));
         }
     }
-    Ok(dictionary)
+    // The line of the word being added, for an error
+    let at = Cell::new(0);
+    let added = dictionary.with_words(words.iter().enumerate().map(|(index, &(_, _, word))| {
+        at.set(index);
+        word
+    }));
+    added.map_err(|err| match words.get(at.get()) {
+        Some((path, line, _)) => format!("{}: line {line}: {err}", path.display()),
+        None => err.to_string(),
+    })
 }
 
 /// An error of input and output in plain words for the frequent cases
