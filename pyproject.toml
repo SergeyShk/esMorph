@@ -70,7 +70,7 @@ cache-keys = [
 
 [dependency-groups]
 # anyseg - documents for Analyzer.annotate in the tests
-test = ["pytest>=8.3", "pytest-cov>=6.0", "anyseg>=0.3"]
+test = ["pytest>=8.3", "pytest-cov>=6.0", "anyseg>=0.4"]
 lint = ["mypy>=1.14", "pre-commit>=4.0", "ruff>=0.9"]
 docs = [
     "mkdocs>=1.6",

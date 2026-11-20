@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "anyseg"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0404842b12e5e8d9bcab3d0725ed88e6fa9d5d6635dbff366bc008f0ae71f0f2"
+checksum = "eb1d382f3d84c3297cef3ec42ef5252ea68845c8280485e8016c3dd59b8528c1"
 dependencies = [
  "unicode-normalization",
 ]
