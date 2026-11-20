@@ -906,6 +906,7 @@ def test_analyze_sentence(morph):
         # A rare verb does not take the place of a frequent one with the same form, a frequent
         # one stays
         ("Aunque vengan tarde .", 1, ("venir", "VERB")),
+        ("Se misturaban trementina y diaquilón .", 1, ("misturar", "VERB")),
         ("Ojalá venga pronto .", 1, ("venir", "VERB")),
         ("La fuerza crea leyes nuevas .", 2, ("crear", "VERB")),
         # After a clitic the frequent verb in a form of the same kind: no participle of `ver`;

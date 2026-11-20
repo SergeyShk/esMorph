@@ -336,7 +336,8 @@ impl Dictionary {
     }
 
     /// Shares of the verbs of a word by how often the treebanks have them in all their forms, among
-    /// its verbs, if it is the form of several (`venga` of `venir` and `vengar`), empty otherwise
+    /// its verbs, if it is the form of several (`venga` of `venir` and `vengar`), empty otherwise;
+    /// by the probabilities of its analyses if the treebanks have none of them
     pub(crate) fn verb_shares(&self, list: &[Analysis]) -> Vec<(String, f64)> {
         let verb = |analysis: &&Analysis| self.pos(analysis) == "VERB";
         let Some(first) = list.iter().find(verb) else {
@@ -352,8 +353,21 @@ impl Dictionary {
         let mut shares: Vec<(String, f64)> = Vec::new();
         for analysis in list.iter().filter(verb) {
             if shares.iter().all(|(lemma, _)| *lemma != analysis.lemma) {
-                let frequency = f64::from(self.verb_frequency(&analysis.lemma)) + 1.0;
+                let frequency = f64::from(self.verb_frequency(&analysis.lemma));
                 shares.push((analysis.lemma.clone(), frequency));
+            }
+        }
+        // A guessed form tells its verbs apart only by its endings: `misturaban` is `misturar`
+        if shares.iter().all(|&(_, frequency)| frequency == 0.0) {
+            for (lemma, share) in &mut shares {
+                *share = (list.iter().filter(verb))
+                    .filter(|analysis| analysis.lemma == *lemma)
+                    .map(|analysis| analysis.prob)
+                    .sum();
+            }
+        } else {
+            for (_, share) in &mut shares {
+                *share += 1.0;
             }
         }
         let total: f64 = shares.iter().map(|(_, share)| share).sum();
