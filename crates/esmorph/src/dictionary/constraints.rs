@@ -72,7 +72,7 @@ const AL_PHRASES: [&str; 12] = [
 /// Words a verb follows, not a noun without a determiner: the negation and the subject `tú`
 const BEFORE_VERB: [&str; 2] = ["no", "tú"];
 /// Lemmas of the verbs followed by a bare infinitive: `puede ser`, `suele parecer`, but `tiene
-/// poder`, `siento pesar`
+/// poder`, `perdió poder`
 const BEFORE_INFINITIVE: [&str; 16] = [
     "conseguir",
     "deber",
@@ -116,6 +116,7 @@ impl Dictionary {
             let chosen = clitic_homonym(&lower[at], &sentence[at])
                 .or_else(|| self.article_clitic(&lower, sentence, at))
                 .or_else(|| self.infinitive(sentence, at))
+                .or_else(|| self.locution_verb(&lower, sentence, at))
                 .or_else(|| self.ser_ir(&lower, sentence, at))
                 .or_else(|| self.verb_after(&lower, sentence, at))
                 .or_else(|| self.opening_word(words, sentence, at, start));
@@ -164,7 +165,10 @@ impl Dictionary {
     }
 
     /// An article before a finite verb is the clitic pronoun: `no la descubras`, `¿dónde las has
-    /// puesto?`; after a preposition or a determiner it stays an article (`de la luthiere`)
+    /// puesto?`; after a preposition or a determiner it stays an article (`de la luthiere`), and
+    /// after a preposition, which no clitic follows, it is one even if the model reads a pronoun;
+    /// the neuter `lo` is a pronoun there (`de lo que`), and `hasta` and `según` may be an adverb
+    /// and a conjunction before a clitic (`hasta la engordan`, `según la he oído`)
     fn article_clitic(
         &self,
         lower: &[String],
@@ -172,7 +176,16 @@ impl Dictionary {
         at: usize,
     ) -> Option<usize> {
         let list = &sentence[at];
-        if !ARTICLE_CLITICS.contains(&lower[at].as_str())
+        let form = lower[at].as_str();
+        if matches!(form, "la" | "las" | "los")
+            && self.pos(list.first()?) == "PRON"
+            && at > 0
+            && self.top_pos(sentence, at - 1) == "ADP"
+            && !matches!(lower[at - 1].as_str(), "hasta" | "según")
+        {
+            return list.iter().position(|analysis| self.pos(analysis) == "DET");
+        }
+        if !ARTICLE_CLITICS.contains(&form)
             || self.pos(list.first()?) != "DET"
             || !self.top_verb_form(sentence, at + 1, "Fin")
             || (at > 0 && matches!(self.top_pos(sentence, at - 1), "ADP" | "DET"))
@@ -198,6 +211,26 @@ impl Dictionary {
         }
         list.iter().position(|analysis| {
             matches!(self.pos(analysis), "VERB" | "AUX") && self.has(analysis, "VerbForm", "Inf")
+        })
+    }
+
+    /// `pesar` of `a pesar de` is the infinitive, as in the treebanks; the model, trained without
+    /// these tokens, keeps the noun elsewhere (`con profundo pesar`)
+    fn locution_verb(
+        &self,
+        lower: &[String],
+        sentence: &[Vec<Analysis>],
+        at: usize,
+    ) -> Option<usize> {
+        let word = |at: usize| lower.get(at).map_or("", String::as_str);
+        if word(at) != "pesar"
+            || !matches!(word(at.checked_sub(1)?), "a" | "á")
+            || !matches!(word(at + 1), "de" | "del")
+        {
+            return None;
+        }
+        sentence[at].iter().position(|analysis| {
+            self.pos(analysis) == "VERB" && self.has(analysis, "VerbForm", "Inf")
         })
     }
 

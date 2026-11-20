@@ -862,6 +862,10 @@ def test_analyze_sentence(morph):
         # A noun after a verb of a bare infinitive is the infinitive, after another verb a noun
         ("Parecía pesar sobre él .", 1, ("pesar", "VERB")),
         ("Perdió poder en el partido .", 1, ("poder", "NOUN")),
+        # `pesar` of "a pesar de" is the infinitive, the noun stays elsewhere
+        ("A pesar de todo , vino .", 1, ("pesar", "VERB")),
+        ("Lo hizo á pesar del frío .", 3, ("pesar", "VERB")),
+        ("Con gran pesar lo digo .", 2, ("pesar", "NOUN")),
         # A form of ser and ir is ir after a reflexive clitic, before the goal of a and before a
         # gerund, and ser before a predicate, a prepositional phrase or an hour
         ("Los pájaros se fueron .", 3, ("ir", "VERB")),

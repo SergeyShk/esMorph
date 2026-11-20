@@ -99,8 +99,8 @@ echo "Dime la verdad." | esmorph -f tsv
 ```
 Di	decir	VERB	Mood=Imp|Number=Sing|Person=2|VerbForm=Fin	1
 me	yo	PRON	Case=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs	0.45766
-la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.998651270895756
-verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.9999990357487462
+la	el	DET	Definite=Def|Gender=Fem|Number=Sing|PronType=Art	0.998143424891606
+verdad	verdad	NOUN	Gender=Fem|Number=Sing	0.9999988233744395
 .	.	PUNCT	PunctType=Peri	1
 ```
 
@@ -118,17 +118,17 @@ echo "Vino ayer." | esmorph -f jsonl
   "tokens": [
     {"word": "Vino", "analyses": [
       {"word": "vino", "lemma": "venir", "pos": "VERB", "feats": {"Mood": "Ind", "Number": "Sing", "Person": "3", "Tense": "Past", "VerbForm": "Fin"},
-       "prob": 0.9913998269085376, "words": ["vino"], "source": "dictionary"},
+       "prob": 0.9870720357294033, "words": ["vino"], "source": "dictionary"},
       {"word": "vino", "lemma": "vino", "pos": "NOUN", "feats": {"Gender": "Masc", "Number": "Sing"},
-       "prob": 0.006704116608033302, "words": ["vino"], "source": "dictionary"},
+       "prob": 0.009865941202898194, "words": ["vino"], "source": "dictionary"},
       {"word": "Vino", "lemma": "Vino", "pos": "PROPN", "feats": {},
-       "prob": 0.0018960564834289374, "words": ["Vino"], "source": "rule"}
+       "prob": 0.003062023067698373, "words": ["Vino"], "source": "rule"}
     ]},
     {"word": "ayer", "analyses": [
       {"word": "ayer", "lemma": "ayer", "pos": "ADV", "feats": {},
-       "prob": 0.9996562790600558, "words": ["ayer"], "source": "dictionary"},
+       "prob": 0.9996791748477427, "words": ["ayer"], "source": "dictionary"},
       {"word": "ayer", "lemma": "ayer", "pos": "NOUN", "feats": {"Gender": "Masc", "Number": "Sing"},
-       "prob": 0.0003437209399442448, "words": ["ayer"], "source": "dictionary"}
+       "prob": 0.0003208251522573586, "words": ["ayer"], "source": "dictionary"}
     ]},
     {"word": ".", "analyses": [
       {"word": ".", "lemma": ".", "pos": "PUNCT", "feats": {"PunctType": "Peri"},
