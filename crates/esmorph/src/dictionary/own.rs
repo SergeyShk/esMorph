@@ -253,7 +253,8 @@ impl Dictionary {
     /// analyses as a word of the dictionary. The word and the sample are taken as `analyze` takes a
     /// word. A sample that is a lemma gives its lexemes of that lemma; the lexemes of one part of
     /// speech are all taken. A sample may be an own word added before. A dictionary with and
-    /// without own words: `dictionary.clone().with_words(...)`, the copy shares the mapped file
+    /// without own words: `dictionary.clone().with_words(...)`, the copy shares the mapped file.
+    /// Every call builds the lookup of all own words anew: many words are added in one call
     ///
     /// ```
     /// # #[cfg(feature = "bundled")] {
@@ -264,10 +265,6 @@ impl Dictionary {
     /// # }
     /// # Ok::<(), esmorph::Error>(())
     /// ```
-    ///
-    /// # Errors
-    ///
-    /// Every call builds the lookup of all own words anew: many words are added in one call
     ///
     /// # Errors
     ///
