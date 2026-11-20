@@ -449,6 +449,10 @@ def test_what_takes_no_enclitic_without_an_accent(morph):
     assert morph.analyze("dijole")[0].source == "guess"
     assert morph.analyze("atenianos")[0].lemma == "ateniano"
     assert morph.analyze("Volviose")[0].pos == "PROPN"
+    # A lone `se` is of the third person, and an imperative stays itself
+    assert {a.source for a in morph.analyze("finesse")} == {"guess"}
+    assert {a.source for a in morph.analyze("dise")} == {"guess"}
+    assert morph.analyze("acerqueme")[0].feats["Mood"] == "Imp"
 
 
 def test_words_of_the_dictionary_are_not_split(morph):
@@ -2006,6 +2010,9 @@ def test_clitics_in_literary_writing(morph):
     # A finite form takes enclitics with the accent of the token
     dijole = morph.analyze("díjole")[0]
     assert (dijole.lemma, dijole.words, dijole.source) == ("decir", ("dijo", "le"), "clitics")
+    # The accent of a preterite in `-é` marks it, not the imperative `quédeme`
+    assert [a.words for a in morph.analyze("quedéme")] == [("quedé", "me")]
+    assert morph.analyze("acérqueme")[0].words == ("acerque", "me")
     assert morph.is_known("levantóse")
     # `te` follows only the imperative of `tú`
     assert {a.lemma for a in morph.analyze("siéntate")} == {"sentar"}

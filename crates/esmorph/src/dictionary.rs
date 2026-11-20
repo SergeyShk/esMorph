@@ -497,9 +497,12 @@ impl Dictionary {
     /// though a token with a capital letter may also be a name. A word spelled as in the dictionary
     /// gives the analyses of that spelling; a word absent as written is a verb with clitics
     /// (`dámelo`) or is looked for without its accents and with a lost diaeresis; a lowercase word
-    /// that is neither may be a colloquial spelling of a word of the dictionary (`trabajao`,
-    /// `caridá`, `juerza`), as a participle without its `d` is before other accents (`perdío` is
-    /// `perdido`, not `perdió`). A token that is none of these gets the analyses of the rules:
+    /// that is neither may be a colloquial or an older spelling of a word of the dictionary
+    /// (`trabajao`, `caridá`, `juerza`, `estranjero`), as a participle without its `d` is before
+    /// other accents (`perdío` is `perdido`, not `perdió`). A token that is none of these and
+    /// splits as a finite form stressed on its last syllable with an enclitic without an accent is
+    /// first of all that verb (`quedose`), with a capital letter a name first. A token that is none
+    /// of these gets the analyses of the rules:
     /// punctuation, a symbol, a number, an ordinal number in digits, a Roman numeral, a name with a
     /// capital letter, an address, an abbreviation. A lowercase word that is none of these is
     /// guessed: by its last part after a hyphen, by the word without a known prefix, as a verb with
@@ -688,9 +691,9 @@ impl Dictionary {
     }
 
     /// Share of a name among the analyses of a token with a capital letter that splits as a verb
-    /// with clitics: an imperative without an accent mostly is a name (`Mandela`, `Portela`), an
-    /// infinitive, a gerund, an imperative with an accent and a finite form mostly are verbs
-    /// (`Hacerlo`, `Déjame`, `Levantóse`)
+    /// with clitics: an imperative or a finite form without an accent mostly is a name (`Mandela`,
+    /// `Portela`, `Vila`), an infinitive, a gerund, an imperative or a finite form with an accent
+    /// mostly are verbs (`Hacerlo`, `Déjame`, `Levantóse`)
     fn clitics_name(&self, token: &str, analyses: &[Analysis]) -> f64 {
         let host = analyses
             .first()
@@ -1009,7 +1012,8 @@ impl Dictionary {
     }
 
     /// Whether the dictionary has the word form, as written or as a verb of the dictionary with
-    /// clitics; the analyses of the rules and the guesses do not count
+    /// clitics; the analyses of the rules and the guesses, colloquial spellings (`trabajao`) and a
+    /// finite form with an enclitic without an accent (`quedose`) do not count
     pub fn is_known(&self, word: &str) -> bool {
         let word = normalized(word);
         self.lookup(&word).is_some() || self.is_own(&word) || !self.with_clitics(&word).is_empty()
@@ -1017,8 +1021,9 @@ impl Dictionary {
 
     /// Analyses of a verb with clitics: of the first split into a host and clitics, the most
     /// clitics first, whose host is an infinitive, a gerund or an imperative of the dictionary. A
-    /// finite form is a host only of a token that has no other one and stresses it where its accent
-    /// is: enclitics after it belong to older and literary writing (`díjole`, `levantóse`)
+    /// finite form is a host only of a token whose accent it stresses and no other host does:
+    /// enclitics after it belong to older and literary writing (`díjole`, `levantóse`, `quedéme`,
+    /// whose imperative would be `quédeme`)
     fn with_clitics(&self, word: &str) -> Vec<Analysis> {
         let token = word.to_lowercase();
         // The accent that clitics put on a host marks its stressed vowel: in `piénselo` the host
@@ -1040,9 +1045,6 @@ impl Dictionary {
                 }
             }
         }
-        if let Some((split, hosts)) = fallback {
-            return with_clitics(&token, split, hosts);
-        }
         if accent.is_some() {
             for split in &splits {
                 for host in self.host_analyses(split, accent, true) {
@@ -1051,6 +1053,9 @@ impl Dictionary {
                     }
                 }
             }
+        }
+        if let Some((split, hosts)) = fallback {
+            return with_clitics(&token, split, hosts);
         }
         Vec::new()
     }
@@ -1119,10 +1124,10 @@ impl Dictionary {
     /// Whether the form of an analysis takes the clitics of a split
     fn takes(&self, analysis: &Analysis, split: &clitics::Split, finite: bool) -> bool {
         let first = split.clitics[0];
+        let feat = |name| self.ud.get(analysis.ud).and_then(|tag| tag.feat(name));
         match self.hosts.get(usize::from(analysis.ud)) {
             Some(Host::NonFinite) => true,
             Some(Host::Imperative) => {
-                let feat = |name| self.ud.get(analysis.ud).and_then(|tag| tag.feat(name));
                 if first == "os" {
                     // `os` follows only the imperative of `vosotros`, which loses its `d`:
                     // `cuéntenos` is `cuente` + `nos`, `distribuídos` is no imperative at all
@@ -1136,7 +1141,10 @@ impl Dictionary {
                     true
                 }
             }
-            Some(Host::Finite) => finite,
+            // A lone `se` is of the third person: `finesse` is no `finés` + `se`
+            Some(Host::Finite) => {
+                finite && !(split.clitics == ["se"] && matches!(feat("Person"), Some("1" | "2")))
+            }
             _ => false,
         }
     }
