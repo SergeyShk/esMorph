@@ -1915,6 +1915,15 @@ def test_names_of_the_dictionary(morph):
     assert [(a.pos, a.feats.get("NumForm")) for a in morph.analyze("X")][:1] == [("NUM", "Roman")]
 
 
+def test_plurals_of_letters_that_are_verbs_of_tu(morph):
+    # `ves` and `des` are `ver` and `dar`, while other plurals of letters stay
+    assert {(a.lemma, a.pos) for a in morph.analyze("ves")} == {("ver", "VERB")}
+    assert {(a.lemma, a.pos) for a in morph.analyze("des")} == {("dar", "VERB")}
+    assert ("erre", "NOUN") in {(a.lemma, a.pos) for a in morph.analyze("erres")}
+    letter = next(a for a in morph.analyze("ve") if a.pos == "NOUN")
+    assert [form.word for form in letter.forms()] == ["ve"]
+
+
 def test_conventions_of_the_dictionary(morph):
     def verb(lemma):
         return next(a for a in morph.analyze(lemma) if a.lemma == lemma and a.pos == "VERB")
