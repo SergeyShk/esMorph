@@ -1093,7 +1093,7 @@ def extra_rows(
 
 def diminutive_senses(
     source: Callable[[], Iterable[dict]], only: bool = False
-) -> tuple[dict[tuple[str, str], str], set[tuple[str, str]]]:
+) -> tuple[dict[tuple[str, str], str], set[tuple[str, str]], set[tuple[str, str]]]:
     """
     Diminutives of the entries of a snapshot
 
@@ -1111,9 +1111,9 @@ def diminutive_senses(
         only (bool): A diminutive has no other own senses
 
     Returns:
-        tuple[dict[tuple[str, str], str], set[tuple[str, str]]]: The words of the diminutives by
-        their word and part of speech, and the words and parts of speech with a sense of a
-        diminutive at all
+        tuple[dict[tuple[str, str], str], set[tuple[str, str]], set[tuple[str, str]]]: The words
+        of the diminutives by their word and part of speech, the words and parts of speech with a
+        sense of a diminutive at all, and those with an own sense
     """
     first: dict[tuple[str, str], str | None] = {}
     other, diminutives = set(), set()
@@ -1134,7 +1134,38 @@ def diminutive_senses(
                 base = clean(bases[0]) if bases else None
                 first[(word, pos)] = base if base != word else None
     found = {key: base for key, base in first.items() if base and not (only and key in other)}
-    return found, diminutives
+    return found, diminutives, set(first)
+
+
+def feminine_diminutives(
+    bases: dict[tuple[str, str], str], own: set[tuple[str, str]], table: Iterable[conventions.Row]
+) -> dict[tuple[str, str], str]:
+    """
+    The words of the feminine nouns of diminutives, which are lemmas of their own (`form_of_rows`)
+
+    Arguments:
+        bases (dict[tuple[str, str], str]): The words of the diminutives
+        own (set[tuple[str, str]]): Words and parts of speech with an own sense in an edition
+        table (Iterable[conventions.Row]): Rows of the export
+
+    Returns:
+        dict[tuple[str, str], str]: The words of the feminines without an own sense, by their
+        lemma and part of speech: the feminine of the word of the masculine if the export has one
+        (`gatita` of `gata`), else that word (`pobrecita` of `pobre`)
+    """
+    feminine = "Gender=Fem|Number=Sing"
+    feminines = {
+        (lemma, pos): form
+        for lemma, pos, form, text in table
+        if text == feminine and form != lemma
+    }
+    found = {}
+    for (lemma, pos), form in feminines.items():
+        key = (form, pos)
+        if pos == "NOUN" and (lemma, pos) in bases and key not in bases and key not in own:
+            base = bases[(lemma, pos)]
+            found[key] = feminines.get((base, pos), base)
+    return found
 
 
 def genderless(table: set[conventions.Row]) -> set[conventions.Row]:
@@ -1184,11 +1215,12 @@ def export(output: Path) -> int:
             "\t".join((*row, kinds[row], rank(row, ranks))) + "\n" for row in sorted(kinds)
         )
     # The English edition decides for a word it knows as a diminutive
-    bases, english = diminutive_senses(lambda: snapshot_entries(path))
-    spanish, _ = diminutive_senses(
+    bases, english, own = diminutive_senses(lambda: snapshot_entries(path))
+    spanish, _, own_spanish = diminutive_senses(
         lambda: eswiktionary.entries(output / "raw" / extra_name), only=True
     )
     bases |= {key: base for key, base in spanish.items() if key not in english}
+    bases |= feminine_diminutives(bases, own | own_spanish, kinds)
     lexemes = {(lemma, pos) for lemma, pos, _, _ in kinds}
     with (output / "diminutives.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(

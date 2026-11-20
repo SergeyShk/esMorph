@@ -58,9 +58,11 @@ NOMINAL_TAGS = {
 # A sense that only spells another word: "Variante obsoleta de mano", "Grafía alternativa de güija";
 # the word ends the phrase, unlike in a definition: "Variante de la papa, de menor tamaño"
 SPELLING = re.compile(r"^(?:Variante|Grafía)\b[^.,;:()]*? de ([^\s.,;:()]+)(?=\s*(?:[.,;:(]|$))")
-# A sense of a diminutive: "Diminutivo de casa", "Diminutivo afectivo de poco"; the word may carry
-# the number of its sense, as `pelota₁`
-DIMINUTIVE = re.compile(r"^Diminutivo (?:\w+ )?de ([^\s,;:().₀-₉]+)")
+# A sense of a diminutive: "Diminutivo de casa", "Diminutivo afectivo de poco", "Diminutivo del
+# adjetivo bueno"; the word may carry the number of its sense, as `pelota₁`
+DIMINUTIVE = re.compile(
+    r"^Diminutivo (?:\w+ )?de(?:l (?:adjetivo|adverbio|sustantivo)(?: de \w+)?)? ([^\s,;:().₀-₉]+)"
+)
 # Labels of such a sense in the tags of the English edition
 SPELLING_TAGS = (
     ("anticuad", "archaic"),

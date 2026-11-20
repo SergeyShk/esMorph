@@ -1853,9 +1853,6 @@ fn spelling_list(lists: &[u32]) -> Option<(SpellingList<'_>, &[u32])> {
     Some((SpellingList { numbers, wide }, rest))
 }
 
-/// Automaton of a section of a dictionary. A damaged automaton loads without errors but panics when
-/// walked; the checksum of the file catches damage, and the address of the root is checked here:
-/// `Fst::new` checks it only for an empty automaton
 /// Places of the fields of the lines of the section of diminutives: lines of a lemma, a part of
 /// speech and a word, ordered by lemma and part of speech, each ending with a line break
 fn diminutive_fields(text: &str) -> Result<Arc<[[u32; 4]]>, Error> {
@@ -1889,6 +1886,9 @@ fn diminutive_fields(text: &str) -> Result<Arc<[[u32; 4]]>, Error> {
     Ok(lines.into())
 }
 
+/// Automaton of a section of a dictionary. A damaged automaton loads without errors but panics when
+/// walked; the checksum of the file catches damage, and the address of the root is checked here:
+/// `Fst::new` checks it only for an empty automaton
 fn automaton(storage: &Arc<Storage>, range: &Range<usize>) -> Result<Map<Slice>, Error> {
     let slice = Slice {
         storage: Arc::clone(storage),

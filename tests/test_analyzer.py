@@ -2072,6 +2072,9 @@ def test_diminutives(morph):
         "poco",
         "ahora",
     ]
+    # A feminine noun of a diminutive is of the feminine of the word, if it has one
+    words = ("pobrecita", "gatita")
+    assert [morph.analyze(word)[0].diminutive_of for word in words] == ["pobre", "gata"]
     # A word that is mostly a word of its own, and another word, have none
     words = ("señorita", "granito", "casa")
     assert [morph.analyze(word)[0].diminutive_of for word in words] == [None, None, None]
