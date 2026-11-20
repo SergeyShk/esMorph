@@ -1,8 +1,9 @@
 //! Own words: a word inflects as a word of the dictionary, its sample
 
-use std::collections::HashMap;
-use std::hash::{BuildHasherDefault, Hasher};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+use fst::{Map, MapBuilder};
 
 use super::{Analysis, Dictionary, Entry, Lexeme, Source, analyses_at, normalized};
 use crate::Error;
@@ -40,13 +41,62 @@ impl<'a> From<(&'a str, &'a str)> for Sample<'a> {
     }
 }
 
-/// Own words by the bytes of their keys
-pub(super) type OwnWords = HashMap<Box<[u8]>, Vec<OwnForm>, BuildHasherDefault<KeyHasher>>;
+/// Own words: lexemes of their own stems with the forms of their samples, found by the keys of
+/// their forms. A form is the key of its stem with the key of the ending of its sample, so neither
+/// spellings nor keys of forms are kept but in the automaton of keys
+#[derive(Clone, Default)]
+pub(super) struct OwnWords {
+    /// Keys of the endings of samples with their accents, each once
+    endings: Vec<(Box<[u8]>, u64)>,
+    /// Forms of the lexemes of samples, each shared by the own words of its sample
+    samples: Vec<SampleForms>,
+    /// Keys of the stems of own words one after another
+    stems: Vec<u8>,
+    /// Lexemes of own words in the order they were added
+    lexemes: Vec<OwnLexeme>,
+    /// The key of every form of an own word: the number of its lexeme or, with GROUP, the place
+    /// of a group
+    keys: Map<Vec<u8>>,
+    /// Lexemes that have forms of one key, in the order they were added: each group is its length
+    /// and its lexemes
+    groups: Vec<u32>,
+}
 
-/// A form of an own word: the accents of its key, which with the key give its spelling, the form of
-/// a table, and the share and the place of that form among the analyses of the spelling of the
-/// sample
+/// The bit of a value of `OwnWords::keys` that gives the place of a group of lexemes
+const GROUP: u64 = 1 << 32;
+
+/// The forms of a lexeme of a sample that own words take
 #[derive(Clone)]
+struct SampleForms {
+    table: u16,
+    /// The stem of the sample, which with the table and the forms tells one sample from another
+    stem: Box<str>,
+    forms: Box<[SampleForm]>,
+}
+
+/// A form of a sample: its number in the table, the number of its ending in `OwnWords::endings`,
+/// and the share and the place of the form among the analyses of the spelling of the sample
+#[derive(Clone)]
+struct SampleForm {
+    form: u16,
+    place: u16,
+    ending: u32,
+    share: f32,
+}
+
+/// A lexeme of an own word: the accents and the place and the length of the key of its stem in
+/// `OwnWords::stems`, and the number of its sample
+#[derive(Clone)]
+struct OwnLexeme {
+    marks: u64,
+    stem: u32,
+    sample: u32,
+    len: u8,
+}
+
+/// A form of an own word of a key: the accents of the key, which with the key give its spelling,
+/// the form of a table, and the share and the place of that form among the analyses of the
+/// spelling of the sample
 pub(super) struct OwnForm {
     marks: u64,
     entry: Entry,
@@ -54,33 +104,137 @@ pub(super) struct OwnForm {
     place: u16,
 }
 
-/// Hash of the keys of own words: they are looked for on every token, so it is faster than
-/// SipHash; the owner of the dictionary sets the words, so crafted keys are no threat
-#[derive(Clone, Default)]
-pub(super) struct KeyHasher(u64);
-
-impl KeyHasher {
-    fn add(&mut self, word: u64) {
-        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
-    }
+/// A lexeme of an own word as `sample_forms` finds it: the stem of the word, the table and the stem
+/// of the sample, and the forms of the table it takes with the numbers of their endings
+struct OwnSpec {
+    stem: String,
+    table: u16,
+    like: String,
+    forms: Vec<(u16, u32)>,
 }
 
-impl Hasher for KeyHasher {
-    // Eight bytes at a time: a token of a text takes a probe of the own words
-    fn write(&mut self, bytes: &[u8]) {
-        let (chunks, rest) = bytes.as_chunks::<8>();
-        for &chunk in chunks {
-            self.add(u64::from_le_bytes(chunk));
-        }
-        if !rest.is_empty() {
-            let mut word = [0; 8];
-            word[..rest.len()].copy_from_slice(rest);
-            self.add(u64::from_le_bytes(word));
-        }
+impl OwnWords {
+    pub(super) fn is_empty(&self) -> bool {
+        self.lexemes.is_empty()
     }
 
-    fn finish(&self) -> u64 {
-        self.0
+    /// The key of the stem of a lexeme
+    fn stem(&self, lexeme: &OwnLexeme) -> &[u8] {
+        let start = lexeme.stem as usize;
+        self.stems
+            .get(start..start + usize::from(lexeme.len))
+            .unwrap_or_default()
+    }
+
+    /// The forms of the own words of the bytes of a key; a form of two lexemes of one table and
+    /// the same accents is given once, by the lexeme added first
+    fn forms(&self, bytes: &[u8]) -> Vec<OwnForm> {
+        let Some(value) = self.keys.get(bytes) else {
+            return Vec::new();
+        };
+        let single = [value as u32];
+        let lexemes: &[u32] = if value & GROUP == 0 {
+            &single
+        } else {
+            let at = (value & !GROUP) as usize;
+            let len = self.groups.get(at).map_or(0, |&len| len as usize);
+            self.groups.get(at + 1..at + 1 + len).unwrap_or_default()
+        };
+        let mut found: Vec<OwnForm> = Vec::new();
+        for &number in lexemes {
+            let Some(lexeme) = self.lexemes.get(number as usize) else {
+                continue;
+            };
+            let stem = self.stem(lexeme);
+            let (Some(rest), Some(sample)) = (
+                bytes.strip_prefix(stem),
+                self.samples.get(lexeme.sample as usize),
+            ) else {
+                continue;
+            };
+            for form in sample.forms.iter() {
+                let Some((ending, ending_marks)) = self.endings.get(form.ending as usize) else {
+                    continue;
+                };
+                if **ending != *rest {
+                    continue;
+                }
+                let marks = lexeme.marks | ending_marks << stem.len();
+                let entry = Entry {
+                    table: sample.table,
+                    form: form.form,
+                };
+                if !(found.iter()).any(|own| own.entry == entry && own.marks == marks) {
+                    found.push(OwnForm {
+                        marks,
+                        entry,
+                        share: form.share,
+                        place: form.place,
+                    });
+                }
+            }
+        }
+        found
+    }
+
+    /// Builds the automaton of the keys of the forms of all the lexemes
+    fn index(&mut self) -> Result<(), Error> {
+        // The keys in one buffer, each its length and its bytes, as their places and lexemes: a key
+        // is a stem and an ending. The buffers are sized first, as they take the most memory
+        let forms = |lexeme: &OwnLexeme| {
+            let sample = self.samples.get(lexeme.sample as usize);
+            (sample.into_iter().flat_map(|sample| sample.forms.iter()))
+                .filter_map(|form| self.endings.get(form.ending as usize))
+        };
+        let (count, size) = (self.lexemes.iter()).fold((0, 0), |(count, size), lexeme| {
+            forms(lexeme).fold((count, size), |(count, size), (ending, _)| {
+                (count + 1, size + 1 + usize::from(lexeme.len) + ending.len())
+            })
+        });
+        let too_many = || Error::Word("the own words have too many forms".into());
+        if u32::try_from(size).is_err() {
+            return Err(too_many());
+        }
+        let mut bytes = Vec::with_capacity(size);
+        let mut keys: Vec<(u32, u32)> = Vec::with_capacity(count);
+        for (number, lexeme) in self.lexemes.iter().enumerate() {
+            for (ending, _) in forms(lexeme) {
+                keys.push((bytes.len() as u32, number as u32));
+                bytes.push(lexeme.len + ending.len() as u8);
+                bytes.extend_from_slice(self.stem(lexeme));
+                bytes.extend_from_slice(ending);
+            }
+        }
+        let key = |&(start, _): &(u32, u32)| {
+            let start = start as usize;
+            &bytes[start + 1..start + 1 + usize::from(bytes[start])]
+        };
+        keys.sort_unstable_by(|a, b| key(a).cmp(key(b)).then(a.1.cmp(&b.1)));
+        keys.dedup_by(|later, first| later.1 == first.1 && key(later) == key(first));
+        let mut builder = MapBuilder::memory();
+        let mut groups: Vec<u32> = Vec::new();
+        for run in keys.chunk_by(|a, b| key(a) == key(b)) {
+            let value = match run {
+                [(_, lexeme)] => u64::from(*lexeme),
+                _ => {
+                    let at = groups.len() as u64;
+                    groups.push(run.len() as u32);
+                    groups.extend(run.iter().map(|&(_, lexeme)| lexeme));
+                    GROUP | at
+                }
+            };
+            (builder.insert(key(&run[0]), value))
+                .map_err(|error| Error::Word(format!("the keys of own words: {error}")))?;
+        }
+        self.keys = builder.into_map();
+        self.groups = groups;
+        // The vectors grew by doubling: an analyzer keeps them as long as it lives
+        self.endings.shrink_to_fit();
+        self.samples.shrink_to_fit();
+        self.stems.shrink_to_fit();
+        self.lexemes.shrink_to_fit();
+        self.groups.shrink_to_fit();
+        Ok(())
     }
 }
 
@@ -112,63 +266,138 @@ impl Dictionary {
         mut self,
         words: impl IntoIterator<Item = (&'a str, S)>,
     ) -> Result<Self, Error> {
-        // The analyses of the spellings of samples: words of one sample share them
-        let mut samples: HashMap<String, Vec<Analysis>> = HashMap::new();
+        // The endings, the samples and the lexemes known: words of one sample share them, and a
+        // lexeme added again is not repeated
+        let mut endings: HashMap<(Box<[u8]>, u64), u32> = (self.own_words.endings.iter())
+            .enumerate()
+            .map(|(number, ending)| (ending.clone(), number as u32))
+            .collect();
+        let mut samples: HashMap<(u16, Box<str>, Vec<u16>), u32> = (self.own_words.samples.iter())
+            .enumerate()
+            .map(|(number, sample)| {
+                let forms = sample.forms.iter().map(|form| form.form).collect();
+                ((sample.table, sample.stem.clone(), forms), number as u32)
+            })
+            .collect();
+        let mut lexemes: HashSet<(Box<[u8]>, u64, u32)> = (self.own_words.lexemes.iter())
+            .map(|lexeme| {
+                (
+                    self.own_words.stem(lexeme).into(),
+                    lexeme.marks,
+                    lexeme.sample,
+                )
+            })
+            .collect();
         for (word, sample) in words {
-            let mut forms = Vec::new();
-            for (spelling, entry, like) in self.sample_forms(word, sample.into())? {
-                // The analyses of a spelling go in the order and by the shares of the sample: in
-                // `blogueaba` the third person goes first
-                let analyses = samples
-                    .entry(like)
-                    .or_insert_with_key(|like| self.spelled(like).0);
-                let (share, place) = (analyses.iter().enumerate())
-                    .find(|(_, analysis)| analysis.entry == Some(entry))
-                    .map_or(
-                        (1.0 / analyses.len().max(1) as f64, analyses.len()),
-                        |(at, found)| (found.prob, at),
-                    );
-                let place = u16::try_from(place).unwrap_or(u16::MAX);
-                forms.push((spelling, entry, share as f32, place));
-            }
-            let own = Arc::make_mut(&mut self.own_words);
-            for (spelling, entry, share, place) in forms {
+            let specs = self.sample_forms(word, sample.into())?;
+            for spec in &specs {
+                let forms: Vec<u16> = spec.forms.iter().map(|&(form, _)| form).collect();
+                let id = (spec.table, Box::from(spec.like.as_str()), forms);
+                let sample = match samples.get(&id) {
+                    Some(&number) => number,
+                    None => {
+                        let shares = self.sample_form_shares(spec);
+                        let own = Arc::make_mut(&mut self.own_words);
+                        let forms = (shares.into_iter())
+                            .map(|(form, key, share, place)| {
+                                let ending = (Box::<[u8]>::from(key.bytes()), key.marks);
+                                let number = *endings.entry(ending).or_insert_with_key(|ending| {
+                                    own.endings.push(ending.clone());
+                                    (own.endings.len() - 1) as u32
+                                });
+                                SampleForm {
+                                    form,
+                                    place,
+                                    ending: number,
+                                    share,
+                                }
+                            })
+                            .collect();
+                        own.samples.push(SampleForms {
+                            table: spec.table,
+                            stem: id.1.clone(),
+                            forms,
+                        });
+                        let number = (own.samples.len() - 1) as u32;
+                        samples.insert(id, number);
+                        number
+                    }
+                };
                 // Letters that the dictionary has not take free bytes of the alphabet of the copy
-                if !self.alphabet.extend(&spelling) {
+                if !self.alphabet.extend(&spec.stem) {
                     return Err(Error::Word(format!(
-                        "the word {spelling:?} has too many letters that the dictionary has not"
+                        "the word {word:?} has too many letters that the dictionary has not"
                     )));
                 }
-                let Some(key) = self.alphabet.input_key(&spelling) else {
+                let longest = (spec.forms.iter())
+                    .filter_map(|&(_, suffix)| self.suffixes.get(suffix as usize))
+                    .max_by_key(|ending| ending.chars().count())
+                    .unwrap_or_default();
+                let fits = (self.alphabet.input_key(&spec.stem))
+                    .filter(|key| key.bytes().len() + longest.chars().count() <= MAX_KEY);
+                let Some(key) = fits else {
                     return Err(Error::Word(format!(
-                        "the word {spelling:?} is longer than {MAX_KEY} letters"
+                        "the word {:?} is longer than {MAX_KEY} letters",
+                        format!("{}{longest}", spec.stem)
                     )));
                 };
-                let forms = own.entry(key.bytes().into()).or_default();
-                if !(forms.iter()).any(|known| known.entry == entry && known.marks == key.marks) {
-                    // A key has a form or two: a vector grows by four places at first
-                    forms.reserve_exact(1);
-                    forms.push(OwnForm {
+                if lexemes.insert((key.bytes().into(), key.marks, sample)) {
+                    let own = Arc::make_mut(&mut self.own_words);
+                    own.lexemes.push(OwnLexeme {
                         marks: key.marks,
-                        entry,
-                        share,
-                        place,
+                        stem: own.stems.len() as u32,
+                        sample,
+                        len: key.bytes().len() as u8,
                     });
+                    own.stems.extend_from_slice(key.bytes());
                 }
             }
         }
+        Arc::make_mut(&mut self.own_words).index()?;
         Ok(self)
     }
 
-    /// Forms of the word `word` like the sample: the spelling, the form of the table and the
-    /// spelling of the sample of each form of the lexemes of the sample, without the spoken
-    /// spellings and, but of a verb (`hablás` of `hablas`), without the variants: those of a noun
-    /// are other spellings (`yoghurt` of `yogur`)
-    fn sample_forms(
-        &self,
-        word: &str,
-        sample: Sample<'_>,
-    ) -> Result<Vec<(String, Entry, String)>, Error> {
+    /// The forms of a sample with the keys of their endings, and the shares and the places of the
+    /// forms among the analyses of the spellings of the sample: in `blogueaba` the third person
+    /// goes first
+    fn sample_form_shares(&self, spec: &OwnSpec) -> Vec<(u16, Key, f32, u16)> {
+        // The forms and the shares of the analyses of each spelling of the sample: forms of one
+        // spelling share them
+        let mut spelled: HashMap<String, Vec<(Option<Entry>, f64)>> = HashMap::new();
+        let mut forms = Vec::with_capacity(spec.forms.len());
+        for &(form, suffix) in &spec.forms {
+            let Some((ending, key)) = (self.suffixes.get(suffix as usize))
+                .and_then(|ending| Some((ending, self.alphabet.input_key(ending)?)))
+            else {
+                continue;
+            };
+            let like = format!("{}{ending}", spec.like);
+            let analyses = (spelled.entry(like)).or_insert_with_key(|like| {
+                (self.spelled(like).0.into_iter())
+                    .map(|analysis| (analysis.entry, analysis.prob))
+                    .collect()
+            });
+            let entry = Entry {
+                table: spec.table,
+                form,
+            };
+            let (share, place) = (analyses.iter().enumerate())
+                .find(|(_, (found, _))| *found == Some(entry))
+                .map_or(
+                    (1.0 / analyses.len().max(1) as f64, analyses.len()),
+                    |(at, &(_, prob))| (prob, at),
+                );
+            let place = u16::try_from(place).unwrap_or(u16::MAX);
+            forms.push((form, key, share as f32, place));
+        }
+        forms
+    }
+
+    /// Lexemes of the word `word` like the sample: the stem of the word, the table and the stem of
+    /// the sample, and the forms of the table with their endings, without the spoken spellings
+    /// and, but of a verb (`hablás` of `hablas`), without the variants: those of a noun are other
+    /// spellings (`yoghurt` of `yogur`)
+    fn sample_forms(&self, word: &str, sample: Sample<'_>) -> Result<Vec<OwnSpec>, Error> {
         let normal = |text: &str| normalized(text).to_lowercase();
         let (word, like) = (normal(word), normal(sample.word));
         if word.is_empty() || word.chars().any(|c| c.is_whitespace() || c.is_control()) {
@@ -229,8 +458,7 @@ impl Dictionary {
                 )));
             }
         }
-        let mut forms = Vec::new();
-        let mut lexemes: Vec<(u16, &str)> = Vec::new();
+        let mut specs: Vec<OwnSpec> = Vec::new();
         // The endings of the sample that the word needs, for the error
         let mut endings: Vec<&str> = Vec::new();
         for analysis in &analyses {
@@ -251,10 +479,9 @@ impl Dictionary {
             else {
                 continue;
             };
-            if lexemes.contains(&(entry.table, lexeme.stem)) {
+            if (specs.iter()).any(|spec| spec.table == entry.table && spec.stem == lexeme.stem) {
                 continue;
             }
-            lexemes.push((entry.table, lexeme.stem));
             // An own verb takes the forms of `vos`, not the old ones (`truje` of `traer`)
             let skipped = match pos(analysis) {
                 "VERB" | "AUX" => LEMMA_ONLY | SPOKEN | OLD,
@@ -274,24 +501,25 @@ impl Dictionary {
                     main & (LEMMA_ONLY | SPOKEN | VARIANT) == 0 && number(main) == wanted
                 })
             };
-            for form in 0..lexeme.cells.len() {
-                let cell = lexeme.cells[form];
-                if cell & skipped != 0 && (cell & (LEMMA_ONLY | SPOKEN | OLD) != 0 || main(form)) {
-                    continue;
-                }
-                if let (Some(spelling), Some(like)) = (
-                    lexeme.spell(&self.suffixes, form),
-                    sample_lexeme.spell(&self.suffixes, form),
-                ) {
-                    let entry = Entry {
-                        table: entry.table,
-                        form: form as u16,
-                    };
-                    forms.push((spelling, entry, like));
-                }
+            let forms: Vec<(u16, u32)> = (0..lexeme.cells.len())
+                .filter(|&form| {
+                    let cell = lexeme.cells[form];
+                    !(cell & skipped != 0
+                        && (cell & (LEMMA_ONLY | SPOKEN | OLD) != 0 || main(form)))
+                })
+                .filter_map(|form| Some((form as u16, *lexeme.paradigm.get(form)?)))
+                .filter(|&(_, suffix)| self.suffixes.get(suffix as usize).is_some())
+                .collect();
+            if !forms.is_empty() {
+                specs.push(OwnSpec {
+                    stem: lexeme.stem.to_owned(),
+                    table: entry.table,
+                    like: sample_lexeme.stem.to_owned(),
+                    forms,
+                });
             }
         }
-        if forms.is_empty() {
+        if specs.is_empty() {
             let endings: Vec<String> = endings.iter().map(|ending| format!("{ending:?}")).collect();
             return Err(Error::Word(format!(
                 "{word:?} does not inflect as {like:?}: the word needs the ending {} of the sample \
@@ -299,7 +527,7 @@ impl Dictionary {
                 endings.join(" or ")
             )));
         }
-        Ok(forms)
+        Ok(specs)
     }
 
     /// The analyses of a word with its own words: an own word of the exact spelling, or of any
@@ -365,22 +593,23 @@ impl Dictionary {
 
     /// The key of a word, the own words of it and whether the key is as written: the key as written,
     /// then with a lost diaeresis restored
-    fn own_forms(&self, word: &str) -> Option<(Key, &[OwnForm], bool)> {
+    fn own_forms(&self, word: &str) -> Option<(Key, Vec<OwnForm>, bool)> {
         self.own_forms_of(&self.alphabet.input_key(word)?, true)
     }
 
     /// The own words of a key as written and, with `diaeresis`, of the key with a lost diaeresis
     /// restored: the key found, its own words and whether it is as written
-    fn own_forms_of(&self, key: &Key, diaeresis: bool) -> Option<(Key, &[OwnForm], bool)> {
-        if let Some(forms) = self.own_words.get(key.bytes()) {
+    fn own_forms_of(&self, key: &Key, diaeresis: bool) -> Option<(Key, Vec<OwnForm>, bool)> {
+        let forms = self.own_words.forms(key.bytes());
+        if !forms.is_empty() {
             return Some((key.clone(), forms, true));
         }
         if !diaeresis {
             return None;
         }
         (self.alphabet.diaeresis_keys(key).into_iter()).find_map(|key| {
-            let forms = self.own_words.get(key.bytes())?;
-            Some((key, forms.as_slice(), false))
+            let forms = self.own_words.forms(key.bytes());
+            (!forms.is_empty()).then_some((key, forms, false))
         })
     }
 
