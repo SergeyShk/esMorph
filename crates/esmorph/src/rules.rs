@@ -38,9 +38,10 @@ const LONGEST_ROMAN: usize = 15;
 
 /// Shares of a name among the analyses of a token with a capital letter that splits as a verb with
 /// clitics, by AnCora and GSD train: of an imperative without an accent (`Mandela`, `Portela`: 45 of
-/// 48) and of an infinitive, a gerund or an imperative with an accent (`Hacerlo`, `Déjame`: 4 of
-/// 36), taken for a finite form too (`Levantóse`), which the treebanks of news hardly have
-pub(crate) const CLITICS_NAME: [f64; 2] = [45.0 / 48.0, 4.0 / 36.0];
+/// 48), of an infinitive, a gerund or an imperative with an accent (`Hacerlo`, `Déjame`: 4 of 36),
+/// taken for a finite form with an accent too (`Levantóse`), and of a finite form without an accent
+/// (`Vila`, `Irala`: 33 of 33, with one count left to the verb, which opens sentences of prose)
+pub(crate) const CLITICS_NAME: [f64; 3] = [45.0 / 48.0, 4.0 / 36.0, 33.0 / 34.0];
 
 /// Share of a name among the analyses of a word with a capital letter and without accents that the
 /// dictionary has only with them (`Angel`, `Perez`), by AnCora and GSD train (882 of 933)

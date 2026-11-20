@@ -590,6 +590,25 @@ impl Dictionary {
             }
         }
         if analyses.is_empty() {
+            let mut enclitic = self.finite_with_enclitic(&word);
+            if !enclitic.is_empty() {
+                if upper {
+                    let share = self.clitics_name(&word, &enclitic);
+                    self.add_rules(&word, &[(Rule::Name, share)], &mut enclitic);
+                } else {
+                    let guessed = self.guess(&word);
+                    if !guessed.is_empty() {
+                        for analysis in &mut enclitic {
+                            analysis.prob *= clitics::FINITE_ENCLITIC_SHARE;
+                        }
+                        enclitic.extend(guessed.into_iter().map(|analysis| Analysis {
+                            prob: analysis.prob * (1.0 - clitics::FINITE_ENCLITIC_SHARE),
+                            ..analysis
+                        }));
+                    }
+                }
+                return enclitic;
+            }
             let ruled = self.ruled(&word);
             return if ruled.is_empty() {
                 self.guess(&word)
@@ -680,6 +699,7 @@ impl Dictionary {
             (token.chars().flat_map(char::to_lowercase)).any(|c| clitics::without_acute(c) != c);
         match host {
             Some(Host::Imperative) if !accented => CLITICS_NAME[0],
+            Some(Host::Finite) if !accented => CLITICS_NAME[2],
             _ => CLITICS_NAME[1],
         }
     }
@@ -1029,6 +1049,34 @@ impl Dictionary {
                     if !host.stressed.is_empty() {
                         return with_clitics(&token, split, host.stressed);
                     }
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    /// A finite form with one enclitic that the spelling of 2010 writes without an accent: the host
+    /// is stressed on its last syllable, so the word is stressed on the penultimate one
+    /// (`quedose` is `quedó` + `se`, `vase` is `va` + `se`); a host stressed elsewhere would need
+    /// the accent (`díjole`)
+    fn finite_with_enclitic(&self, word: &str) -> Vec<Analysis> {
+        let token = word.to_lowercase();
+        if token.chars().any(|c| clitics::without_acute(c) != c) {
+            return Vec::new();
+        }
+        for split in clitics::splits(&token) {
+            if split.clitics.len() != 1 {
+                continue;
+            }
+            for host in self.host_analyses(&split, None, true) {
+                let finite: Vec<Analysis> = (host.found.into_iter())
+                    .filter(|analysis| {
+                        self.hosts.get(usize::from(analysis.ud)) == Some(&Host::Finite)
+                            && clitics::stressed_last(&analysis.word)
+                    })
+                    .collect();
+                if !finite.is_empty() {
+                    return with_clitics(&token, &split, finite);
                 }
             }
         }

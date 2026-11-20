@@ -422,6 +422,32 @@ def test_hosts_of_clitics_are_infinitives_gerunds_and_imperatives(morph):
             )
 
 
+@pytest.mark.parametrize(
+    ("word", "lemma", "words"),
+    [
+        ("quedose", "quedar", ("quedó", "se")),
+        ("vase", "ir", ("va", "se")),
+        ("fuime", "ir", ("fui", "me")),
+    ],
+)
+def test_finite_forms_with_an_enclitic_without_an_accent(morph, word, lemma, words):
+    analyses = morph.analyze(word)
+    first = analyses[0]
+    assert (first.lemma, first.pos, first.words, first.source) == (lemma, "VERB", words, "clitics")
+    assert first.prob > 0.5
+    # The token stays unknown, with guesses after the verb
+    assert analyses[-1].source == "guess"
+    assert not morph.is_known(word)
+
+
+def test_what_takes_no_enclitic_without_an_accent(morph):
+    # A form stressed before its last syllable takes the accent with an enclitic (`díjole`), an
+    # accented weak vowel is no diphthong, and a capital letter makes a name without context
+    assert morph.analyze("dijole")[0].source == "guess"
+    assert morph.analyze("atenianos")[0].lemma == "ateniano"
+    assert morph.analyze("Volviose")[0].pos == "PROPN"
+
+
 def test_words_of_the_dictionary_are_not_split(morph):
     assert {a.source for a in morph.analyze("comete")} == {"dictionary"}
     assert morph.analyze("cómetelo")[0].words == ("come", "te", "lo")
@@ -866,10 +892,12 @@ def test_analyze_sentence(morph):
         ("A pesar de todo , vino .", 1, ("pesar", "VERB")),
         ("Lo hizo á pesar del frío .", 3, ("pesar", "VERB")),
         ("Con gran pesar lo digo .", 2, ("pesar", "NOUN")),
-        # A form of ser and ir is ir after a reflexive clitic, before the goal of a and before a
-        # gerund, and ser before a predicate, a prepositional phrase or an hour
+        # A form of ser and ir is ir after a reflexive clitic or with it, before the goal of a and
+        # before a gerund, and ser before a predicate, a prepositional phrase or an hour
         ("Los pájaros se fueron .", 3, ("ir", "VERB")),
         ("Se fue muy lejos .", 1, ("ir", "VERB")),
+        ("Fuime a casa .", 0, ("ir", "VERB")),
+        ("Fueme imposible venir .", 0, ("ser", "AUX")),
         ("Fue a casa .", 0, ("ir", "VERB")),
         ("Fueron al cine .", 0, ("ir", "VERB")),
         ("El conflicto fue escalando .", 2, ("ir", "VERB")),
@@ -887,6 +915,9 @@ def test_analyze_sentence(morph):
         ("No podia venir .", 1, ("poder", "AUX")),
         ("Así fueron á visitar al santo .", 1, ("ir", "VERB")),
         ("Angel , ven .", 0, ("Angel", "PROPN")),
+        # A finite form with an enclitic opens a sentence, a name stays elsewhere
+        ("Volviose la señora .", 0, ("volver", "VERB")),
+        ("La casa de Vila .", 3, ("Vila", "PROPN")),
         # A word after a clitic, the negation or tú is a verb, of the frequent one of its form;
         # after a preposition no makes a noun negative
         ("¿ Te figuras lo que dijo ?", 2, ("figurar", "VERB")),
