@@ -933,9 +933,22 @@ def test_analyze_sentence(morph):
         ("Adonde tú vayas , voy .", 2, ("ir", "VERB")),
         ("Se acerca a él .", 1, ("acercar", "VERB")),
         ("Es el punto de no retorno .", 5, ("retorno", "NOUN")),
+        # A plural noun after a clitic `la`, `lo`, `le` or `les` is a verb of `tú`, not a noun in
+        # the singular or after a preposition
+        ("No me la quites .", 2, ("él", "PRON")),
+        ("No me la quites .", 3, ("quitar", "VERB")),
+        ("¿ Me lo preguntas ?", 3, ("preguntar", "VERB")),
+        ("Le faltas tú .", 1, ("faltar", "VERB")),
+        ("Iban á la mies .", 3, ("mies", "NOUN")),
+        ("Ya ves que no .", 1, ("ver", "VERB")),
         # An imperative opening a sentence is no name; a name and a noun stay
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
         ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
+        # A verb of `tú` after an opening question or exclamation mark is no name
+        ("¿ Quieres más ?", 1, ("querer", "AUX")),
+        ("¡ Eres un ingrato !", 1, ("ser", "AUX")),
+        ("¿ Crees que vendrá ?", 1, ("creer", "VERB")),
+        ("¿ Luis , vienes ?", 1, ("Luis", "PROPN")),
         ("Sangre de Abel .", 0, ("sangre", "NOUN")),
         # A word of the dictionary that is mostly a verb with clitics is one, not the interjection
         # or a name
