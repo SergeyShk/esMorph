@@ -796,10 +796,11 @@ fn verified(analyzer: &Bound<'_, Analyzer>, verify: bool) -> PyResult<()> {
 ///     matter for finding a word, though a word with a capital letter may also be a name. A word
 ///     spelled as in the dictionary gives the analyses of that spelling; a word absent as written
 ///     is looked for without its accents and with a lost diaeresis. A word absent from the
-///     dictionary may be a verb with clitics (`dámelo`) or, in lower case, a colloquial spelling of
-///     a word of the dictionary (`trabajao`, `caridá`, `juerza`; `perdío` is `perdido`, not
-///     `perdió`); other tokens get the analyses of rules (punctuation, symbols, numbers, Roman
-///     numerals and names), and other lowercase words are guessed. The dictionary is loaded once
+///     dictionary may be a verb with clitics (`dámelo`, `quedose`) or, in lower case, a colloquial
+///     or an older spelling of a word of the dictionary (`trabajao`, `caridá`, `juerza`,
+///     `estranjero`; `perdío` is `perdido`, not `perdió`); other tokens get the analyses of rules
+///     (punctuation, symbols, numbers, Roman numerals and names), and other lowercase words are
+///     guessed. The dictionary is loaded once
 ///     when the analyzer is created; an analyzer can be used from several threads
 ///
 /// Arguments:
@@ -1297,8 +1298,9 @@ impl Analyzer {
     /// Whether the dictionary has the word form
     ///
     /// Description:
-    ///     The analyses of the rules and the guesses do not count: a name, a number or a guessed
-    ///     word has analyses but is not known
+    ///     The analyses of the rules and the guesses do not count: a name, a number, a guessed
+    ///     word, a colloquial spelling (`trabajao`) or a finite form with an enclitic without an
+    ///     accent (`quedose`) has analyses but is not known
     ///
     /// Arguments:
     ///     word (str): The word form

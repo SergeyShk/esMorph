@@ -1,6 +1,8 @@
 //! Words of a token of several: a verb with enclitic pronouns (`dámelo` is `da` + `me` + `lo`) and
 //! the contractions `del` and `al`
 
+use std::ops::Range;
+
 /// Clitics and their places: a clitic stands after the clitics of lower places, `se` first and
 /// the third person last (`dáselo`, `cómetelo`, `démonos`)
 const CLITICS: [(&str, u8); 11] = [
@@ -32,6 +34,10 @@ const HOMONYMS: [&str; 13] = [
 /// Share of the verb with clitics among the analyses of such a word: the words of the dictionary
 /// keep one in 27
 pub(crate) const HOMONYM_SHARE: f64 = 26.0 / 27.0;
+/// Share of a finite form with an enclitic written without an accent among the analyses of an
+/// unknown word: of 60 such tokens of prose 59 are such verbs (`quedose`), one is another word
+/// (`deos`, `dedos`)
+pub(crate) const FINITE_ENCLITIC_SHARE: f64 = 59.0 / 60.0;
 
 /// Whether a word in lower case is a clitic: `la` after a verb is a pronoun, not an article
 pub(crate) fn is_clitic(word: &str) -> bool {
@@ -153,32 +159,7 @@ pub(crate) fn stressed(word: &str) -> Option<usize> {
     if let Some(at) = letters.iter().position(|&c| without_acute(c) != c) {
         return Some(at);
     }
-    // Syllables by their vowels: weak vowels join the strong vowel after them, then the one before
-    // them, so two strong vowels are two syllables, as are `noi` and `a` of `paranoia`
-    let weak = |at: usize| {
-        letters
-            .get(at)
-            .is_some_and(|&c| is_vowel(c) && !is_strong(c))
-    };
-    let mut nuclei = Vec::new();
-    let mut at = 0;
-    while at < letters.len() {
-        if !is_vowel(letters[at]) {
-            at += 1;
-            continue;
-        }
-        let start = at;
-        while weak(at) {
-            at += 1;
-        }
-        if letters.get(at).is_some_and(|&c| is_strong(c)) {
-            at += 1;
-            while weak(at) {
-                at += 1;
-            }
-        }
-        nuclei.push(start..at);
-    }
+    let nuclei = nuclei(&letters);
     let last = *letters.last()?;
     let paroxytone = is_vowel(last) || last == 'n' || last == 's';
     let nucleus = match nuclei.len() {
@@ -190,6 +171,49 @@ pub(crate) fn stressed(word: &str) -> Option<usize> {
         .clone()
         .find(|&at| is_strong(letters[at]))
         .or(nucleus.last())
+}
+
+/// Whether a word is stressed on its last syllable: `quedó`, `va`, not `quedo`
+pub(crate) fn stressed_last(word: &str) -> bool {
+    let letters: Vec<char> = word.chars().collect();
+    let last = nuclei(&letters).pop();
+    (stressed(word)).is_some_and(|at| last.is_some_and(|last| last.contains(&at)))
+}
+
+/// The vowels of the syllables of a word: weak vowels join the strong vowel after them, then the
+/// one before them, so two strong vowels are two syllables, as are `noi` and `a` of `paranoia`; a
+/// weak vowel with an accent is strong (`a-te-ní-a`)
+fn nuclei(letters: &[char]) -> Vec<Range<usize>> {
+    let weak = |at: usize| {
+        letters
+            .get(at)
+            .is_some_and(|&c| is_vowel(c) && !is_strong(c))
+    };
+    let strong = |at: usize| {
+        letters
+            .get(at)
+            .is_some_and(|&c| is_strong(c) || without_acute(c) != c)
+    };
+    let mut nuclei = Vec::new();
+    let mut at = 0;
+    while at < letters.len() {
+        if !weak(at) && !strong(at) {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        while weak(at) {
+            at += 1;
+        }
+        if strong(at) {
+            at += 1;
+            while weak(at) {
+                at += 1;
+            }
+        }
+        nuclei.push(start..at);
+    }
+    nuclei
 }
 
 /// A vowel without its acute: `á` is `a`
@@ -299,6 +323,16 @@ mod tests {
         assert_eq!(hosts("pingüino", "lo"), ["pingüino", "pingüinó"]);
         assert_eq!(hosts("de", "me"), ["de", "dé"]);
         assert_eq!(hosts("esta", "te"), ["esta", "está"]);
+    }
+
+    #[test]
+    fn stressed_on_the_last_syllable() {
+        for word in ["quedó", "va", "fui", "dio", "podrán", "sentí"] {
+            assert!(stressed_last(word), "{word}");
+        }
+        for word in ["quedo", "atenía", "dijo", "pongan", ""] {
+            assert!(!stressed_last(word), "{word}");
+        }
     }
 
     #[test]

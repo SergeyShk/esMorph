@@ -234,13 +234,16 @@ impl Dictionary {
         })
     }
 
-    /// A form of `ser` and `ir` is `ir` after a reflexive clitic but before a predicate (`se fue`,
-    /// `me fui de casa`, not `me fue muy útil`), before `a` and its goal (`fue a casa`, `fueron a
-    /// ver`, not `fue a partir de`, `fue al principio`, `fue a las cinco`) and before a gerund
-    /// (`fue cayendo`)
+    /// A form of `ser` and `ir` is `ir` after a reflexive clitic or with it as an enclitic but
+    /// before a predicate (`se fue`, `me fui de casa`, `fuime`, not `me fue muy útil`), before `a`
+    /// and its goal (`fue a casa`, `fueron a ver`, not `fue a partir de`, `fue al principio`, `fue
+    /// a las cinco`) and before a gerund (`fue cayendo`)
     fn ser_ir(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
-        if !SER_IR.contains(&lower[at].as_str()) || list.first()?.lemma == "ir" {
+        let top = list.first()?;
+        let enclitic = matches!(top.words.as_slice(), [host, clitic]
+            if SER_IR.contains(&host.as_str()) && PROCLITICS.contains(&clitic.as_str()));
+        if !(SER_IR.contains(&lower[at].as_str()) || enclitic) || top.lemma == "ir" {
             return None;
         }
         let word = |at: usize| lower.get(at).map_or("", String::as_str);
@@ -249,8 +252,7 @@ impl Dictionary {
         let predicate = (at + 1..sentence.len())
             .find(|&next| self.top_pos(sentence, next) != "ADV")
             .unwrap_or(sentence.len());
-        let after_clitic = at > 0
-            && PROCLITICS.contains(&lower[at - 1].as_str())
+        let after_clitic = (enclitic || at > 0 && PROCLITICS.contains(&lower[at - 1].as_str()))
             && next != "de"
             && self.top_pos(sentence, predicate) != "ADJ"
             && !self.top_verb_form(sentence, predicate, "Part");
