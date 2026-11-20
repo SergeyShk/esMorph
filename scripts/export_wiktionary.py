@@ -1153,12 +1153,11 @@ def feminine_diminutives(
         lemma and part of speech: the feminine of the word of the masculine if the export has one
         (`gatita` of `gata`), else that word (`pobrecita` of `pobre`)
     """
-    feminine = "Gender=Fem|Number=Sing"
-    feminines = {
-        (lemma, pos): form
-        for lemma, pos, form, text in table
-        if text == feminine and form != lemma
-    }
+    # The first feminine in the order of letters: a word may have several (`abuela`, `agüela`)
+    feminines: dict[tuple[str, str], str] = {}
+    for lemma, pos, form, text in sorted(table):
+        if text == "Gender=Fem|Number=Sing" and form != lemma:
+            feminines.setdefault((lemma, pos), form)
     found = {}
     for (lemma, pos), form in feminines.items():
         key = (form, pos)
