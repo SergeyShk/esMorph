@@ -1280,11 +1280,12 @@ def test_dictionary_description_of_another_builder(morph, tmp_path):
 
 
 def without_model(data: bytes) -> bytes:
-    """A dictionary file with an empty last section, the context model"""
+    """A dictionary file with an empty section of the context model, the 14th"""
     at = 16
     for _ in range(13):
         at += 8 + (int.from_bytes(data[at : at + 8], "little") + 7) // 8 * 8
-    body = data[16:at] + bytes(8)
+    after = at + 8 + (int.from_bytes(data[at : at + 8], "little") + 7) // 8 * 8
+    body = data[16:at] + bytes(8) + data[after:]
     return data[:12] + zlib.crc32(body).to_bytes(4, "little") + body
 
 
@@ -2061,3 +2062,20 @@ def test_guessed_verbs_with_clitics(morph, word, lemma, words):
 def test_the_last_part_after_a_hyphen_is_of_an_open_class(morph):
     assert morph.analyze("sur-este")[0].pos == "NOUN"
     assert morph.analyze("post-nosotros") == []
+
+
+def test_diminutives(morph):
+    words = ("casitas", "gatito", "poquita", "ahorita")
+    assert [morph.analyze(word)[0].diminutive_of for word in words] == [
+        "casa",
+        "gato",
+        "poco",
+        "ahora",
+    ]
+    # A word that is mostly a word of its own, and another word, have none
+    words = ("señorita", "granito", "casa")
+    assert [morph.analyze(word)[0].diminutive_of for word in words] == [None, None, None]
+    # The forms of the lexeme and a pickled analysis keep it
+    analysis = morph.analyze("casita")[0]
+    assert {form.diminutive_of for form in analysis.forms()} == {"casa"}
+    assert pickle.loads(pickle.dumps(analysis)).diminutive_of == "casa"

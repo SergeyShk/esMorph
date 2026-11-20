@@ -34,6 +34,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 | `prob` | `float` | Parte del análisis entre los análisis de la palabra; la suma de todos es 1. En [`analyze_sentence`](analyzer.md#analyze_sentence) - la puntuación del modelo de contexto en la oración |
 | `words` | `tuple[str, ...]` | Palabras del token: un verbo y sus clíticos, las palabras de una contracción (`del`, `al`, la antigua `desta`), un número y su signo o unidad (`60%`), una unidad y su número (`km.24`) o la propia palabra; el análisis describe la primera |
 | `source` | `str` | De dónde viene el análisis: `"dictionary"` - la forma está en el diccionario, `"clitics"` - un verbo del diccionario con [clíticos](#clitics), `"rule"` - un [análisis por regla](#rules), `"guess"` - un [análisis estimado](#guess) de una palabra desconocida |
+| `diminutive_of` | `str \| None` | La palabra de la que el lema es un [diminutivo](#diminutives): `casa` para `casitas`; `None` para las demás palabras |
 
 ## Categorías y rasgos { #ud }
 
@@ -63,6 +64,25 @@ Los análisis van del más probable al menos probable. `prob` es la parte de un 
 
     ```
     [('casa', 'NOUN', 0.99), ('casar', 'VERB', 0.01)]
+    ```
+
+## Diminutivos { #diminutives }
+
+Un diminutivo conserva su propio lema, como en los treebanks: `casitas` es una forma de `casita`. `diminutive_of` da la palabra de la que es diminutivo, tal como la da Wikcionario en la primera acepción de la palabra: `casita` es diminutivo de `casa`, `poquito` de `poco`, `ahorita` de `ahora`. Una palabra que es sobre todo una palabra propia, aunque Wikcionario también la tenga como diminutivo, no lo tiene: `señorita`, `granito`. Lo tienen unos dos mil sustantivos, adjetivos y adverbios del diccionario.
+
+=== "Código"
+
+    ``` python
+    [
+        morph.analyze(word)[0].diminutive_of
+        for word in ("casitas", "poquito", "ahorita", "señorita", "granito")
+    ]
+    ```
+
+=== "Resultado"
+
+    ```
+    ['casa', 'poco', 'ahora', None, None]
     ```
 
 ## Palabras con clíticos { #clitics }

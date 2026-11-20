@@ -2,7 +2,8 @@
 //! <dictionary file> [<context model>]`. The export is `lexemes.tsv` (lemma, part of speech, form,
 //! features, `variant`, `old` for an old or nonstandard variant, `spoken:` with the form a spoken
 //! spelling stands for, `extra`, `extra-variant` or `extra-old` for a form of the extra source or
-//! `_`, the place in the table of the source or `_`) and `meta.json`, written by
+//! `_`, the place in the table of the source or `_`), `diminutives.tsv` (lemma, part of speech
+//! and the word it is a diminutive of) and `meta.json`, written by
 //! `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and `sources.json`,
 //! written by `scripts/export_ud.py`; the context model is the file of weights of
 //! `scripts/train_context.py`. A form of the extra source that the treebanks have only as a name
@@ -378,6 +379,18 @@ fn build(
     // The builder keeps its own copies: the table and the counts go before it builds
     drop((forms, main, counts));
     drop(table);
+    let diminutives = export.join("diminutives.tsv");
+    for (number, line) in read(&diminutives)?.lines().enumerate() {
+        let at = |err| at_line(&diminutives, number, err);
+        let fields: Vec<&str> = line.split('\t').collect();
+        let &[lemma, pos, base] = fields.as_slice() else {
+            return Err(at(Error::Build(format!(
+                "expected 3 fields, got {}",
+                fields.len()
+            ))));
+        };
+        builder.add_diminutive(lemma, pos, base).map_err(at)?;
+    }
     let bytes = builder.build()?;
     if context.is_some() {
         let gaps = esmorph::Dictionary::from_bytes(&bytes)?.context_gaps()?;
@@ -496,6 +509,7 @@ mod tests {
         fs::create_dir_all(&export).unwrap();
         fs::create_dir_all(&counts).unwrap();
         fs::write(export.join("meta.json"), "{}").unwrap();
+        fs::write(export.join("diminutives.tsv"), "").unwrap();
         for name in ["analyses.tsv", "pos.tsv"] {
             fs::write(counts.join(name), "").unwrap();
         }
@@ -511,6 +525,9 @@ mod tests {
         let message = error(&format!("{line}Casa\tNOUN\tCasa\t_\t_\t_\n"), &output);
         assert!(message.contains("lexemes.tsv:2:"), "{message}");
         assert!(error("", &output).contains("no rows"));
+        fs::write(export.join("diminutives.tsv"), "casa\tNOUN\n").unwrap();
+        assert!(error(line, &output).contains("diminutives.tsv:1: expected 3 fields"));
+        fs::write(export.join("diminutives.tsv"), "").unwrap();
         // A directory in place of the dictionary file: the error names it and leaves no file
         let taken = dir.join("taken.dict");
         fs::create_dir_all(&taken).unwrap();
@@ -541,6 +558,7 @@ mod tests {
         fs::create_dir_all(&export).unwrap();
         fs::create_dir_all(&counts).unwrap();
         fs::write(export.join("meta.json"), "{}").unwrap();
+        fs::write(export.join("diminutives.tsv"), "").unwrap();
         fs::write(counts.join("analyses.tsv"), "").unwrap();
         fs::write(
             counts.join("pos.tsv"),
@@ -586,6 +604,7 @@ mod tests {
         fs::create_dir_all(&export).unwrap();
         fs::create_dir_all(&counts).unwrap();
         fs::write(export.join("meta.json"), "{}").unwrap();
+        fs::write(export.join("diminutives.tsv"), "").unwrap();
         for name in ["analyses.tsv", "pos.tsv"] {
             fs::write(counts.join(name), "").unwrap();
         }

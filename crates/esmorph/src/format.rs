@@ -45,10 +45,10 @@ pub(crate) const UD_BITS: u32 = 0xFFFF;
 pub(crate) const MAX_ENDING: usize = 5;
 /// Largest dictionary file: offsets into records and variants are of 32 bits
 pub(crate) const MAX_FILE: u64 = 1 << 31;
-const VERSION: u32 = 8;
+const VERSION: u32 = 9;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
-const SECTIONS: usize = 14;
+const SECTIONS: usize = 15;
 
 /// Contents of a dictionary for writing into a file
 #[cfg(any(test, feature = "build"))]
@@ -90,6 +90,9 @@ pub(crate) struct Sections {
     pub guess_records: Vec<u32>,
     /// Weights of the context model (`scripts/train_context.py`); empty without a model
     pub context: Vec<u8>,
+    /// Diminutives: a line "lemma, part of speech, the word it is a diminutive of" with tabs for
+    /// every lexeme of a diminutive, in the order of lemma and part of speech
+    pub diminutives: String,
 }
 
 /// Value of a key in the automaton of word forms
@@ -185,6 +188,7 @@ pub(crate) struct Layout {
     pub guesses: Range<usize>,
     pub guess_records: Range<usize>,
     pub context: Range<usize>,
+    pub diminutives: Range<usize>,
     /// CRC32 of the file after its header
     pub checksum: u32,
 }
@@ -227,6 +231,7 @@ pub(crate) fn write(sections: &Sections) -> Vec<u8> {
     section(&sections.guesses);
     section(&u32_bytes(&sections.guess_records));
     section(&sections.context);
+    section(sections.diminutives.as_bytes());
     let checksum = crc32fast::hash(&out[HEADER..]);
     out[12..HEADER].copy_from_slice(&checksum.to_le_bytes());
     out
@@ -301,6 +306,7 @@ pub(crate) fn layout(data: &[u8], checked: bool) -> Result<Layout, Error> {
         guesses: section(1)?,
         guess_records: section(4)?,
         context: section(1)?,
+        diminutives: section(1)?,
         checksum: 0,
     };
     if at != data.len() {
@@ -685,13 +691,13 @@ pub(crate) mod tests {
             assert!(layout(broken, true).is_err());
         }
         let mut other = data.clone();
-        other[8] = 7;
+        other[8] = 8;
         assert!(
             layout(&other, true)
                 .err()
                 .unwrap()
                 .to_string()
-                .contains("format version 7, supported 8: build the dictionary again")
+                .contains("format version 8, supported 9: build the dictionary again")
         );
         let mut foreign = data.clone();
         foreign[0] = b'X';
