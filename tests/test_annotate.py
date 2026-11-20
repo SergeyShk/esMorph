@@ -23,10 +23,14 @@ def columns(document):
 
 def test_annotate(morph, segmenter):
     document = segmenter.segment("Devuélvenos, dime la verdad del caso.\n\nDámelo.")
-    assert morph.annotate(document, context=False) is None
-    assert columns(document) == [
-        # The segmenter leaves the token one word: it is the verb
-        ("Devuélvenos", "devolver", "VERB"),
+    annotated = morph.annotate(document, context=False)
+    # The segmenter leaves the token one word: a new document has the words of the verb with
+    # clitics, and the given one stays as it was
+    assert annotated is not document
+    assert document.column("lemma") == [None] * 14
+    assert columns(annotated) == [
+        ("Devuelve", "devolver", "VERB"),
+        ("nos", "yo", "PRON"),
         (",", ",", "PUNCT"),
         # `di` alone is mostly the past of `dar`, `la` alone is mostly an article
         ("di", "decir", "VERB"),
@@ -42,11 +46,36 @@ def test_annotate(morph, segmenter):
         ("lo", "él", "PRON"),
         (".", ".", "PUNCT"),
     ]
-    feats = document.column("feats")
-    assert feats[2] == "Mood=Imp|Number=Sing|Person=2|VerbForm=Fin"
+    feats = annotated.column("feats")
+    assert feats[3] == "Mood=Imp|Number=Sing|Person=2|VerbForm=Fin"
     # A word without features has none
-    assert feats[6] is None
-    assert "3-4\tdime\t_" in document.to_conllu()
+    assert feats[7] is None
+    conllu = annotated.to_conllu()
+    assert "1-2\tDevuélvenos\t_" in conllu and "4-5\tdime\t_" in conllu
+    # A document whose tokens keep their words is annotated itself
+    plain = segmenter.segment("Dime la verdad.")
+    assert morph.annotate(plain) is plain
+    assert plain.column("lemma") == ["decir", "yo", "el", "verdad", "."]
+
+
+def test_words_that_cannot_change(morph):
+    # Heads refer to the IDs of words: the token keeps one word with the analysis of the whole
+    parsed = anyseg.read_conllu(
+        "1\tDevuélvenos\t_\t_\t_\t_\t0\troot\t_\tSpaceAfter=No\n2\t.\t_\t_\t_\t_\t1\tpunct\t_\t_\n\n"
+    )[0]
+    assert morph.annotate(parsed) is parsed
+    assert columns(parsed) == [("Devuélvenos", "devolver", "VERB"), (".", ".", "PUNCT")]
+    # So does one whose words have XPOS or MISC beyond the spaces, which other words lose
+    for xpos, misc in [("VMM02S0", "_"), ("_", "SpaceAfter=No|start_char=0")]:
+        read = anyseg.read_conllu(
+            f"1\tDevuélvenos\t_\t_\t{xpos}\t_\t_\t_\t_\t{misc}\n2\t.\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+        )[0]
+        assert morph.annotate(read) is read
+        assert read.column("lemma") == ["devolver", "."]
+    # A document without with_words keeps its words too
+    document = Document(["Devuélvenos", "."])
+    assert morph.annotate(document) is document
+    assert document.columns["lemma"] == ["devolver", "."]
 
 
 def test_clitics_after_verb(morph, segmenter):

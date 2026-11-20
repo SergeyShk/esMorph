@@ -1,7 +1,7 @@
 from collections.abc import Iterable, Mapping, Sequence
 from os import PathLike
 from pathlib import Path
-from typing import Literal, Protocol, final
+from typing import Literal, Protocol, TypeVar, final
 
 from ._types import DictionaryInfo
 
@@ -107,6 +107,9 @@ class _Document(Protocol):
         feats: list[str | None],
     ) -> object: ...
 
+# The document annotate returns: the given one or a new one of its kind
+_D = TypeVar("_D", bound=_Document)
+
 @final
 class Analyzer:
     """Morphological analyzer of Spanish"""
@@ -138,7 +141,7 @@ class Analyzer:
     def analyze_sentence(self, words: Iterable[str]) -> list[list[Analysis]]:
         """Analyses of the tokens of a sentence in context"""
 
-    def annotate(self, document: _Document, *, context: bool = True) -> None:
+    def annotate(self, document: _D, *, context: bool = True) -> _D:
         """Analysis of a document of the anySeg segmenter"""
 
     def is_known(self, word: str) -> bool:

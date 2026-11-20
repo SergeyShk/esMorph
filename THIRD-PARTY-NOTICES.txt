@@ -3,7 +3,7 @@ choice of licenses, the MIT license is the one used here, with the Unicode licen
 data.
 
 ====================================================================================================
-anyseg 0.3.0 (MIT): https://github.com/SergeyShk/anySeg
+anyseg 0.4.0 (MIT): https://github.com/SergeyShk/anySeg
 ====================================================================================================
 
 MIT License

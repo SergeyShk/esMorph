@@ -96,7 +96,7 @@ El analizador se crea una vez: carga el diccionario, y luego se puede usar en to
 (True, False)
 ```
 
-`analyze_many` analiza una lista de palabras; `lemmatize` da sus lemas, y `annotate` rellena los lemas, las categorías y los rasgos de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), ambos sin el GIL. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib.
+`analyze_many` analiza una lista de palabras; `lemmatize` da sus lemas, y `annotate` rellena los lemas, las categorías y los rasgos de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/) y da sus palabras a un verbo con clíticos que el segmentador deja entero, ambos sin el GIL. El analizador y los análisis se serializan con pickle, así que funcionan con `multiprocessing` y joblib.
 
 El comando `esmorph`, que se instala con el paquete, analiza texto de archivos y de la entrada estándar:
 

@@ -23,6 +23,31 @@ use pyo3::types::{
     PyWeakrefReference,
 };
 
+/// Tokens of one word that take the words of their analysis, by their indices, and the words
+type TokenWords = Vec<(usize, Vec<String>)>;
+
+/// Whether a document has XPOS or MISC beyond the spaces around a token, which other words lose
+fn keeps_columns(document: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = document.py();
+    for name in [intern!(py, "xpos"), intern!(py, "misc")] {
+        for value in document
+            .call_method1(intern!(py, "column"), (name,))?
+            .try_iter()?
+        {
+            let value = value?;
+            if value.is_none() {
+                continue;
+            }
+            let text: String = value.extract()?;
+            if name.to_str()? == "xpos" || text.split('|').any(|entry| !esmorph::space_entry(entry))
+            {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 /// How many words `analyze_many` and `lemmatize` read and analyze at a time without the GIL: the
 /// input is not copied whole, and Ctrl+C is checked between the chunks
 const CHUNK: usize = 8192;
@@ -1117,21 +1142,29 @@ impl Analyzer {
     /// Description:
     ///     Fills the columns lemma, upos and feats of the words of the document with the most
     ///     probable analysis of every word in the context of its sentence, as analyze_sentence
-    ///     orders the analyses of its tokens. The words of a multiword token are analyzed by the
-    ///     token: "dime" split into "di" and "me" is the imperative of "decir" with the pronoun
-    ///     "me", and clitics after a verb are pronouns. A token that the segmenter leaves as one
-    ///     word gets the analysis of the whole token: "devuélvenos" is the imperative of
-    ///     "devolver". Without context the analyses of a token are ordered as analyze orders
-    ///     them. A word without analyses gets its lower case as the lemma and the part of
-    ///     speech X; the earlier values of the columns are replaced. The document
-    ///     is an anyseg.Document or an object with the same column("form"), multiword_tokens (a
-    ///     token has text and words, a word has index), sentences (a sentence has words) and
-    ///     set_columns; without sentences the document is one sentence. The analysis goes without
-    ///     the GIL
+    ///     orders the analyses of its tokens, and returns the document. A token that the
+    ///     segmenter leaves as one word and whose analysis has several gets these words:
+    ///     "pónganselo" becomes the multiword token "pongan", "se", "lo", the imperative of
+    ///     "poner" and two pronouns. Then the analysis goes to a new document with these words
+    ///     (with_words), and the given one stays as it was; a document whose words cannot change
+    ///     (it has heads, enhanced dependencies or empty nodes, or no with_words) or would lose
+    ///     its xpos or misc other than the spaces after a token is filled itself, and such a
+    ///     token gets the analysis of the whole. The words of a multiword
+    ///     token are analyzed by the token: "dime" split into "di" and "me" is the imperative of
+    ///     "decir" with the pronoun "me", and clitics after a verb are pronouns. Without context
+    ///     the analyses of a token are ordered as analyze orders them. A word without analyses
+    ///     gets its lower case as the lemma and the part of speech X; the earlier values of the
+    ///     columns are replaced. The document is an anyseg.Document or an object with the same
+    ///     column("form"), multiword_tokens (a token has text and words, a word has index),
+    ///     sentences (a sentence has words) and set_columns; without sentences the document is
+    ///     one sentence. The analysis goes without the GIL
     ///
     /// Arguments:
     ///     document (anyseg.Document): The document
     ///     context (bool): Order the analyses by the context model
+    ///
+    /// Returns:
+    ///     anyseg.Document: The document filled, the given one or a new one with other words
     ///
     /// Raises:
     ///     ValueError: If the words of the multiword tokens or the first words of the sentences
@@ -1143,12 +1176,16 @@ impl Analyzer {
     /// Example:
     ///     >>> from anyseg import Segmenter
     ///     >>> from esmorph import Analyzer
-    ///     >>> document = Segmenter("es").segment("Dime la verdad.")
-    ///     >>> Analyzer().annotate(document)
+    ///     >>> document = Analyzer().annotate(Segmenter("es").segment("Pónganselo ya."))
     ///     >>> [(word.form, word.lemma, word.upos) for word in document.words]
-    ///     [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    ///     [('Pongan', 'poner', 'VERB'), ('se', 'él', 'PRON'), ('lo', 'él', 'PRON'), ('ya', 'ya', 'ADV'), ('.', '.', 'PUNCT')]
     #[pyo3(signature = (document, *, context = true))]
-    fn annotate(&self, py: Python<'_>, document: &Bound<'_, PyAny>, context: bool) -> PyResult<()> {
+    fn annotate<'py>(
+        &self,
+        py: Python<'py>,
+        document: &Bound<'py, PyAny>,
+        context: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let column = document_attribute(document, intern!(py, "column"))?;
         let set_columns = document_attribute(document, intern!(py, "set_columns"))?;
         let mut words = Words::new(&column.call1(("form",))?)?;
@@ -1200,12 +1237,6 @@ impl Analyzer {
         }
         bounds.push(tokens.len());
         bounds.dedup();
-        // A part of speech, features and a lemma are one string object for all their words, and
-        // the columns are filled by chunks: a large document takes much less memory
-        let mut strings: HashMap<&str, Bound<'_, PyString>> = HashMap::new();
-        let mut lemma_strings: HashMap<String, Bound<'_, PyString>> = HashMap::new();
-        let (lemmas, parts, feats) = (PyList::empty(py), PyList::empty(py), PyList::empty(py));
-        let mut fields = Vec::with_capacity(CHUNK);
         // Sentences by pieces of about CHUNK tokens by the parts the model analyzes, and whether a
         // piece starts its sentence
         let mut pieces: Vec<(Range<usize>, bool)> = Vec::new();
@@ -1215,53 +1246,38 @@ impl Analyzer {
                 pieces.push((sentence[0] + range.start..sentence[0] + range.end, start));
             }
         }
-        let mut piece = 0;
-        while piece < pieces.len() {
-            // Pieces of about CHUNK words: Ctrl+C is checked between them
-            let first = tokens[pieces[piece].0.start].1.start;
-            py.detach(|| -> Result<(), esmorph::Error> {
-                while piece < pieces.len() && tokens[pieces[piece].0.start].1.start - first < CHUNK
-                {
-                    let (range, start) = pieces[piece].clone();
-                    let part: Vec<(&str, &[String])> = (tokens[range].iter())
-                        .map(|(text, range)| {
-                            let words = &forms[range.clone()];
-                            (text.unwrap_or(words[0].as_str()), words)
-                        })
-                        .collect();
-                    (self.dictionary).sentence_fields(&part, context, start, &mut fields)?;
-                    piece += 1;
-                }
-                Ok(())
-            })
-            .map_err(|err| PyValueError::new_err(err.to_string()))?;
-            for field in fields.drain(..) {
-                let mut string = |text| {
-                    (strings.entry(text))
-                        .or_insert_with(|| PyString::new(py, text))
-                        .clone()
-                };
-                parts.append(string(field.pos))?;
-                feats.append(field.feats.map(string))?;
-                let lemma = match lemma_strings.get(&field.lemma) {
-                    Some(lemma) => lemma.clone(),
-                    None => {
-                        let lemma = PyString::new(py, &field.lemma);
-                        lemma_strings.insert(field.lemma, lemma.clone());
-                        lemma
-                    }
-                };
-                lemmas.append(lemma)?;
+        // A document that cannot take other words keeps its own: an object without with_words,
+        // a document with heads, enhanced dependencies or empty nodes
+        let split = document.hasattr(intern!(py, "with_words"))?;
+        let (mut columns, words) = self.columns(py, &forms, &tokens, &pieces, context, split)?;
+        let mut annotated = document.clone();
+        // Other words would lose the XPOS and MISC of a document read from CoNLL-U
+        if !words.is_empty() && keeps_columns(document)? {
+            columns = self
+                .columns(py, &forms, &tokens, &pieces, context, false)?
+                .0;
+        } else if !words.is_empty() {
+            let mapping = PyDict::new(py);
+            for (token, parts) in words {
+                mapping.set_item(token, parts)?;
             }
-            py.check_signals()?;
+            match document.call_method1(intern!(py, "with_words"), (mapping,)) {
+                Ok(other) => annotated = other,
+                Err(err) if err.is_instance_of::<PyValueError>(py) => {
+                    columns = self
+                        .columns(py, &forms, &tokens, &pieces, context, false)?
+                        .0;
+                }
+                Err(err) => return Err(err),
+            }
         }
-        drop((forms, tokens, lemma_strings));
-        let columns = PyDict::new(py);
-        columns.set_item(intern!(py, "lemma"), lemmas)?;
-        columns.set_item(intern!(py, "upos"), parts)?;
-        columns.set_item(intern!(py, "feats"), feats)?;
+        drop((forms, tokens));
+        let set_columns = match annotated.is(document) {
+            true => set_columns,
+            false => annotated.getattr(intern!(py, "set_columns"))?,
+        };
         set_columns.call((), Some(&columns))?;
-        Ok(())
+        Ok(annotated)
     }
 
     /// Whether the dictionary has the word form
@@ -1383,6 +1399,77 @@ impl Analyzer {
 }
 
 impl Analyzer {
+    /// The columns lemma, upos and feats of the words of the tokens of a document by the pieces of
+    /// its sentences, and with `split` the tokens of one word whose analysis has several, by their
+    /// indices, and the words, which the columns follow
+    fn columns<'py>(
+        &self,
+        py: Python<'py>,
+        forms: &[String],
+        tokens: &[(Option<&str>, Range<usize>)],
+        pieces: &[(Range<usize>, bool)],
+        context: bool,
+        split: bool,
+    ) -> PyResult<(Bound<'py, PyDict>, TokenWords)> {
+        // A part of speech, features and a lemma are one string object for all their words, and
+        // the columns are filled by chunks: a large document takes much less memory
+        let mut strings: HashMap<&str, Bound<'_, PyString>> = HashMap::new();
+        let mut lemma_strings: HashMap<String, Bound<'_, PyString>> = HashMap::new();
+        let (lemmas, parts, feats) = (PyList::empty(py), PyList::empty(py), PyList::empty(py));
+        let mut fields = Vec::with_capacity(CHUNK);
+        let mut words = Vec::new();
+        let mut piece = 0;
+        while piece < pieces.len() {
+            // Pieces of about CHUNK words: Ctrl+C is checked between them
+            let first = tokens[pieces[piece].0.start].1.start;
+            py.detach(|| -> Result<(), esmorph::Error> {
+                while piece < pieces.len() && tokens[pieces[piece].0.start].1.start - first < CHUNK
+                {
+                    let (range, start) = pieces[piece].clone();
+                    let part: Vec<(&str, &[String])> = (tokens[range.clone()].iter())
+                        .map(|(text, range)| {
+                            let words = &forms[range.clone()];
+                            (text.unwrap_or(words[0].as_str()), words)
+                        })
+                        .collect();
+                    let known = words.len();
+                    let found = split.then_some(&mut words);
+                    (self.dictionary).sentence_fields(&part, context, start, &mut fields, found)?;
+                    for (token, _) in &mut words[known..] {
+                        *token += range.start;
+                    }
+                    piece += 1;
+                }
+                Ok(())
+            })
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+            for field in fields.drain(..) {
+                let mut string = |text| {
+                    (strings.entry(text))
+                        .or_insert_with(|| PyString::new(py, text))
+                        .clone()
+                };
+                parts.append(string(field.pos))?;
+                feats.append(field.feats.map(string))?;
+                let lemma = match lemma_strings.get(&field.lemma) {
+                    Some(lemma) => lemma.clone(),
+                    None => {
+                        let lemma = PyString::new(py, &field.lemma);
+                        lemma_strings.insert(field.lemma, lemma.clone());
+                        lemma
+                    }
+                };
+                lemmas.append(lemma)?;
+            }
+            py.check_signals()?;
+        }
+        let columns = PyDict::new(py);
+        columns.set_item(intern!(py, "lemma"), lemmas)?;
+        columns.set_item(intern!(py, "upos"), parts)?;
+        columns.set_item(intern!(py, "feats"), feats)?;
+        Ok((columns, words))
+    }
+
     /// An analyzer of the dictionary of the package or of the file at `path` with own words
     /// `words`: they go to a copy of the dictionary of the analyzer of the file that the process
     /// shares
