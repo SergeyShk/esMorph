@@ -77,6 +77,8 @@ pub struct Builder {
     tag_frequencies: HashMap<(String, String), u32>,
     /// Weights of the context model
     context: Vec<u8>,
+    /// The words of the diminutives by their lemma and part of speech
+    diminutives: BTreeMap<(String, String), String>,
 }
 
 /// Place of an analysis in the list of its word form
@@ -612,7 +614,37 @@ impl Builder {
             guesses,
             guess_records,
             context: self.context.clone(),
+            diminutives: self.diminutives_text(),
         }))
+    }
+
+    /// Marks a lexeme as a diminutive of a word: `casita` of `casa`; the word is in lower case. A
+    /// lexeme that the dictionary does not have is left out
+    pub fn add_diminutive(&mut self, lemma: &str, pos: &str, base: &str) -> Result<(), Error> {
+        for field in [lemma, pos, base] {
+            if field.is_empty() || field.contains(['\t', '\n']) {
+                return Err(Error::Build(format!(
+                    "wrong field of a diminutive {field:?}"
+                )));
+            }
+        }
+        if base.chars().flat_map(char::to_lowercase).ne(base.chars()) {
+            return Err(Error::Build(format!("word {base:?} is not in lower case")));
+        }
+        self.diminutives
+            .insert((lemma.to_owned(), pos.to_owned()), base.to_owned());
+        Ok(())
+    }
+
+    /// The section of the diminutives: only lexemes that the dictionary has
+    fn diminutives_text(&self) -> String {
+        let mut text = String::new();
+        for ((lemma, pos), base) in &self.diminutives {
+            if self.lexemes.contains_key(&(lemma.clone(), pos.clone())) {
+                text.push_str(&format!("{lemma}\t{pos}\t{base}\n"));
+            }
+        }
+        text
     }
 }
 

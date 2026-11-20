@@ -44,6 +44,10 @@ class Analysis:
     def source(self) -> str:
         """Where the analysis comes from: "dictionary", "clitics", "rule" or "guess\""""
 
+    @property
+    def diminutive_of(self) -> str | None:
+        """The word of which the lemma is a diminutive"""
+
     def forms(self) -> list[Analysis]:
         """Forms of the lexeme"""
 

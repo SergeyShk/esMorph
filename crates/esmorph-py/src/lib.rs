@@ -157,6 +157,10 @@ enum AnalysisTag {
 ///         dictionary with clitics, "rule" for a token out of the dictionary (punctuation, a
 ///         symbol, a number, a Roman numeral, a name) and for the name or the Roman numeral of a
 ///         word with a capital letter that the dictionary has, "guess" for a guessed lowercase word
+///     diminutive_of (str | None): The word of which the lemma is a diminutive, as Wiktionary
+///         gives it in the first sense of the word: "casita" and "casitas" are of "casa",
+///         "poquito" of "poco"; None for another word and for a diminutive that is mostly a word
+///         of its own ("señorita", "granito")
 ///
 /// Example:
 ///     >>> from esmorph import Analyzer
@@ -166,6 +170,8 @@ enum AnalysisTag {
 ///     >>> analysis = Analyzer().analyze("dámelo")[0]
 ///     >>> analysis.lemma, analysis.pos, analysis.words
 ///     ('dar', 'VERB', ('da', 'me', 'lo'))
+///     >>> Analyzer().analyze("casitas")[0].diminutive_of
+///     'casa'
 #[pyclass(frozen, module = "esmorph")]
 struct Analysis {
     #[pyo3(get)]
@@ -290,6 +296,14 @@ impl Analysis {
         } else {
             PyTuple::new(py, &self.words)
         }
+    }
+
+    #[getter]
+    fn diminutive_of(&self) -> Option<String> {
+        let analyzer = self.handle.analyzer.get();
+        (analyzer.dictionary)
+            .diminutive(&self.lemma, &self.tag().pos)
+            .map(str::to_owned)
     }
 
     /// Forms of the lexeme

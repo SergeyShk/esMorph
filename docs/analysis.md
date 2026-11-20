@@ -34,6 +34,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 | `prob` | `float` | Share of the analysis among the analyses of the word; it sums to 1 over all of them. From [`analyze_sentence`](analyzer.md#analyze_sentence) - the score of the context model in the sentence |
 | `words` | `tuple[str, ...]` | Words of the token: a verb and its clitics, the words of a contraction (`del`, `al`, the older `desta`), a number and its sign or unit (`60%`), a unit and its number (`km.24`), or the word itself; the analysis describes the first of them |
 | `source` | `str` | Where the analysis comes from: `"dictionary"` - the word form is in the dictionary, `"clitics"` - a verb of the dictionary with [clitics](#clitics), `"rule"` - an [analysis by rule](#rules), `"guess"` - a [guessed analysis](#guess) of an unknown word |
+| `diminutive_of` | `str \| None` | The word of which the lemma is a [diminutive](#diminutives): `casa` for `casitas`; `None` for other words |
 
 ## Parts of speech and features { #ud }
 
@@ -63,6 +64,25 @@ Analyses go from the most probable to the least. `prob` is the share of an analy
 
     ```
     [('casa', 'NOUN', 0.99), ('casar', 'VERB', 0.01)]
+    ```
+
+## Diminutives { #diminutives }
+
+A diminutive keeps its own lemma, as in the treebanks: `casitas` is a form of `casita`. `diminutive_of` gives the word it is a diminutive of, as Wiktionary gives it in the first sense of the word: `casita` is a diminutive of `casa`, `poquito` of `poco`, `ahorita` of `ahora`. A word that is mostly a word of its own, though Wiktionary also has it as a diminutive, has none: `señorita`, `granito`. About two thousand nouns, adjectives and adverbs of the dictionary have it.
+
+=== "Code"
+
+    ``` python
+    [
+        morph.analyze(word)[0].diminutive_of
+        for word in ("casitas", "poquito", "ahorita", "señorita", "granito")
+    ]
+    ```
+
+=== "Result"
+
+    ```
+    ['casa', 'poco', 'ahora', None, None]
     ```
 
 ## Words with clitics { #clitics }

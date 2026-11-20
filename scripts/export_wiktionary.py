@@ -12,7 +12,8 @@ Description:
     form of a verb (`trujo` of `traer`), `spoken:` with the standard form of a spelling as the word
     sounds (`mu` of `muy`), `extra`, `extra-variant` and `extra-old` for a main form, a variant and
     an old form of the Spanish edition and `_` for a main form; the place is the number of the row in the table of its
-    lexeme, `_` for a row that only another entry gives. Only the standard library is needed.
+    lexeme, `_` for a row that only another entry gives. `diminutives.tsv` gives the lemma and the part of speech of
+    a diminutive and the word it is a diminutive of (`casita` of `casa`). Only the standard library is needed.
 
 Example:
     uv run python scripts/export_wiktionary.py target/wiktionary
@@ -133,6 +134,8 @@ CLITICS_AFTER = re.compile(r"(?:me|te|se|nos|os|lo|la|le|los|las|les)+")
 VOWELS = re.compile(r"[aeiouáéíóú]+")
 # A Roman numeral, which the analyzer reads by a rule: `xix` is no noun
 ROMAN = re.compile(r"^(?=[ivxlcdm])m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$")
+# Parts of speech of the diminutives that the dictionary gives the word of
+DIMINUTIVES = {"ADJ", "ADV", "NOUN"}
 # Tags of a spelling that shows how a word sounds: `güeno` of `bueno`, `er` of `el`
 SPOKEN_TAGS = {"eye-dialect", "pronunciation-spelling"}
 # Tags of a verb form of an older or a nonstandard language: `trujo` of `traer`, `vido` of `vio`
@@ -1088,6 +1091,82 @@ def extra_rows(
     return {row: kinds[kind(row, variants, closed, {}, old)] for row in found}
 
 
+def diminutive_senses(
+    source: Callable[[], Iterable[dict]], only: bool = False
+) -> tuple[dict[tuple[str, str], str], set[tuple[str, str]], set[tuple[str, str]]]:
+    """
+    Diminutives of the entries of a snapshot
+
+    Description:
+        A word is a diminutive if the first of its own senses, in the order of its etymologies, is
+        a sense "diminutive of": `casita` of `casa`, while `señorita` ("young woman" first) and
+        `granito` (granite first) are words of their own. Own senses are no form or spelling of
+        another word. A sense of a diminutive is one with the tag `diminutive` and `form_of`, or
+        with `diminutive_of` of the Spanish edition (`eswiktionary.sense`). With `only` every own
+        sense must be one: the Spanish edition puts the sense of a diminutive first also for a word
+        of its own (`pañuelo` of `paño`)
+
+    Arguments:
+        source (Callable[[], Iterable[dict]]): The entries of a snapshot
+        only (bool): A diminutive has no other own senses
+
+    Returns:
+        tuple[dict[tuple[str, str], str], set[tuple[str, str]], set[tuple[str, str]]]: The words
+        of the diminutives by their word and part of speech, the words and parts of speech with a
+        sense of a diminutive at all, and those with an own sense
+    """
+    first: dict[tuple[str, str], str | None] = {}
+    other, diminutives = set(), set()
+    for entry in source():
+        word, pos = clean(entry["word"]), PARTS_OF_SPEECH.get(entry["pos"])
+        if not word or pos not in DIMINUTIVES:
+            continue
+        for sense in entry["senses"]:
+            tags = set(sense["tags"])
+            bases = sense["form_of"] if "diminutive" in tags else sense.get("diminutive_of", [])
+            if bases:
+                diminutives.add((word, pos))
+            elif sense["form_of"] or sense["alt_of"]:
+                continue
+            else:
+                other.add((word, pos))
+            if (word, pos) not in first:
+                base = clean(bases[0]) if bases else None
+                first[(word, pos)] = base if base != word else None
+    found = {key: base for key, base in first.items() if base and not (only and key in other)}
+    return found, diminutives, set(first)
+
+
+def feminine_diminutives(
+    bases: dict[tuple[str, str], str], own: set[tuple[str, str]], table: Iterable[conventions.Row]
+) -> dict[tuple[str, str], str]:
+    """
+    The words of the feminine nouns of diminutives, which are lemmas of their own (`form_of_rows`)
+
+    Arguments:
+        bases (dict[tuple[str, str], str]): The words of the diminutives
+        own (set[tuple[str, str]]): Words and parts of speech with an own sense in an edition
+        table (Iterable[conventions.Row]): Rows of the export
+
+    Returns:
+        dict[tuple[str, str], str]: The words of the feminines without an own sense, by their
+        lemma and part of speech: the feminine of the word of the masculine if the export has one
+        (`gatita` of `gata`), else that word (`pobrecita` of `pobre`)
+    """
+    # The first feminine in the order of letters: a word may have several (`abuela`, `agüela`)
+    feminines: dict[tuple[str, str], str] = {}
+    for lemma, pos, form, text in sorted(table):
+        if text == "Gender=Fem|Number=Sing" and form != lemma:
+            feminines.setdefault((lemma, pos), form)
+    found = {}
+    for (lemma, pos), form in feminines.items():
+        key = (form, pos)
+        if pos == "NOUN" and (lemma, pos) in bases and key not in bases and key not in own:
+            base = bases[(lemma, pos)]
+            found[key] = feminines.get((base, pos), base)
+    return found
+
+
 def genderless(table: set[conventions.Row]) -> set[conventions.Row]:
     """
     Rows of nouns and adjectives without a gender that a row of the same form names
@@ -1133,6 +1212,20 @@ def export(output: Path) -> int:
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
             "\t".join((*row, kinds[row], rank(row, ranks))) + "\n" for row in sorted(kinds)
+        )
+    # The English edition decides for a word it knows as a diminutive
+    bases, english, own = diminutive_senses(lambda: snapshot_entries(path))
+    spanish, _, own_spanish = diminutive_senses(
+        lambda: eswiktionary.entries(output / "raw" / extra_name), only=True
+    )
+    bases |= {key: base for key, base in spanish.items() if key not in english}
+    bases |= feminine_diminutives(bases, own | own_spanish, kinds)
+    lexemes = {(lemma, pos) for lemma, pos, _, _ in kinds}
+    with (output / "diminutives.tsv").open("w", encoding="utf-8", newline="\n") as out:
+        out.writelines(
+            f"{lemma}\t{pos}\t{base}\n"
+            for (lemma, pos), base in sorted(bases.items())
+            if (lemma, pos) in lexemes
         )
     meta = {
         "source": "Wiktionary",

@@ -184,6 +184,9 @@ pub struct Dictionary {
     context: Arc<OnceLock<Result<context::Context, String>>>,
     /// Own words of the copy (`Dictionary::with_words`)
     own_words: Arc<own::OwnWords>,
+    /// Places of the fields of every line of the section of diminutives: the starts of the lemma,
+    /// the part of speech and the word, and the end
+    diminutives: Arc<[[u32; 4]]>,
 }
 
 /// The features of every UD tag in CoNLL-U, `None` without them
@@ -351,6 +354,7 @@ impl Dictionary {
             feats: Arc::default(),
             context: Arc::default(),
             own_words: Arc::default(),
+            diminutives: diminutive_fields(text(&layout.diminutives)?)?,
             layout,
             storage: Arc::clone(&storage),
         };
@@ -390,6 +394,29 @@ impl Dictionary {
             })
             .collect();
         Ok(dictionary)
+    }
+
+    /// The word of which the lexeme of an analysis is a diminutive, as Wiktionary gives it in the
+    /// first sense of the word: `casita` and `casitas` are of `casa`, `poquito` of `poco`, while
+    /// `señorita` and `granito`, mostly words of their own, are of none
+    pub fn diminutive_of(&self, analysis: &Analysis) -> Option<&str> {
+        let tag = self.ud_tag(analysis.ud)?;
+        self.diminutive(&analysis.lemma, tag.pos())
+    }
+
+    /// The word of which a lexeme of a lemma and a part of speech is a diminutive
+    #[doc(hidden)]
+    pub fn diminutive(&self, lemma: &str, pos: &str) -> Option<&str> {
+        let text = &self.storage.bytes()[self.layout.diminutives.clone()];
+        let field = |start: u32, end: u32| &text[start as usize..end as usize];
+        let at = (self.diminutives)
+            .binary_search_by(|&[lemma_at, pos_at, base_at, _]| {
+                (field(lemma_at, pos_at - 1), field(pos_at, base_at - 1))
+                    .cmp(&(lemma.as_bytes(), pos.as_bytes()))
+            })
+            .ok()?;
+        let [_, _, base_at, end] = self.diminutives[at];
+        std::str::from_utf8(field(base_at, end)).ok()
     }
 
     /// Description of the source of the dictionary
@@ -1826,6 +1853,39 @@ fn spelling_list(lists: &[u32]) -> Option<(SpellingList<'_>, &[u32])> {
     Some((SpellingList { numbers, wide }, rest))
 }
 
+/// Places of the fields of the lines of the section of diminutives: lines of a lemma, a part of
+/// speech and a word, ordered by lemma and part of speech, each ending with a line break
+fn diminutive_fields(text: &str) -> Result<Arc<[[u32; 4]]>, Error> {
+    let wrong = || Error::Format("wrong section of diminutives".into());
+    if !text.is_empty() && !text.ends_with('\n') {
+        return Err(wrong());
+    }
+    let mut lines = Vec::new();
+    let mut previous: Option<(&str, &str)> = None;
+    let mut start = 0;
+    for line in text.split_terminator('\n') {
+        let mut fields = line.split('\t');
+        let (Some(lemma), Some(pos), Some(base), None) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
+            return Err(wrong());
+        };
+        if [lemma, pos, base].iter().any(|field| field.is_empty())
+            || previous.is_some_and(|previous| previous >= (lemma, pos))
+        {
+            return Err(wrong());
+        }
+        previous = Some((lemma, pos));
+        // The section is part of a file below 2 GiB
+        let at = |offset: usize| (start + offset) as u32;
+        let pos_at = lemma.len() + 1;
+        let base_at = pos_at + pos.len() + 1;
+        lines.push([at(0), at(pos_at), at(base_at), at(line.len())]);
+        start += line.len() + 1;
+    }
+    Ok(lines.into())
+}
+
 /// Automaton of a section of a dictionary. A damaged automaton loads without errors but panics when
 /// walked; the checksum of the file catches damage, and the address of the root is checked here:
 /// `Fst::new` checks it only for an empty automaton
@@ -3235,6 +3295,53 @@ pub(crate) mod tests {
             .into_iter()
             .map(|row| row.1)
             .collect()
+    }
+
+    #[test]
+    fn diminutives() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        for &(lemma, pos, form, feats) in FORMS {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        for (form, number) in [("casita", "Sing"), ("casitas", "Plur")] {
+            let feats = format!("Gender=Fem|Number={number}");
+            builder.add_form("casita", "NOUN", form, &feats).unwrap();
+        }
+        builder.add_diminutive("casita", "NOUN", "casa").unwrap();
+        // A lexeme that the dictionary does not have is left out
+        builder.add_diminutive("gatito", "NOUN", "gato").unwrap();
+        assert!(builder.add_diminutive("casita", "NOUN", "Casa").is_err());
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        assert_eq!(
+            dictionary.diminutive_of(&dictionary.analyze("casitas")[0]),
+            Some("casa")
+        );
+        assert_eq!(
+            dictionary.diminutive_of(&dictionary.analyze("casas")[0]),
+            None
+        );
+        assert_eq!(dictionary.diminutive("casita", "ADJ"), None);
+        assert_eq!(dictionary.diminutive("gatito", "NOUN"), None);
+    }
+
+    #[test]
+    fn wrong_section_of_diminutives() {
+        assert!(diminutive_fields("").unwrap().is_empty());
+        assert_eq!(
+            diminutive_fields("a\tNOUN\tb\nc\tNOUN\td\n").unwrap().len(),
+            2
+        );
+        for text in [
+            "a\tNOUN\tb",
+            "a\tNOUN\n",
+            "a\tNOUN\tb\tc\n",
+            "\tNOUN\tb\n",
+            "c\tNOUN\td\na\tNOUN\tb\n",
+            "a\tNOUN\tb\na\tNOUN\tc\n",
+        ] {
+            assert!(diminutive_fields(text).is_err(), "{text:?}");
+        }
     }
 
     #[test]

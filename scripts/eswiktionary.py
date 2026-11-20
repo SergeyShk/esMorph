@@ -58,6 +58,11 @@ NOMINAL_TAGS = {
 # A sense that only spells another word: "Variante obsoleta de mano", "Grafía alternativa de güija";
 # the word ends the phrase, unlike in a definition: "Variante de la papa, de menor tamaño"
 SPELLING = re.compile(r"^(?:Variante|Grafía)\b[^.,;:()]*? de ([^\s.,;:()]+)(?=\s*(?:[.,;:(]|$))")
+# A sense of a diminutive: "Diminutivo de casa", "Diminutivo afectivo de poco", "Diminutivo del
+# adjetivo bueno"; the word may carry the number of its sense, as `pelota₁`
+DIMINUTIVE = re.compile(
+    r"^Diminutivo (?:\w+ )?de(?:l (?:adjetivo|adverbio|sustantivo)(?: de \w+)?)? ([^\s,;:().₀-₉]+)"
+)
 # Labels of such a sense in the tags of the English edition
 SPELLING_TAGS = (
     ("anticuad", "archaic"),
@@ -141,8 +146,9 @@ def sense(record: dict, pos: str, gender: set[str]) -> dict | None:
         gender (set[str]): Genders of its entry
 
     Returns:
-        dict | None: Tags, `form_of` and `alt_of`; `None` for a form whose gloss names no grammar.
-        A form of a noun has the gender of its entry if its gloss names none
+        dict | None: Tags, `form_of` and `alt_of`, and `diminutive_of` with the word of a sense
+        of a diminutive; `None` for a form whose gloss names no grammar. A form of a noun has the
+        gender of its entry if its gloss names none
     """
     tags = {OTHER_NAMES.get(tag, tag) for tag in record["tags"]} - {"form-of"}
     # The genders of a sense of an adjective tell its use as a noun, not the gender of the word
@@ -162,11 +168,12 @@ def sense(record: dict, pos: str, gender: set[str]) -> dict | None:
     if spelling:
         head = gloss[: spelling.start(1)]
         tags |= {tag for text, tag in SPELLING_TAGS if text in head}
+    diminutive = DIMINUTIVE.match(gloss)
     return {
         "tags": sorted(tags | gender),
         "form_of": [],
         "alt_of": [spelling[1]] if spelling else [],
-    }
+    } | ({"diminutive_of": [diminutive[1]]} if diminutive else {})
 
 
 def entry(record: dict) -> dict | None:
