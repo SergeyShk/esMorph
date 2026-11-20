@@ -1479,7 +1479,7 @@ mod tests {
     fn formats() {
         let expected = "Di\tdecir\tVERB\tMood=Imp|Number=Sing|Person=2|VerbForm=Fin\t1\n\
              me\tyo\tPRON\tCase=Dat|Number=Sing|Person=1|PrepCase=Npr|PronType=Prs\t0.45766\n\
-             la\tel\tDET\tDefinite=Def|Gender=Fem|Number=Sing|PronType=Art\t0.9774450451099099\n\
+             la\tel\tDET\tDefinite=Def|Gender=Fem|Number=Sing|PronType=Art\t0.9774460451079099\n\
              verdad\tverdad\tNOUN\tGender=Fem|Number=Sing\t0.999997\n\
              .\t.\tPUNCT\tPunctType=Peri\t1\n\n";
         assert_eq!(

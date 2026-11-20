@@ -1159,7 +1159,7 @@ pub(crate) mod tests {
         let dictionary = Dictionary::bundled().unwrap();
         for (sentence, wanted) in [
             (&["Mira", "lo", "que", "has", "hecho", "."][..], "VERB"),
-            (&["Señor", ",", "venga", "."], "NOUN"),
+            (&["Hombre", ",", "ven", "."], "NOUN"),
             (&["Pobre", "mujer", "."], "ADJ"),
         ] {
             for lead in ["—", "--", "«", "(", "¡", "\""] {

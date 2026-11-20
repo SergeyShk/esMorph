@@ -26,7 +26,7 @@ Description:
     speech alone, whose lemmas and features are automatic. The
     parts of speech of GSD are first brought to the conventions of AnCora and the dictionary by the
     gold syntax (`gsd_pos`), and the forms the two treebanks tag differently are left out of its
-    loss. The unit is a surface token: a contraction or a verb with clitics is one token, and its
+    loss, as is `pesar` of "a pesar de", which a rule of the analyzer reads. The unit is a surface token: a contraction or a verb with clitics is one token, and its
     gold word is the first one. The model is a BiLSTM over the features of a token (shape, word,
     endings, tags of its analyses) that scores every analysis by a dot product with the vector of
     the token. The epoch is chosen by "all" on the development part of AnCora, scored by gold words
@@ -77,11 +77,11 @@ except ImportError:
 DEV_FILES = {
     "UD_Spanish-AnCora": (
         "es_ancora-ud-dev.conllu",
-        "1a132068062edf2654fb45b41cd4c59ba7e5c18e7c5f642ed5a9cc351fd9f0fe",
+        "83033c89b18594a8c7d1571a0f259721714fd989974ca51bd9776bc69faba40c",
     ),
     "UD_Spanish-GSD": (
         "es_gsd-ud-dev.conllu",
-        "704fb19afc0a34cff476e1a70351b7026c4364f862e8e8388b02873852567c22",
+        "5c701ddde2de7ac10032665dcfb8ea39316584ec032ac46ed44a4a567afec82f",
     ),
 }
 CORE = ("Number", "Gender", "Person", "Tense", "Mood", "VerbForm")
@@ -205,8 +205,7 @@ def gsd_pos(token: Token, first: bool, before: str, after: str) -> str:
        `estar` is ADJ;
     6. a NOUN with a capital letter and the rest in lower case, not first in the sentence, is
        PROPN;
-    7. `ambos` is NUM, `pesar` and `partir` of "a ... de" are NOUN, `debido` before `a` is ADJ,
-       `cómo` is PRON
+    7. `ambos` is NUM, `partir` of "a partir de" is NOUN, `debido` before `a` is ADJ
 
     Arguments:
         token (Token): Token
@@ -236,13 +235,30 @@ def gsd_pos(token: Token, first: bool, before: str, after: str) -> str:
         return "PROPN"
     if low == "ambos":
         return "NUM"
-    if low in ("pesar", "partir") and before == "a" and after in ("de", "del"):
+    if low == "partir" and before == "a" and after in ("de", "del"):
         return "NOUN"
     if low == "debido" and after in ("a", "al"):
         return "ADJ"
-    if low == "cómo":
-        return "PRON"
     return upos
+
+
+def locution_words(sentence: list[Token]) -> list[Token]:
+    """
+    Tokens of `pesar` in "a pesar de": the analyzer chooses the infinitive there by a rule, and the
+    model, left without them, does not take every `pesar` for a verb (`con profundo pesar`)
+
+    Arguments:
+        sentence (list[Token]): Sentence
+
+    Returns:
+        list[Token]: The tokens
+    """
+    lower = ["", *(token.text.lower() for token in sentence), ""]
+    return [
+        token
+        for k, token in enumerate(sentence)
+        if lower[k + 1] == "pesar" and lower[k] in ("a", "á") and lower[k + 2] in ("de", "del")
+    ]
 
 
 def gsd_parts(sents: list[list[Token]]) -> list[str]:
@@ -428,6 +444,7 @@ class Part:
             excluded (frozenset[str]): Forms in lower case left out of the loss (`divergent`)
         """
         texts = [token for sentence in sents for token in sentence]
+        locutions = {id(token) for sentence in sents for token in locution_words(sentence)}
         self.forms = [token.text for token in texts]
         self.sent_off = np.cumsum([0] + [len(sentence) for sentence in sents])
         upos = gsd_parts(sents) if gsd else [token.words[0].upos for token in texts]
@@ -441,7 +458,9 @@ class Part:
         for i, (token, pos, found) in enumerate(zip(texts, upos, self.candidates, strict=True)):
             host = token.words[0]
             self.fallback[i] = match("", token.text.lower(), {}, host)
-            skip = token.text == token.text.lower() and normal(token.text) in excluded
+            skip = (token.text == token.text.lower() and normal(token.text) in excluded) or (
+                id(token) in locutions
+            )
             found_bits = [
                 match(p, lemma, feats, host) | (MAPPED if p == pos else 0)
                 for p, lemma, feats, _, _ in found
