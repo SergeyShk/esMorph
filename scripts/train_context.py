@@ -77,11 +77,11 @@ except ImportError:
 DEV_FILES = {
     "UD_Spanish-AnCora": (
         "es_ancora-ud-dev.conllu",
-        "1a132068062edf2654fb45b41cd4c59ba7e5c18e7c5f642ed5a9cc351fd9f0fe",
+        "83033c89b18594a8c7d1571a0f259721714fd989974ca51bd9776bc69faba40c",
     ),
     "UD_Spanish-GSD": (
         "es_gsd-ud-dev.conllu",
-        "704fb19afc0a34cff476e1a70351b7026c4364f862e8e8388b02873852567c22",
+        "5c701ddde2de7ac10032665dcfb8ea39316584ec032ac46ed44a4a567afec82f",
     ),
 }
 CORE = ("Number", "Gender", "Person", "Tense", "Mood", "VerbForm")
@@ -205,8 +205,7 @@ def gsd_pos(token: Token, first: bool, before: str, after: str) -> str:
        `estar` is ADJ;
     6. a NOUN with a capital letter and the rest in lower case, not first in the sentence, is
        PROPN;
-    7. `ambos` is NUM, `pesar` and `partir` of "a ... de" are NOUN, `debido` before `a` is ADJ,
-       `cómo` is PRON
+    7. `ambos` is NUM, `partir` of "a partir de" is NOUN, `debido` before `a` is ADJ
 
     Arguments:
         token (Token): Token
@@ -236,12 +235,10 @@ def gsd_pos(token: Token, first: bool, before: str, after: str) -> str:
         return "PROPN"
     if low == "ambos":
         return "NUM"
-    if low in ("pesar", "partir") and before == "a" and after in ("de", "del"):
+    if low == "partir" and before == "a" and after in ("de", "del"):
         return "NOUN"
     if low == "debido" and after in ("a", "al"):
         return "ADJ"
-    if low == "cómo":
-        return "PRON"
     return upos
 
 

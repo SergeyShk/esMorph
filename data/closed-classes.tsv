@@ -63,9 +63,7 @@ cierto	DET	cierto	Gender=Masc|Number=Sing|PronType=Ind
 cierto	DET	ciertos	Gender=Masc|Number=Plur|PronType=Ind
 cinco	NUM	cinco	Number=Plur|NumType=Card
 cincuenta	NUM	cincuenta	Number=Plur|NumType=Card
-como	ADP	como	_
 como	ADV	como	PronType=Rel
-como	CCONJ	como	_
 como	SCONJ	como	_
 con	ADP	con	_
 conforme	SCONJ	conforme	_

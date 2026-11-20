@@ -22,19 +22,19 @@ from pathlib import Path
 from conventions import format_features, parse_features
 from export_wiktionary import download
 
-RELEASE = "r2.18"
+RELEASE = "r2.19"
 LICENSES = {"UD_Spanish-AnCora": "CC BY 4.0", "UD_Spanish-GSD": "CC BY-SA 4.0"}
 # Treebank, commit of the release, file and its SHA-256
 SOURCES = {
     "UD_Spanish-AnCora": (
-        "197cca385e0e7db1b1fe26a5772dade1b6fbbee8",
+        "bdb41b5f95db8e0a64217fcb8d15cd3ad38c34db",
         "es_ancora-ud-train.conllu",
-        "47b6fc49d6ed48a016e7fa5ad9f5c7ecf3ec21e9db005df3ea14d10f07c6deb6",
+        "acb96e0b3d28d8ae0288e0fb0a2d5243bd352c86bcecc0773deef5f40e612f83",
     ),
     "UD_Spanish-GSD": (
-        "6364fa8cf5420ff7156e6b383d25936d759c68a3",
+        "c262f3ca7897ea3b7719731d5958948614e3a214",
         "es_gsd-ud-train.conllu",
-        "9e527de0e45dca4a8ef00105a3ebd102da941964b35f01916a6baa6288130f7b",
+        "f8e0c5ba75d33f78ab7299355924ea9923067a4554a5eff4e04b71064b1835fd",
     ),
 }
 # The features of the dictionary: the others describe the text, not the word form

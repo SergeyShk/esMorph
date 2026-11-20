@@ -861,7 +861,7 @@ def test_analyze_sentence(morph):
         ("Viene de la luthiere .", 2, ("el", "DET")),
         # A noun after a verb of a bare infinitive is the infinitive, after another verb a noun
         ("Parecía pesar sobre él .", 1, ("pesar", "VERB")),
-        ("Siento pesar por su muerte .", 1, ("pesar", "NOUN")),
+        ("Perdió poder en el partido .", 1, ("poder", "NOUN")),
         # A form of ser and ir is ir after a reflexive clitic, before the goal of a and before a
         # gerund, and ser before a predicate, a prepositional phrase or an hour
         ("Los pájaros se fueron .", 3, ("ir", "VERB")),
@@ -894,7 +894,7 @@ def test_analyze_sentence(morph):
         # An imperative opening a sentence is no name; a name and a noun stay
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
         ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
-        ("Sangre de Abel .", 0, ("Sangre", "PROPN")),
+        ("Sangre de Abel .", 0, ("sangre", "NOUN")),
         # A word of the dictionary that is mostly a verb with clitics is one, not the interjection
         # or a name
         ("¡ Cállate !", 1, ("callar", "VERB")),
@@ -1240,12 +1240,12 @@ def test_dictionary_description(morph):
         "checksum",
     }
     assert info["source"] == "Wiktionary"
-    assert info["ud_release"] == "r2.18"
+    assert info["ud_release"] == "r2.19"
     assert info["treebanks"] == {
         "UD_Spanish-AnCora": "CC BY 4.0",
         "UD_Spanish-GSD": "CC BY-SA 4.0",
     }
-    assert info["context"] == {"ud_release": "r2.18", "treebanks": info["treebanks"]}
+    assert info["context"] == {"ud_release": "r2.19", "treebanks": info["treebanks"]}
     assert info["license"] == "CC BY-SA 4.0"
     assert info["snapshot"].endswith(".jsonl.xz") and len(info["sha256"]) == 64
     # The English edition and the Spanish one
