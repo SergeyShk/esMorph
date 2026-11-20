@@ -38,7 +38,6 @@ It chooses the analysis of a word by its sentence with a small context model, al
 * **[Unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess)** - analyses by the ending, a hyphen or a prefix, and the forms of guessed words
 * **[Inflection](https://sergeyshk.github.io/esMorph/inflection/)** - the forms of a lexeme and the form with given UD features
 * **[The esmorph command](https://sergeyshk.github.io/esMorph/cli/)** - lemmas, CoNLL-U, TSV or JSON Lines of text, tokens or CoNLL-U from files and the standard input
-* **[spaCy](https://sergeyshk.github.io/esMorph/spacy/)** - the component `esmorph` with the analysis in context in place of the tagger, the morphologizer and the lemmatizer
 * **[Comparison](https://sergeyshk.github.io/esMorph/comparison/)** - accuracy, inflection and speed compared with simplemma, spaCy, Stanza, ablaut and verbecc
 
 > [!NOTE]
@@ -113,7 +112,7 @@ See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/)
 
 ### Analysis in context
 
-`analyze_sentence` orders the analyses of the tokens of a sentence with a small neural network trained on the treebanks UD Spanish AnCora and GSD: the first is the analysis the context chooses, and its probability is the score of the model. `annotate` and the command analyze in context by default; `context=False` and `--no-context` order the analyses as `analyze` does, about nine times faster. The `esmorph` component puts the analysis in context into a [spaCy](https://spacy.io/) pipeline (`pip install "esmorph[spacy]"`).
+`analyze_sentence` orders the analyses of the tokens of a sentence with a small neural network trained on the treebanks UD Spanish AnCora and GSD: the first is the analysis the context chooses, and its probability is the score of the model. `annotate` and the command analyze in context by default; `context=False` and `--no-context` order the analyses as `analyze` does, about nine times faster.
 
 ```python
 >>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])
@@ -121,14 +120,9 @@ See the documentation: [analyzer](https://sergeyshk.github.io/esMorph/analyzer/)
 [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
 >>> morph.analyze("la")[0].pos
 'DET'
->>> import spacy
->>> nlp = spacy.blank("es")
->>> _ = nlp.add_pipe("esmorph")
->>> [(token.lemma_, token.pos_) for token in nlp("Ella la vio del balcón.")]
-[('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
 ```
 
-See the documentation: [analysis in context](https://sergeyshk.github.io/esMorph/analyzer/#analyze_sentence), [spaCy](https://sergeyshk.github.io/esMorph/spacy/).
+See the documentation: [analysis in context](https://sergeyshk.github.io/esMorph/analyzer/#analyze_sentence).
 
 <details>
 <summary><b>Parts of speech and features of Universal Dependencies</b></summary>
@@ -177,7 +171,7 @@ See the documentation: [tokens out of the dictionary](https://sergeyshk.github.i
 
 <br>
 
-A lowercase word out of the dictionary may be a colloquial spelling of a word of the dictionary: a participle without its `d` (`trabajao`), a final `-á` for `-ad` (`caridá`), an aspirated `f` or `h` (`juerza`); the dictionary also has spellings of words as they sound (`na`, `pos`, `güeno`). Such a word gets the analyses of the standard word, and `word` is its standard spelling. Own words take the forms of a sample word of the dictionary: `Analyzer(words=...)`, the `-w` option of the command and the `words` parameter of the spaCy component.
+A lowercase word out of the dictionary may be a colloquial spelling of a word of the dictionary: a participle without its `d` (`trabajao`), a final `-á` for `-ad` (`caridá`), an aspirated `f` or `h` (`juerza`); the dictionary also has spellings of words as they sound (`na`, `pos`, `güeno`). Such a word gets the analyses of the standard word, and `word` is its standard spelling. Own words take the forms of a sample word of the dictionary: `Analyzer(words=...)` and the `-w` option of the command.
 
 ```python
 >>> [(a.word, a.lemma) for a in (morph.analyze(w)[0] for w in ["trabajao", "caridá", "na"])]

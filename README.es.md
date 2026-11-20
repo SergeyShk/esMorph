@@ -38,7 +38,6 @@ Elige el análisis de una palabra según su oración con un pequeño modelo de c
 * **[Palabras desconocidas](https://sergeyshk.github.io/esMorph/es/analysis/#guess)** - análisis por la terminación, un guion o un prefijo, y las formas de las palabras adivinadas
 * **[Flexión](https://sergeyshk.github.io/esMorph/es/inflection/)** - las formas de un lexema y la forma con los rasgos de UD dados
 * **[El comando esmorph](https://sergeyshk.github.io/esMorph/es/cli/)** - lemas, CoNLL-U, TSV o JSON Lines de texto, tokens o CoNLL-U de archivos y de la entrada estándar
-* **[spaCy](https://sergeyshk.github.io/esMorph/es/spacy/)** - el componente `esmorph` con el análisis en contexto en lugar del etiquetador, el morfologizador y el lematizador
 * **[Comparación](https://sergeyshk.github.io/esMorph/es/comparison/)** - precisión, flexión y velocidad frente a simplemma, spaCy, Stanza, ablaut y verbecc
 
 > [!NOTE]
@@ -113,7 +112,7 @@ Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esM
 
 ### Análisis en contexto
 
-`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas nueve veces más rápido. El componente `esmorph` lleva el análisis en contexto a una cadena de [spaCy](https://spacy.io/) (`pip install "esmorph[spacy]"`).
+`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas nueve veces más rápido.
 
 ```python
 >>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])
@@ -121,14 +120,9 @@ Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esM
 [('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB')]
 >>> morph.analyze("la")[0].pos
 'DET'
->>> import spacy
->>> nlp = spacy.blank("es")
->>> _ = nlp.add_pipe("esmorph")
->>> [(token.lemma_, token.pos_) for token in nlp("Ella la vio del balcón.")]
-[('él', 'PRON'), ('él', 'PRON'), ('ver', 'VERB'), ('de', 'ADP'), ('balcón', 'NOUN'), ('.', 'PUNCT')]
 ```
 
-Más detalles en la documentación: [análisis en contexto](https://sergeyshk.github.io/esMorph/es/analyzer/#analyze_sentence), [spaCy](https://sergeyshk.github.io/esMorph/es/spacy/).
+Más detalles en la documentación: [análisis en contexto](https://sergeyshk.github.io/esMorph/es/analyzer/#analyze_sentence).
 
 <details>
 <summary><b>Categorías y rasgos de Universal Dependencies</b></summary>
@@ -177,7 +171,7 @@ Más detalles en la documentación: [tokens fuera del diccionario](https://serge
 
 <br>
 
-Una palabra en minúsculas fuera del diccionario puede ser una grafía coloquial de una palabra del diccionario: un participio sin su `d` (`trabajao`), una `-á` final por `-ad` (`caridá`), una `f` o una `h` aspiradas (`juerza`); el diccionario también tiene grafías de palabras como suenan (`na`, `pos`, `güeno`). Esa palabra recibe los análisis de la palabra estándar, y `word` es su grafía estándar. Las palabras propias toman las formas de una palabra modelo del diccionario: `Analyzer(words=...)`, la opción `-w` del comando y el parámetro `words` del componente de spaCy.
+Una palabra en minúsculas fuera del diccionario puede ser una grafía coloquial de una palabra del diccionario: un participio sin su `d` (`trabajao`), una `-á` final por `-ad` (`caridá`), una `f` o una `h` aspiradas (`juerza`); el diccionario también tiene grafías de palabras como suenan (`na`, `pos`, `güeno`). Esa palabra recibe los análisis de la palabra estándar, y `word` es su grafía estándar. Las palabras propias toman las formas de una palabra modelo del diccionario: `Analyzer(words=...)` y la opción `-w` del comando.
 
 ```python
 >>> [(a.word, a.lemma) for a in (morph.analyze(w)[0] for w in ["trabajao", "caridá", "na"])]
