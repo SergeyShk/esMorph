@@ -119,7 +119,8 @@ impl Dictionary {
                 .or_else(|| self.locution_verb(&lower, sentence, at))
                 .or_else(|| self.ser_ir(&lower, sentence, at))
                 .or_else(|| self.verb_after(&lower, sentence, at))
-                .or_else(|| self.opening_word(words, sentence, at, start));
+                .or_else(|| self.opening_word(words, sentence, at, start))
+                .or_else(|| self.question_verb(words, sentence, at));
             if let Some(index) = chosen {
                 promote(&mut sentence[at], index);
             }
@@ -165,7 +166,8 @@ impl Dictionary {
     }
 
     /// An article before a finite verb is the clitic pronoun: `no la descubras`, `¿dónde las has
-    /// puesto?`; after a preposition or a determiner it stays an article (`de la luthiere`), and
+    /// puesto?`, and so is `la` or `lo` before a plural noun that may be a finite verb (`la ves`,
+    /// `lo preguntas`); after a preposition or a determiner it stays an article (`de la luthiere`), and
     /// after a preposition, which no clitic follows, it is one even if the model reads a pronoun;
     /// the neuter `lo` is a pronoun there (`de lo que`), and `hasta` and `según` may be an adverb
     /// and a conjunction before a clitic (`hasta la engordan`, `según la he oído`)
@@ -185,9 +187,11 @@ impl Dictionary {
         {
             return list.iter().position(|analysis| self.pos(analysis) == "DET");
         }
+        let verb = self.top_verb_form(sentence, at + 1, "Fin")
+            || (matches!(form, "la" | "lo") && self.plural_verb(sentence, at + 1));
         if !ARTICLE_CLITICS.contains(&form)
             || self.pos(list.first()?) != "DET"
-            || !self.top_verb_form(sentence, at + 1, "Fin")
+            || !verb
             || (at > 0 && matches!(self.top_pos(sentence, at - 1), "ADP" | "DET"))
         {
             return None;
@@ -272,10 +276,26 @@ impl Dictionary {
         list.iter().position(|analysis| analysis.lemma == "ir")
     }
 
+    /// Whether the model reads a word as a plural noun that may be a finite verb and is no noun in
+    /// the singular: after `la` or `lo` it is the verb (`la ves`), not a noun (`la mies`)
+    fn plural_verb(&self, sentence: &[Vec<Analysis>], at: usize) -> bool {
+        let Some(list) = sentence.get(at) else {
+            return false;
+        };
+        let noun = |analysis: &Analysis| self.pos(analysis) == "NOUN";
+        (list.first()).is_some_and(|top| noun(top) && self.has(top, "Number", "Plur"))
+            && !(list.iter()).any(|analysis| noun(analysis) && self.has(analysis, "Number", "Sing"))
+            && list.iter().any(|analysis| {
+                matches!(self.pos(analysis), "VERB" | "AUX")
+                    && self.has(analysis, "VerbForm", "Fin")
+            })
+    }
+
     /// A word the model reads as a noun after a reflexive or a dative clitic, the negation or
     /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`; so is one it reads as
     /// an adverb, an adjective or a participle after such a clitic, which no participle follows:
-    /// `se acerca`, `te quedas`, `me visto`
+    /// `se acerca`, `te quedas`, `me visto`, and a plural noun after another clitic: `le faltas`,
+    /// `lo preguntas`
     fn verb_after(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         let before = at.checked_sub(1)?;
@@ -284,11 +304,17 @@ impl Dictionary {
         // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
             && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"));
+        // No clitic follows a preposition: `por lo duras que eran`
+        let object = matches!(lower[before].as_str(), "la" | "lo" | "le" | "les")
+            && self.top_pos(sentence, before) == "PRON"
+            && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"))
+            && self.plural_verb(sentence, at);
         let top = list.first()?;
         let read = self.pos(top);
         let noun = matches!(read, "NOUN" | "PROPN");
         let participle = matches!(read, "VERB" | "AUX") && self.has(top, "VerbForm", "Part");
         if !(((clitic || negation) && noun)
+            || object
             || (clitic && (participle || matches!(read, "ADV" | "ADJ"))))
         {
             return None;
@@ -334,6 +360,40 @@ impl Dictionary {
             analysis.source == Source::Dictionary
                 && self.pos(analysis) == "VERB"
                 && self.has(analysis, "Mood", "Imp")
+        })
+    }
+
+    /// A capitalized word after an opening question or exclamation mark that a rule reads as a name
+    /// is the finite verb of `tú` that the dictionary has when the model ranks a verb above its
+    /// other words and a lowercase word follows: `¿Quieres algo?`, `¡Eres tonto!`, not `¿Luis?`
+    fn question_verb(
+        &self,
+        words: &[&str],
+        sentence: &[Vec<Analysis>],
+        at: usize,
+    ) -> Option<usize> {
+        let list = &sentence[at];
+        let top = list.first()?;
+        let opening = at > 0
+            && matches!(words[at - 1], "¿" | "¡")
+            && (words.get(at + 1).and_then(|word| word.chars().next()))
+                .is_some_and(char::is_lowercase);
+        if !opening || top.source != Source::Rule || self.pos(top) != "PROPN" {
+            return None;
+        }
+        let known = list
+            .iter()
+            .find(|analysis| analysis.source == Source::Dictionary)?;
+        if !matches!(self.pos(known), "VERB" | "AUX") {
+            return None;
+        }
+        list.iter().position(|analysis| {
+            analysis.source == Source::Dictionary
+                && matches!(self.pos(analysis), "VERB" | "AUX")
+                && self.has(analysis, "VerbForm", "Fin")
+                && self.has(analysis, "Person", "2")
+                && self.has(analysis, "Number", "Sing")
+                && !self.has(analysis, "Mood", "Imp")
         })
     }
 

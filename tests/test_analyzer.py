@@ -933,9 +933,22 @@ def test_analyze_sentence(morph):
         ("Adonde tú vayas , voy .", 2, ("ir", "VERB")),
         ("Se acerca a él .", 1, ("acercar", "VERB")),
         ("Es el punto de no retorno .", 5, ("retorno", "NOUN")),
+        # A plural noun after a clitic `la`, `lo`, `le` or `les` is a verb of `tú`, not a noun in
+        # the singular or after a preposition
+        ("No me la quites .", 2, ("él", "PRON")),
+        ("No me la quites .", 3, ("quitar", "VERB")),
+        ("¿ Me lo preguntas ?", 3, ("preguntar", "VERB")),
+        ("Le faltas tú .", 1, ("faltar", "VERB")),
+        ("Iban á la mies .", 3, ("mies", "NOUN")),
+        ("Ya ves que no .", 1, ("ver", "VERB")),
         # An imperative opening a sentence is no name; a name and a noun stay
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
         ("Defensa quiere tropas .", 0, ("Defensa", "PROPN")),
+        # A verb of `tú` after an opening question or exclamation mark is no name
+        ("¿ Quieres más ?", 1, ("querer", "AUX")),
+        ("¡ Eres un ingrato !", 1, ("ser", "AUX")),
+        ("¿ Crees que vendrá ?", 1, ("creer", "VERB")),
+        ("¿ Luis , vienes ?", 1, ("Luis", "PROPN")),
         ("Sangre de Abel .", 0, ("sangre", "NOUN")),
         # A word of the dictionary that is mostly a verb with clitics is one, not the interjection
         # or a name
@@ -1913,6 +1926,15 @@ def test_names_of_the_dictionary(morph):
     assert morph.analyze("Miró")[0].pos == "PROPN"
     # A Roman numeral of one letter that the dictionary knows is a number first
     assert [(a.pos, a.feats.get("NumForm")) for a in morph.analyze("X")][:1] == [("NUM", "Roman")]
+
+
+def test_plurals_of_letters_that_are_verbs_of_tu(morph):
+    # `ves` and `des` are `ver` and `dar`, while other plurals of letters stay
+    assert {(a.lemma, a.pos) for a in morph.analyze("ves")} == {("ver", "VERB")}
+    assert {(a.lemma, a.pos) for a in morph.analyze("des")} == {("dar", "VERB")}
+    assert ("erre", "NOUN") in {(a.lemma, a.pos) for a in morph.analyze("erres")}
+    letter = next(a for a in morph.analyze("ve") if a.pos == "NOUN")
+    assert [form.word for form in letter.forms()] == ["ve"]
 
 
 def test_conventions_of_the_dictionary(morph):

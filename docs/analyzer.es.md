@@ -125,15 +125,15 @@ analyze_sentence(words)
 
 Los análisis de los tokens de una oración, tal como los da [`analyze`](#analyze), ordenados por el modelo de contexto del diccionario: el primero es el que el modelo eligió por los tokens de alrededor, y `prob` es su puntuación en esta oración. Unas pocas reglas del español ponen después primero otro análisis donde solo él cabe, y las puntuaciones del modelo se conservan:
 
-- un artículo ante un verbo en forma personal es el pronombre clítico (`no la descubras`), aunque no tras una preposición o un determinante, y tras una preposición `la`, `las` y `los` son el artículo (`de la luthiere`);
+- un artículo ante un verbo en forma personal es el pronombre clítico (`no la descubras`), y también `la` o `lo` ante un sustantivo en plural que puede ser un verbo en forma personal (`no me la quites`, `¿me lo preguntas?`), aunque no tras una preposición o un determinante, y tras una preposición `la`, `las` y `los` son el artículo (`de la luthiere`);
 - un sustantivo justo tras un verbo que rige un infinitivo sin preposición es ese infinitivo (`puede ser`, `parecía pesar`), pero no tras otro verbo (`perdió poder`);
 - `pesar` de `a pesar de` es el infinitivo, como en los treebanks, mientras que el sustantivo se mantiene en otros casos (`con profundo pesar`);
 - una forma de `ser` e `ir` es `ir`:
     - tras un clítico reflexivo, salvo que siga un predicado (`se fue`, pero `me fue muy difícil`);
     - ante `a` (`á` en la escritura antigua) y su destino, salvo que siga una locución prepositiva o adverbial o una hora (`fue a casa`, pero `fue a partir de 1990`, `fue al principio`, `fue a las cinco`);
     - ante un gerundio (`fue cayendo`);
-- una palabra tras un clítico, la negación o `tú` es un verbo (`que te vayas`, `no vayas`), aunque no tras una preposición (`punto de no retorno`); tras un clítico también lo es un adverbio, un adjetivo o un participio (`se acerca`, `te quedas`, `me visto`);
-- un imperativo con mayúscula que abre una oración no es un nombre (`Indique si desea`), salvo que el modelo ponga por encima un sustantivo del diccionario (`Sangre de Abel`);
+- una palabra tras un clítico, la negación o `tú` es un verbo (`que te vayas`, `no vayas`), aunque no tras una preposición (`punto de no retorno`); tras un clítico también lo es un adverbio, un adjetivo o un participio (`se acerca`, `te quedas`, `me visto`), y tras `le`, `les`, `la` y `lo`, un sustantivo en plural que puede ser un verbo (`le faltas`);
+- un imperativo con mayúscula que abre una oración no es un nombre (`Indique si desea`), salvo que el modelo ponga por encima un sustantivo del diccionario (`Sangre de Abel`), y tampoco lo es un verbo de `tú` tras `¿` o `¡` ante una palabra en minúsculas (`¿Quieres más?`, `¡Eres un ingrato!`);
 - una palabra del diccionario que suele ser un verbo con clíticos lo es (`¡Cállate!`);
 - un verbo raro cede ante uno frecuente con la misma forma (`aunque vengan` es `venir`, no `vengar`), salvo que el modelo haya elegido un participio (`había entrevisto`).
 

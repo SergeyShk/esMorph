@@ -149,6 +149,9 @@ APOCOPE = "before a noun "
 MAX_WORD = 64
 # More rows than a table of an entry has: the places of the rows of further etymologies follow
 TABLE_ROWS = 10_000
+# Plurals of the names of letters `ve` and `de` that are almost always the forms of `tú` of `ver`
+# and `dar`: the treebanks have few forms of `tú`, so the context would choose the letters
+LETTER_PLURALS = {("ve", "ves"), ("de", "des")}
 
 
 def sha256(path: Path) -> str:
@@ -1209,6 +1212,11 @@ def export(output: Path) -> int:
     kinds |= extra_rows(
         download(extra_url, output / "raw" / extra_name, extra_digest), kinds, closed
     )
+    kinds = {
+        row: k
+        for row, k in kinds.items()
+        if (row[0], row[2]) not in LETTER_PLURALS or row[1] != "NOUN"
+    }
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
             "\t".join((*row, kinds[row], rank(row, ranks))) + "\n" for row in sorted(kinds)
