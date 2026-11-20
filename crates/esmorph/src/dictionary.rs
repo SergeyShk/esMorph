@@ -187,6 +187,9 @@ pub struct Dictionary {
     /// Places of the fields of every line of the section of diminutives: the starts of the lemma,
     /// the part of speech and the word, and the end
     diminutives: Arc<[[u32; 4]]>,
+    /// Places of the fields of every line of the section of verbs: the starts of the lemma and the
+    /// count, and the end
+    verbs: Arc<[[u32; 3]]>,
 }
 
 /// The features of every UD tag in CoNLL-U, `None` without them
@@ -355,6 +358,7 @@ impl Dictionary {
             context: Arc::default(),
             own_words: Arc::default(),
             diminutives: diminutive_fields(text(&layout.diminutives)?)?,
+            verbs: verb_fields(text(&layout.verbs)?)?,
             layout,
             storage: Arc::clone(&storage),
         };
@@ -417,6 +421,22 @@ impl Dictionary {
             .ok()?;
         let [_, _, base_at, end] = self.diminutives[at];
         std::str::from_utf8(field(base_at, end)).ok()
+    }
+
+    /// How often the treebanks have a verb in all its forms
+    pub(crate) fn verb_frequency(&self, lemma: &str) -> u32 {
+        let text = &self.storage.bytes()[self.layout.verbs.clone()];
+        let field = |start: u32, end: u32| &text[start as usize..end as usize];
+        (self.verbs)
+            .binary_search_by(|&[lemma_at, count_at, _]| {
+                field(lemma_at, count_at - 1).cmp(lemma.as_bytes())
+            })
+            .ok()
+            .and_then(|at| {
+                let [_, count_at, end] = self.verbs[at];
+                std::str::from_utf8(field(count_at, end)).ok()?.parse().ok()
+            })
+            .unwrap_or(0)
     }
 
     /// Description of the source of the dictionary
@@ -1886,6 +1906,35 @@ fn diminutive_fields(text: &str) -> Result<Arc<[[u32; 4]]>, Error> {
     Ok(lines.into())
 }
 
+/// Places of the fields of the lines of the section of verbs: lines of a lemma and a count, in the
+/// order of lemmas, each ending with a line break
+fn verb_fields(text: &str) -> Result<Arc<[[u32; 3]]>, Error> {
+    let wrong = || Error::Format("wrong section of verbs".into());
+    if !text.is_empty() && !text.ends_with('\n') {
+        return Err(wrong());
+    }
+    let mut lines = Vec::new();
+    let mut previous: Option<&str> = None;
+    let mut start = 0;
+    for line in text.split_terminator('\n') {
+        let Some((lemma, count)) = line.split_once('\t') else {
+            return Err(wrong());
+        };
+        if lemma.is_empty()
+            || count.parse::<u32>().is_err()
+            || previous.is_some_and(|previous| previous >= lemma)
+        {
+            return Err(wrong());
+        }
+        previous = Some(lemma);
+        // The section is part of a file below 2 GiB
+        let at = |offset: usize| (start + offset) as u32;
+        lines.push([at(0), at(lemma.len() + 1), at(line.len())]);
+        start += line.len() + 1;
+    }
+    Ok(lines.into())
+}
+
 /// Automaton of a section of a dictionary. A damaged automaton loads without errors but panics when
 /// walked; the checksum of the file catches damage, and the address of the root is checked here:
 /// `Fst::new` checks it only for an empty automaton
@@ -3295,6 +3344,36 @@ pub(crate) mod tests {
             .into_iter()
             .map(|row| row.1)
             .collect()
+    }
+
+    #[test]
+    fn verb_frequencies() {
+        let mut builder = Builder::new();
+        builder.meta("{}");
+        for &(lemma, pos, form, feats) in FORMS {
+            builder.add_form(lemma, pos, form, feats).unwrap();
+        }
+        builder.set_verb_frequency("casar", 7).unwrap();
+        assert!(builder.set_verb_frequency("ca\tsar", 1).is_err());
+        let dictionary = Dictionary::from_bytes(&builder.build().unwrap()).unwrap();
+        assert_eq!(dictionary.verb_frequency("casar"), 7);
+        assert_eq!(dictionary.verb_frequency("comer"), 0);
+    }
+
+    #[test]
+    fn wrong_section_of_verbs() {
+        assert!(verb_fields("").unwrap().is_empty());
+        assert_eq!(verb_fields("a\t1\nb\t2\n").unwrap().len(), 2);
+        for text in [
+            "a\t1",
+            "a\tx\n",
+            "\t1\n",
+            "a\n",
+            "b\t1\na\t2\n",
+            "a\t1\na\t2\n",
+        ] {
+            assert!(verb_fields(text).is_err(), "{text:?}");
+        }
     }
 
     #[test]

@@ -79,6 +79,8 @@ pub struct Builder {
     context: Vec<u8>,
     /// The words of the diminutives by their lemma and part of speech
     diminutives: BTreeMap<(String, String), String>,
+    /// How often texts have a verb in all its forms
+    verbs: BTreeMap<String, u32>,
 }
 
 /// Place of an analysis in the list of its word form
@@ -615,6 +617,9 @@ impl Builder {
             guess_records,
             context: self.context.clone(),
             diminutives: self.diminutives_text(),
+            verbs: (self.verbs.iter())
+                .map(|(lemma, count)| format!("{lemma}\t{count}\n"))
+                .collect(),
         }))
     }
 
@@ -633,6 +638,16 @@ impl Builder {
         }
         self.diminutives
             .insert((lemma.to_owned(), pos.to_owned()), base.to_owned());
+        Ok(())
+    }
+
+    /// Sets how often texts have a verb in all its forms: a rare verb does not take the place of a
+    /// frequent one of the same form in a sentence (`vengan` is `venir`, not `vengar`)
+    pub fn set_verb_frequency(&mut self, lemma: &str, count: u32) -> Result<(), Error> {
+        if lemma.is_empty() || lemma.contains(['\t', '\n']) {
+            return Err(Error::Build(format!("wrong verb {lemma:?}")));
+        }
+        self.verbs.insert(lemma.to_owned(), count);
         Ok(())
     }
 

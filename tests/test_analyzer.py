@@ -906,6 +906,7 @@ def test_analyze_sentence(morph):
         # A rare verb does not take the place of a frequent one with the same form, a frequent
         # one stays
         ("Aunque vengan tarde .", 1, ("venir", "VERB")),
+        ("Se misturaban trementina y diaquilón .", 1, ("misturar", "VERB")),
         ("Ojalá venga pronto .", 1, ("venir", "VERB")),
         ("La fuerza crea leyes nuevas .", 2, ("crear", "VERB")),
         # After a clitic the frequent verb in a form of the same kind: no participle of `ver`;
@@ -2082,3 +2083,14 @@ def test_diminutives(morph):
     analysis = morph.analyze("casita")[0]
     assert {form.diminutive_of for form in analysis.forms()} == {"casa"}
     assert pickle.loads(pickle.dumps(analysis)).diminutive_of == "casa"
+
+
+def test_verbs_of_a_form(morph):
+    # Without context the counts of the form lead, the frequency of the verb where they are few
+    assert [morph.analyze(word)[0].lemma for word in ("sientan", "dí", "vengo")] == [
+        "sentar",
+        "dar",
+        "venir",
+    ]
+    # In a sentence a rare verb gives way to a frequent one by the frequency of the verbs
+    assert morph.analyze_sentence(["Aunque", "vengan", "tarde", "."])[1][0].lemma == "venir"
