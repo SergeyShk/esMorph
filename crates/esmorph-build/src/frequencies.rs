@@ -4,7 +4,7 @@
 //! features of its part of speech; the lemmas of a verb form are also weighed by their frequency in
 //! all their forms
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use esmorph::Error;
 
@@ -12,9 +12,10 @@ use esmorph::Error;
 const SUFFIX: usize = 3;
 /// Weight of what the treebanks did not see against the counts of a form, as that many words
 const PRIOR: f64 = 1.0;
-/// Weight of the frequency of a verb in all its forms against its counts in a form: a few counts
-/// of a rare verb, often wrong, do not outweigh a frequent one (`vengo` is `venir`, not `vengar`)
-const LEXEME_PRIOR: f64 = 30.0;
+/// Weight of the frequency of a verb in all its forms against its counts in a form, as that many
+/// words: a form the treebanks saw keeps the order they give it (`sienta` is `sentar`), while the
+/// rule of the frequent verb reads the frequency itself (`Dictionary::verb_frequency`)
+const LEXEME_PRIOR: f64 = 3.0;
 
 /// An analysis of a form
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -198,6 +199,15 @@ impl Counts {
         f64::from(self.lemmas.get(&key).copied().unwrap_or(0))
     }
 
+    /// How often the treebanks have every verb as a verb in all its forms: `ser` is an auxiliary
+    /// there, so it does not outweigh `ir` in `fue`
+    pub fn verbs(&self) -> BTreeMap<&str, u32> {
+        (self.lexemes.iter())
+            .filter(|((pos, _), _)| pos == "VERB")
+            .map(|((_, lemma), &count)| (lemma.as_str(), count))
+            .collect()
+    }
+
     fn lexeme(&self, pos: &str, lemma: &str) -> f64 {
         let key = (pos.to_owned(), lemma.to_owned());
         f64::from(self.lexemes.get(&key).copied().unwrap_or(0)) + 1.0
@@ -321,6 +331,15 @@ mod tests {
                          casas\tNOUN\t10\n\
                          mesas\tNOUN\t10\n\
                          pasas\tVERB\t2\n";
+
+    #[test]
+    fn verbs_are_counted_as_verbs() {
+        let counts = Counts::read(&format!("{ANALYSES}es\tAUX\tser\t_\t9\n"), PARTS).unwrap();
+        assert_eq!(
+            counts.verbs().into_iter().collect::<Vec<_>>(),
+            [("comer", 2)]
+        );
+    }
 
     #[test]
     fn errors_name_the_line_and_counts_do_not_overflow() {

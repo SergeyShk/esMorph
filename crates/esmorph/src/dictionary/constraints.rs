@@ -335,8 +335,8 @@ impl Dictionary {
         })
     }
 
-    /// Shares of the verbs of a word in the counts, among its verbs, if it is the form of several
-    /// (`venga` of `venir` and `vengar`), empty otherwise
+    /// Shares of the verbs of a word by how often the treebanks have them in all their forms, among
+    /// its verbs, if it is the form of several (`venga` of `venir` and `vengar`), empty otherwise
     pub(crate) fn verb_shares(&self, list: &[Analysis]) -> Vec<(String, f64)> {
         let verb = |analysis: &&Analysis| self.pos(analysis) == "VERB";
         let Some(first) = list.iter().find(verb) else {
@@ -351,15 +351,11 @@ impl Dictionary {
         }
         let mut shares: Vec<(String, f64)> = Vec::new();
         for analysis in list.iter().filter(verb) {
-            match shares
-                .iter_mut()
-                .find(|(lemma, _)| *lemma == analysis.lemma)
-            {
-                Some((_, share)) => *share += analysis.prob,
-                None => shares.push((analysis.lemma.clone(), analysis.prob)),
+            if shares.iter().all(|(lemma, _)| *lemma != analysis.lemma) {
+                let frequency = f64::from(self.verb_frequency(&analysis.lemma)) + 1.0;
+                shares.push((analysis.lemma.clone(), frequency));
             }
         }
-        // Among the verbs alone: `temas` is mostly the noun, but of the verbs `temer`
         let total: f64 = shares.iter().map(|(_, share)| share).sum();
         if total > 0.0 {
             for (_, share) in &mut shares {

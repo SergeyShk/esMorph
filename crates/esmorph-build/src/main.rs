@@ -377,6 +377,11 @@ fn build(
         }
     }
     // The builder keeps its own copies: the table and the counts go before it builds
+    for (lemma, count) in counts.verbs() {
+        builder
+            .set_verb_frequency(lemma, count)
+            .map_err(|err| within(&analyses, err))?;
+    }
     drop((forms, main, counts));
     drop(table);
     let diminutives = export.join("diminutives.tsv");
