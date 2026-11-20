@@ -1,6 +1,7 @@
-//! Colloquial and dialectal spellings of standard words: a participle without its `d`
+//! Colloquial, dialectal and older spellings of standard words: a participle without its `d`
 //! (`trabajao` is `trabajado`, `sío` is `sido`), a word without its final `d` (`caridá` is
-//! `caridad`) and an aspirated `f` or `h` (`juera` is `fuera`, `juevo` is `huevo`)
+//! `caridad`), an aspirated `f` or `h` (`juera` is `fuera`, `juevo` is `huevo`) and `es` for `ex`
+//! before a consonant (`estranjero` is `extranjero`)
 
 /// Endings of such spellings and of their standard words
 const ENDINGS: [(&str, &str); 7] = [
@@ -28,7 +29,18 @@ pub(crate) fn standard(word: &str) -> impl Iterator<Item = String> + '_ {
         let rest = word.strip_prefix(start).filter(|rest| !rest.is_empty())?;
         Some(format!("{standard}{rest}"))
     });
-    endings.chain(starts)
+    endings
+        .chain(starts)
+        .chain(ex_rest(word).map(|rest| format!("ex{rest}")))
+}
+
+/// The rest of a word that starts with `es` and a consonant, which older writing has for `ex`
+fn ex_rest(word: &str) -> Option<&str> {
+    let rest = word.strip_prefix("es")?;
+    rest.chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() && !"aeiouáéíóúü".contains(c))
+        .then_some(rest)
 }
 
 /// Whether a word has an ending or a start of such spellings, without spelling its standard words
@@ -36,6 +48,7 @@ pub(crate) fn may_be_spelling(word: &str) -> bool {
     let stem = |rest: Option<&str>| rest.is_some_and(|rest| !rest.is_empty());
     (ENDINGS.iter()).any(|&(ending, _)| stem(word.strip_suffix(ending)))
         || (STARTS.iter()).any(|&(start, _)| stem(word.strip_prefix(start)))
+        || ex_rest(word).is_some()
 }
 
 /// Whether a word ends as a participle without its `d` that has an accent: `perdío`, `metíos`
@@ -68,6 +81,8 @@ mod tests {
         assert_eq!(spellings("juyendo"), ["fuyendo", "huyendo"]);
         assert_eq!(spellings("ajuera"), ["afuera"]);
         assert_eq!(spellings("jugao"), ["jugado", "fugao", "hugao"]);
+        assert_eq!(spellings("estranjero"), ["extranjero"]);
+        assert_eq!(spellings("esamen"), Vec::<String>::new());
     }
 
     #[test]

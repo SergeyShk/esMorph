@@ -117,11 +117,12 @@ Las mayúsculas no importan para buscar una palabra en el diccionario, aunque un
     ['camión', 'camión', 'pingüino']
     ```
 
-Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tildes, puede ser una grafía coloquial de una palabra del diccionario. Una palabra así recibe los análisis de esa palabra, y `word` es su grafía estándar. Las grafías son:
+Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tildes, puede ser una grafía coloquial o antigua de una palabra del diccionario. Una palabra así recibe los análisis de esa palabra, y `word` es su grafía estándar. Las grafías son:
 
 - un participio sin su `d`: `trabajao` es `trabajado`, `sío` es `sido`; su tilde no es una tilde perdida, así que `perdío` es `perdido`, no `perdió`;
 - una `-á`, `-é` o `-ú` final en lugar de `-ad`, `-ed` o `-ud`: `caridá` es `caridad`, `virtú` es `virtud`;
-- una `f` o una `h` aspiradas: `juerza` es `fuerza`, `juevo` es `huevo`, `juyendo` es `huyendo`.
+- una `f` o una `h` aspiradas: `juerza` es `fuerza`, `juevo` es `huevo`, `juyendo` es `huyendo`;
+- `es` en lugar de `ex` ante consonante, como en la escritura antigua: `estranjero` es `extranjero`, `esplicar` es `explicar`.
 
 Una palabra con mayúscula no es una grafía así: `Trabajao` y `Julita` son nombres, no `trabajado` y `fulita`.
 

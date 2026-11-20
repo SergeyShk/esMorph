@@ -136,6 +136,9 @@ def test_word_absent_as_written_looks_through_accents(morph):
         # An aspirated `h`, and no old form: `juy` is no `fuy` of `ser`
         ("juyendo", "huyendo", "huir"),
         ("juy", "huy", "huy"),
+        # Older `es` for `ex` before a consonant
+        ("estranjero", "extranjero", "extranjero"),
+        ("esplicar", "explicar", "explicar"),
     ],
 )
 def test_colloquial_spelling_has_the_analyses_of_the_standard_word(morph, token, word, lemma):
