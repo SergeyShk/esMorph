@@ -60,7 +60,8 @@ def test_formats(tmp_path):
 
 
 def test_tokens_and_conllu_input():
-    assert run("-i", "tokens", text="dime\nla\n\nverdad\n").stdout == "decir el\nverdad\n"
+    # A token gets the words of its analysis
+    assert run("-i", "tokens", text="dime\nla\n\nverdad\n").stdout == "decir yo el\nverdad\n"
     conllu = "# text = Dime\n1-2\tDime\t_\t_\t_\t_\t_\t_\t_\t_\n1\tDi\t_\t_\t_\t_\t0\troot\t_\t_\n2\tme\t_\t_\t_\t_\t1\tiobj\t_\t_\n"
     lines = run("-i", "conllu", "-f", "conllu", text=conllu).stdout.splitlines()
     assert lines[2].split("\t")[:4] == ["1", "Di", "decir", "VERB"]

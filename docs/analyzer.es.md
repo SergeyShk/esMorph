@@ -206,14 +206,14 @@ Excepciones:
 
 ### Análisis de un documento { #annotate }
 
-`annotate` · `None`
+`annotate` · `anyseg.Document`
 { .metric-meta }
 
 ``` {.python .signature}
 annotate(document, *, context=True)
 ```
 
-Rellena las columnas `lemma`, `upos` y `feats` de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/) con el análisis más probable de cada palabra en el contexto de su oración, en el orden en que [`analyze_sentence`](#analyze_sentence) ordena los análisis de sus tokens; con `context=False`, en el orden de `analyze`, unas nueve veces más rápido. Los valores anteriores de estas columnas se sustituyen. Las palabras de un token multipalabra se analizan por el token: `dime` dividido en `di` + `me` es el imperativo de `decir` con el pronombre `me`, y los clíticos tras un verbo son pronombres. Un token que el segmentador deja como una sola palabra recibe el análisis del token entero: `devuélvenos` es el imperativo de `devolver`. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría `X`. El método libera el GIL. esMorph no depende de anySeg: el documento es un `anyseg.Document` o un objeto con los mismos `column("form")`, `multiword_tokens` (un token tiene `text` y `words`, una palabra tiene `index`), `sentences` (una oración tiene `words`) y `set_columns`; un objeto sin `sentences` es una sola oración, y con `context=False` no se leen.
+Rellena las columnas `lemma`, `upos` y `feats` de las palabras de un documento del segmentador [anySeg](https://sergeyshk.github.io/anySeg/) con el análisis más probable de cada palabra en el contexto de su oración, en el orden en que [`analyze_sentence`](#analyze_sentence) ordena los análisis de sus tokens, y devuelve el documento; con `context=False`, en el orden de `analyze`, unas nueve veces más rápido. Los valores anteriores de estas columnas se sustituyen. Un token que el segmentador deja como una sola palabra y cuyo análisis tiene varias recibe esas palabras: `pónganselo` se convierte en el token multipalabra `pongan` + `se` + `lo`, el imperativo de `poner` y dos pronombres. El análisis va entonces a un documento nuevo con esas palabras, y el dado queda como estaba. Un documento cuyas palabras no pueden cambiar (tiene núcleos, dependencias mejoradas o nodos vacíos) se rellena él mismo, y ese token recibe el análisis del token entero. Las palabras de un token multipalabra se analizan por el token: `dime` dividido en `di` + `me` es el imperativo de `decir` con el pronombre `me`, y los clíticos tras un verbo son pronombres. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría `X`. El método libera el GIL. esMorph no depende de anySeg: el documento es un `anyseg.Document` o un objeto con los mismos `column("form")`, `multiword_tokens` (un token tiene `text` y `words`, una palabra tiene `index`), `sentences` (una oración tiene `words`) y `set_columns`; un objeto sin `sentences` es una sola oración, y con `context=False` no se leen; un objeto sin `with_words` conserva sus palabras.
 
 | Parámetro | Tipo | Por defecto | Descripción |
 | :-------- | :--- | :---------- | :---------- |
@@ -230,20 +230,17 @@ Excepciones:
     ``` python
     from anyseg import Segmenter
 
-    document = Segmenter("es").segment("Dime la verdad.")
-    morph.annotate(document)
+    document = morph.annotate(Segmenter("es").segment("Pónganselo ya."))
     [(word.form, word.lemma, word.upos) for word in document.words]
     document = Segmenter("es").segment("Ella la vio.")
-    morph.annotate(document, context=False)
-    document.words[1].upos
-    morph.annotate(document)
-    document.words[1].upos
+    morph.annotate(document, context=False).words[1].upos
+    morph.annotate(document).words[1].upos
     ```
 
 === "Resultado"
 
     ```
-    [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    [('Pongan', 'poner', 'VERB'), ('se', 'él', 'PRON'), ('lo', 'él', 'PRON'), ('ya', 'ya', 'ADV'), ('.', '.', 'PUNCT')]
     'DET'
     'PRON'
     ```

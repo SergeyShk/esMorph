@@ -206,14 +206,14 @@ Exceptions:
 
 ### Analysis of a document { #annotate }
 
-`annotate` · `None`
+`annotate` · `anyseg.Document`
 { .metric-meta }
 
 ``` {.python .signature}
 annotate(document, *, context=True)
 ```
 
-Fills the columns `lemma`, `upos` and `feats` of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter with the most probable analysis of every word in the context of its sentence, as [`analyze_sentence`](#analyze_sentence) orders the analyses of its tokens; with `context=False`, as `analyze` orders them, about nine times faster. The earlier values of these columns are replaced. The words of a multiword token are analyzed by the token: `dime` split into `di` + `me` is the imperative of `decir` with the pronoun `me`, and clitics after a verb are pronouns. A token that the segmenter leaves as one word gets the analysis of the whole token: `devuélvenos` is the imperative of `devolver`. A word without analyses gets its lower case as the lemma and the part of speech `X`. The method releases the GIL. esMorph does not depend on anySeg: the document is an `anyseg.Document` or an object with the same `column("form")`, `multiword_tokens` (a token has `text` and `words`, a word has `index`), `sentences` (a sentence has `words`) and `set_columns`; an object without `sentences` is one sentence, and with `context=False` they are not read.
+Fills the columns `lemma`, `upos` and `feats` of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter with the most probable analysis of every word in the context of its sentence, as [`analyze_sentence`](#analyze_sentence) orders the analyses of its tokens, and returns the document; with `context=False`, as `analyze` orders them, about nine times faster. The earlier values of these columns are replaced. A token that the segmenter leaves as one word and whose analysis has several gets these words: `pónganselo` becomes the multiword token `pongan` + `se` + `lo`, the imperative of `poner` and two pronouns. The analysis then goes to a new document with these words, and the given one stays as it was. A document whose words cannot change (it has heads, enhanced dependencies or empty nodes) is filled itself, and such a token gets the analysis of the whole. The words of a multiword token are analyzed by the token: `dime` split into `di` + `me` is the imperative of `decir` with the pronoun `me`, and clitics after a verb are pronouns. A word without analyses gets its lower case as the lemma and the part of speech `X`. The method releases the GIL. esMorph does not depend on anySeg: the document is an `anyseg.Document` or an object with the same `column("form")`, `multiword_tokens` (a token has `text` and `words`, a word has `index`), `sentences` (a sentence has `words`) and `set_columns`; an object without `sentences` is one sentence, and with `context=False` they are not read; an object without `with_words` keeps its words.
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |
@@ -230,20 +230,17 @@ Exceptions:
     ``` python
     from anyseg import Segmenter
 
-    document = Segmenter("es").segment("Dime la verdad.")
-    morph.annotate(document)
+    document = morph.annotate(Segmenter("es").segment("Pónganselo ya."))
     [(word.form, word.lemma, word.upos) for word in document.words]
     document = Segmenter("es").segment("Ella la vio.")
-    morph.annotate(document, context=False)
-    document.words[1].upos
-    morph.annotate(document)
-    document.words[1].upos
+    morph.annotate(document, context=False).words[1].upos
+    morph.annotate(document).words[1].upos
     ```
 
 === "Result"
 
     ```
-    [('Di', 'decir', 'VERB'), ('me', 'yo', 'PRON'), ('la', 'el', 'DET'), ('verdad', 'verdad', 'NOUN'), ('.', '.', 'PUNCT')]
+    [('Pongan', 'poner', 'VERB'), ('se', 'él', 'PRON'), ('lo', 'él', 'PRON'), ('ya', 'ya', 'ADV'), ('.', '.', 'PUNCT')]
     'DET'
     'PRON'
     ```

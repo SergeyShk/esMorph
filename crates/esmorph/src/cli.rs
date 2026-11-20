@@ -1059,9 +1059,15 @@ impl Writer<'_> {
         // JSON Lines gives all analyses of the tokens, not the fields of the words
         let fields = match self.format {
             Format::Jsonl => Vec::new(),
-            _ => (self.dictionary)
-                .document_fields(&document, self.context)
-                .map_err(io::Error::other)?,
+            _ => {
+                let (words, fields) = (self.dictionary)
+                    .document_analysis(&document, self.context)
+                    .map_err(io::Error::other)?;
+                if let Some(words) = words {
+                    document = words;
+                }
+                fields
+            }
         };
         if self.format == Format::Conllu {
             set_fields(&mut document, &fields).map_err(io::Error::other)?;
@@ -1541,21 +1547,23 @@ mod tests {
     #[test]
     fn tokens() {
         // A token per line up to a tab, separators at its ends dropped; blank lines between
-        // sentences
+        // sentences. A token gets the words of its analysis
         let input = "dime\nla\nverdad\n \n\n\u{200b}del\u{200b}\tADP\n\tX\ncaso";
         assert_eq!(
             output(&["-i", "tokens"], input),
-            "decir el verdad\nde caso\n"
+            "decir yo el verdad\nde el caso\n"
         );
         let conllu = output(&["-i", "tokens", "-f", "conllu"], input);
         assert!(
             conllu.starts_with(
-                "# newdoc\n# newpar\n# sent_id = 1\n# text = dime la verdad\n1\tdime\tdecir\tVERB"
+                "# newdoc\n# newpar\n# sent_id = 1\n# text = dime la verdad\n1-2\tdime\t_\t_\t_\t_\t_\t_\t_\t_\n1\tdi\tdecir\tVERB"
             ),
             "{conllu}"
         );
         assert!(
-            conllu.contains("# sent_id = 2\n# text = del caso\n1\tdel\tde\tADP"),
+            conllu.contains(
+                "# sent_id = 2\n# text = del caso\n1-2\tdel\t_\t_\t_\t_\t_\t_\t_\t_\n1\tde\tde\tADP"
+            ),
             "{conllu}"
         );
         let jsonl = output(&["-i", "tokens", "-f", "jsonl"], "dime\n");

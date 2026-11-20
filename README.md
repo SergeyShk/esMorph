@@ -96,7 +96,7 @@ The analyzer is created once: it loads the dictionary, and then it can be used i
 (True, False)
 ```
 
-`analyze_many` analyzes a list of words; `lemmatize` gives their lemmas, and `annotate` fills the lemmas, parts of speech and features of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, both without the GIL. The analyzer and the analyses are pickled, so they work with `multiprocessing` and joblib.
+`analyze_many` analyzes a list of words; `lemmatize` gives their lemmas, and `annotate` fills the lemmas, parts of speech and features of the words of a document of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter and gives a verb with clitics that the segmenter leaves whole its words, both without the GIL. The analyzer and the analyses are pickled, so they work with `multiprocessing` and joblib.
 
 The `esmorph` command, installed with the package, analyzes text from files and the standard input:
 
