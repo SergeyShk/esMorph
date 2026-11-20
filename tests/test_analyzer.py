@@ -243,6 +243,20 @@ def test_own_words_of_a_pair_or_several_parts_of_speech():
     }
 
 
+def test_own_word_as_a_sample_of_another():
+    # An own word given before in the same mapping is a sample, of one or of two parts of speech
+    morph = Analyzer(
+        words={
+            "tiktokear": "bloguear",
+            "feisbuquear": "tiktokear",
+            "tiktokero": ("bloguero", "ADJ,NOUN"),
+            "feisbuquero": ("tiktokero", "ADJ,NOUN"),
+        }
+    )
+    assert morph.analyze("feisbuqueamos")[0].lemma == "feisbuquear"
+    assert {a.pos for a in morph.analyze("feisbuqueros")} == {"ADJ", "NOUN"}
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows replaces no open file")
 def test_own_words_of_a_file_built_again(tmp_path):
     path = tmp_path / "es.dict"

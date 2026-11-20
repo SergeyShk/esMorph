@@ -118,6 +118,15 @@ impl OwnWords {
         self.lexemes.is_empty()
     }
 
+    /// Whether the sample of a lexeme has a form of the ending `rest`
+    fn has_ending(&self, lexeme: u32, rest: &[u8]) -> bool {
+        let sample = (self.lexemes.get(lexeme as usize))
+            .and_then(|lexeme| self.samples.get(lexeme.sample as usize));
+        (sample.into_iter().flat_map(|sample| sample.forms.iter())).any(|form| {
+            (self.endings.get(form.ending as usize)).is_some_and(|(ending, _)| **ending == *rest)
+        })
+    }
+
     /// The key of the stem of a lexeme
     fn stem(&self, lexeme: &OwnLexeme) -> &[u8] {
         let start = lexeme.stem as usize;
@@ -258,6 +267,10 @@ impl Dictionary {
     ///
     /// # Errors
     ///
+    /// Every call builds the lookup of all own words anew: many words are added in one call
+    ///
+    /// # Errors
+    ///
     /// [`Error::Word`] if the sample is not in the dictionary, has lexemes of several parts of
     /// speech and none is given, has no lexemes of a given part of speech, the word does not
     /// inflect as the sample (the sample has another ending or the word has no stem), or the word
@@ -288,8 +301,34 @@ impl Dictionary {
                 )
             })
             .collect();
+        // Lexemes of this call that the lookup has not yet, by the keys of their stems: a sample
+        // that may be a form of one of them is looked for after the lookup is built anew
+        let mut fresh: HashMap<Box<[u8]>, Vec<u32>> = HashMap::new();
         for (word, sample) in words {
-            let specs = self.sample_forms(word, sample.into())?;
+            let sample = sample.into();
+            let own = &self.own_words;
+            let key = (!fresh.is_empty())
+                .then(|| {
+                    self.alphabet
+                        .input_key(&normalized(sample.word).to_lowercase())
+                })
+                .flatten();
+            let of_fresh = key.is_some_and(|key| {
+                let diaeresis = self.alphabet.diaeresis_keys(&key);
+                (std::iter::once(&key).chain(&diaeresis)).any(|key| {
+                    let bytes = key.bytes();
+                    (1..=bytes.len()).any(|len| {
+                        (fresh.get(&bytes[..len])).is_some_and(|lexemes| {
+                            (lexemes.iter()).any(|&lexeme| own.has_ending(lexeme, &bytes[len..]))
+                        })
+                    })
+                })
+            });
+            if of_fresh {
+                Arc::make_mut(&mut self.own_words).index()?;
+                fresh.clear();
+            }
+            let specs = self.sample_forms(word, sample)?;
             for spec in &specs {
                 let forms: Vec<u16> = spec.forms.iter().map(|&(form, _)| form).collect();
                 let id = (spec.table, Box::from(spec.like.as_str()), forms);
@@ -343,6 +382,8 @@ impl Dictionary {
                 };
                 if lexemes.insert((key.bytes().into(), key.marks, sample)) {
                     let own = Arc::make_mut(&mut self.own_words);
+                    let number = own.lexemes.len() as u32;
+                    fresh.entry(key.bytes().into()).or_default().push(number);
                     own.lexemes.push(OwnLexeme {
                         marks: key.marks,
                         stem: own.stems.len() as u32,
@@ -761,12 +802,16 @@ mod tests {
             first(&dictionary, "wikeó"),
             ("wikeó".into(), "wikear".into())
         );
-        // A sample may be an own word
+        // A sample may be an own word, also of the same call
         let dictionary = dictionary.with_words([("zapear", "wikear")]).unwrap();
         assert_eq!(
             first(&dictionary, "zapeo"),
             ("zapeo".into(), "zapear".into())
         );
+        let together = (super::tests::dictionary())
+            .with_words([("wikear", "bloguear"), ("zapear", "wikear")])
+            .unwrap();
+        assert_eq!(first(&together, "zapeó"), ("zapeó".into(), "zapear".into()));
     }
 
     #[test]
