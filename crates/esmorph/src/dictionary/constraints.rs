@@ -239,7 +239,8 @@ impl Dictionary {
 
     /// A word the model reads as a noun after a reflexive or a dative clitic, the negation or
     /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`; so is one it reads as
-    /// an adverb or an adjective after such a clitic: `se acerca`, `te quedas`
+    /// an adverb, an adjective or a participle after such a clitic, which no participle follows:
+    /// `se acerca`, `te quedas`, `me visto`
     fn verb_after(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
         let list = &sentence[at];
         let before = at.checked_sub(1)?;
@@ -248,9 +249,13 @@ impl Dictionary {
         // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
             && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"));
-        let read = self.pos(list.first()?);
+        let top = list.first()?;
+        let read = self.pos(top);
         let noun = matches!(read, "NOUN" | "PROPN");
-        if !(((clitic || negation) && noun) || (clitic && matches!(read, "ADV" | "ADJ"))) {
+        let participle = matches!(read, "VERB" | "AUX") && self.has(top, "VerbForm", "Part");
+        if !(((clitic || negation) && noun)
+            || (clitic && (participle || matches!(read, "ADV" | "ADJ"))))
+        {
             return None;
         }
         list.iter().position(|analysis| {
