@@ -6,7 +6,7 @@ Se requiere Python 3.11 o superior.
 pip install esmorph
 ```
 
-El paquete instala también el [comando `esmorph`](cli.md). El extra `spacy` instala spaCy para el [componente `esmorph`](spacy.md): `pip install "esmorph[spacy]"`; spaCy no tiene paquetes precompilados para Python sin GIL (3.14t, 3.15t).
+El paquete instala también el [comando `esmorph`](cli.md).
 
 ## Paquetes precompilados
 

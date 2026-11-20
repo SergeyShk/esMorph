@@ -74,8 +74,7 @@ impl Dictionary {
     /// with these words, ignoring case and accents, else the first such analysis of the token as
     /// a verb with clitics, its probability the share among them; without one the first analysis
     /// of the first word
-    #[doc(hidden)]
-    pub fn host<S: AsRef<str>>(
+    fn host<S: AsRef<str>>(
         &self,
         token: &str,
         words: &[S],

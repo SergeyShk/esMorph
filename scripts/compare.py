@@ -21,12 +21,12 @@ Description:
     analyzes a word without context and is scored by its first analysis and by the best of its
     analyses (oracle); esMorph in context annotates the gold tokens of a sentence (a multiword
     token with its gold words) with its context model; simplemma gives only a lemma; spaCy and
-    Stanza tag a sentence and give one analysis per word, and spaCy with esmorph is a pipeline of
-    the component esmorph alone. The lemmas and features of GSD are automatic, so only the part of
-    speech is compared on it. Inflection: whether esMorph, ablaut and verbecc give the gold form of
-    a verb of AnCora, PUD and COSER for its gold lemma and features. Speed - tokens per second on
-    AnCora test without loading (the best of two runs) and, for the chart, the whole time with
-    import and loading in a new process on texts of different size (the best of three processes).
+    Stanza tag a sentence and give one analysis per word. The lemmas and features of GSD are
+    automatic, so only the part of speech is compared on it. Inflection: whether esMorph, ablaut
+    and verbecc give the gold form of a verb of AnCora, PUD and COSER for its gold lemma and
+    features. Speed - tokens per second on AnCora test without loading (the best of two runs) and,
+    for the chart, the whole time with import and loading in a new process on texts of different
+    size (the best of three processes).
     Writes Markdown tables, results.json in the data directory (a run of some systems updates only
     their results) and the chart in SVG.
     The versions of all packages are pinned in compare.py.lock; esMorph is the version from it or a
@@ -375,28 +375,6 @@ def spacy_system(data: Path) -> System:
     return System(analyze, spacy_convert)
 
 
-def spacy_esmorph_system(data: Path) -> System:
-    """spaCy with the component esmorph on the gold words: the pipeline of the component alone,
-    without the models of es_core_news_sm"""
-    import spacy
-    from spacy.tokens import Doc
-
-    nlp = spacy.blank("es")
-    nlp.add_pipe("esmorph")
-
-    def analyze(text: Text) -> object:
-        # A gold sentence is one sentence for the component
-        docs = []
-        for sentence in text.words:
-            doc = Doc(
-                nlp.vocab, words=sentence, sent_starts=[True] + [False] * (len(sentence) - 1)
-            )
-            docs.append(doc)
-        return list(nlp.pipe(docs))
-
-    return System(analyze, spacy_convert)
-
-
 def spacy_convert(text: Text, docs: object) -> list[list[list[Candidate]]]:
     """The analyses of the words of spaCy documents"""
     assert isinstance(docs, list)
@@ -431,7 +409,6 @@ SYSTEMS = {
     "esmorph-context": esmorph_context_system,
     "simplemma": simplemma_system,
     "spacy": spacy_system,
-    "spacy-esmorph": spacy_esmorph_system,
     "stanza": stanza_system,
 }
 CONJUGATORS = ("esmorph", "ablaut", "verbecc")
@@ -440,7 +417,6 @@ TITLES = {
     "esmorph-context": "esMorph in context",
     "simplemma": "simplemma",
     "spacy": "spaCy es_core_news_sm",
-    "spacy-esmorph": "spaCy with esmorph",
     "stanza": "Stanza",
     "ablaut": "ablaut",
     "verbecc": "verbecc",
@@ -1011,11 +987,8 @@ def main() -> None:
         saved.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     report(results)
     if args.chart:
-        # The component in spaCy is the speed of esMorph in context with spaCy around it
         curves = {
-            name: results[name]["curve"]
-            for name in SYSTEMS
-            if "curve" in results.get(name, {}) and name != "spacy-esmorph"
+            name: results[name]["curve"] for name in SYSTEMS if "curve" in results.get(name, {})
         }
         chart(curves, args.chart)
         chart(curves, args.chart.with_suffix(".es.svg"), spanish=True)

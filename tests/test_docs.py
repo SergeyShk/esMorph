@@ -75,9 +75,6 @@ def run(code: str, namespace: dict) -> str:
 def test_examples(page):
     pattern = SPANISH_EXAMPLES if page.name.endswith(".es.md") else EXAMPLES
     text = page.read_text(encoding="utf-8")
-    # spaCy has no wheels for the free-threaded Python
-    if "import spacy" in text:
-        pytest.importorskip("spacy")
     namespace: dict = {}
     for code, result in pattern.findall(text):
         code, result = textwrap.dedent(code), textwrap.dedent(result)

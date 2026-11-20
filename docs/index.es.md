@@ -43,14 +43,6 @@
 
     [:octicons-arrow-right-24: El comando esmorph](cli.md)
 
--   :material-puzzle-outline:{ .lg .middle } __spaCy__
-
-    ---
-
-    El componente `esmorph`: el análisis en contexto en lugar del etiquetador, el morfologizador y el lematizador de una cadena
-
-    [:octicons-arrow-right-24: spaCy](spacy.md)
-
 -   :material-speedometer:{ .lg .middle } __Comparación__
 
     ---

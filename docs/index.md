@@ -43,14 +43,6 @@
 
     [:octicons-arrow-right-24: The esmorph command](cli.md)
 
--   :material-puzzle-outline:{ .lg .middle } __spaCy__
-
-    ---
-
-    The `esmorph` component: the analysis in context in place of the tagger, the morphologizer and the lemmatizer of a pipeline
-
-    [:octicons-arrow-right-24: spaCy](spacy.md)
-
 -   :material-speedometer:{ .lg .middle } __Comparison__
 
     ---
