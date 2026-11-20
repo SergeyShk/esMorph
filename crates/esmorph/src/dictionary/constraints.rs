@@ -277,7 +277,7 @@ impl Dictionary {
     }
 
     /// Whether the model reads a word as a plural noun that may be a finite verb and is no noun in
-    /// the singular: after `la` or `lo` it is the verb (`la ves`), not a noun (`la mies`)
+    /// the singular: after `la` or `lo` it is the verb (`la ves`), not a noun (`la botones`)
     fn plural_verb(&self, sentence: &[Vec<Analysis>], at: usize) -> bool {
         let Some(list) = sentence.get(at) else {
             return false;
@@ -304,10 +304,11 @@ impl Dictionary {
         // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
             && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"));
-        // No clitic follows a preposition: `por lo duras que eran`
+        // No clitic follows a preposition (`por lo duras que eran`), while a determiner may come
+        // before one: `por qué lo preguntas`
         let object = matches!(lower[before].as_str(), "la" | "lo" | "le" | "les")
             && self.top_pos(sentence, before) == "PRON"
-            && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"))
+            && !(before > 0 && self.top_pos(sentence, before - 1) == "ADP")
             && self.plural_verb(sentence, at);
         let top = list.first()?;
         let read = self.pos(top);

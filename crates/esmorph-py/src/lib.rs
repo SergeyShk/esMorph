@@ -637,7 +637,7 @@ fn _analyzer(
 /// for the dictionary of the package) and the words identify it
 struct OwnAnalyzer {
     path: Option<PathBuf>,
-    words: Arc<[OwnWord]>,
+    words: Arc<OwnWordList>,
     analyzer: Py<PyWeakrefReference>,
 }
 
@@ -647,12 +647,12 @@ fn with_own_words(
     py: Python<'_>,
     path: Option<PathBuf>,
     verify: bool,
-    words: Vec<OwnWord>,
+    words: OwnWordList,
 ) -> PyResult<Py<Analyzer>> {
     let found = (OWN.lock_py_attached(py))
         .unwrap_or_else(PoisonError::into_inner)
         .iter()
-        .filter(|own| own.path == path && *own.words == *words)
+        .filter(|own| own.path == path && *own.words == words)
         .find_map(|own| own.analyzer.bind(py).upgrade());
     let analyzer = match found {
         Some(analyzer) => analyzer.cast_into::<Analyzer>()?,
@@ -853,7 +853,7 @@ struct Analyzer {
     /// The dictionary is verified: pickle keeps it
     verified: AtomicBool,
     /// Own words with their samples and parts of speech, in the order given
-    words: Arc<[OwnWord]>,
+    words: Arc<OwnWordList>,
     /// The own words for pickle, made once: one object for the analyzer and all its analyses
     words_object: PyOnceLock<Py<PyDict>>,
     /// The analyzer of the dictionary whose copy has the own words, kept: they share the mapped
@@ -861,20 +861,69 @@ struct Analyzer {
     _base: Option<Py<Analyzer>>,
 }
 
-/// An own word, its sample and the part of speech of the sample
-type OwnWord = (String, String, Option<String>);
+/// Own words, their samples and the parts of speech of the samples in the order given: the fields
+/// one after another in one string and their ends, NO_POS in the end of a part of speech not given
+#[derive(Clone, Default, PartialEq, Eq)]
+struct OwnWordList {
+    text: String,
+    ends: Vec<u32>,
+}
+
+/// The bit of the end of a part of speech that is not given
+const NO_POS: u32 = 1 << 31;
+
+impl OwnWordList {
+    fn push(&mut self, word: &str, sample: &str, pos: Option<&str>) -> PyResult<()> {
+        for (field, given) in [
+            (word, true),
+            (sample, true),
+            (pos.unwrap_or_default(), pos.is_some()),
+        ] {
+            self.text.push_str(field);
+            let end = (u32::try_from(self.text.len()).ok())
+                .filter(|&end| end < NO_POS)
+                .ok_or_else(|| PyValueError::new_err("the own words are too long"))?;
+            self.ends.push(if given { end } else { end | NO_POS });
+        }
+        Ok(())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.ends.is_empty()
+    }
+
+    /// Own words: the word, the sample and the part of speech of each
+    fn iter(&self) -> impl Iterator<Item = (&str, &str, Option<&str>)> {
+        let field = |start: u32, end: u32| self.text.get(start as usize..(end & !NO_POS) as usize);
+        (self.ends.as_chunks::<3>().0.iter())
+            .enumerate()
+            .map(move |(at, ends)| {
+                let start = if at == 0 {
+                    0
+                } else {
+                    self.ends[3 * at - 1] & !NO_POS
+                };
+                let (word, sample) = (ends[0], ends[1]);
+                (
+                    field(start, word).unwrap_or_default(),
+                    field(word, sample).unwrap_or_default(),
+                    (ends[2] & NO_POS == 0).then(|| field(sample, ends[2]).unwrap_or_default()),
+                )
+            })
+    }
+}
 
 /// Own words of a mapping "word - sample or (sample, part of speech)"; the pair is a tuple or a list,
 /// as JSON gives it
-fn own_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<OwnWord>> {
+fn own_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<OwnWordList> {
     let Some(words) = words.filter(|words| !words.is_none()) else {
-        return Ok(Vec::new());
+        return Ok(OwnWordList::default());
     };
     let wrong = || PyTypeError::new_err("words must map strings to strings or pairs of strings");
     let items = words
         .call_method0(intern!(words.py(), "items"))
         .map_err(|_| wrong())?;
-    let mut own = Vec::new();
+    let mut own = OwnWordList::default();
     for item in items.try_iter()? {
         let (word, sample): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
         let word: String = word.extract().map_err(|_| wrong())?;
@@ -886,7 +935,7 @@ fn own_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<OwnWord>> {
                 (sample, Some(pos))
             }
         };
-        own.push((word, sample, pos));
+        own.push(&word, &sample, pos.as_deref())?;
     }
     Ok(own)
 }
@@ -1493,7 +1542,7 @@ impl Analyzer {
         py: Python<'_>,
         path: Option<PathBuf>,
         verify: bool,
-        words: Vec<OwnWord>,
+        words: OwnWordList,
     ) -> PyResult<Self> {
         if words.is_empty() {
             return Analyzer::load(py, path, verify);
@@ -1510,10 +1559,10 @@ impl Analyzer {
         let this = base.get();
         let samples = words.iter().map(|(word, sample, pos)| {
             let sample = match pos {
-                Some(pos) => esmorph::Sample::from((sample.as_str(), pos.as_str())),
-                None => esmorph::Sample::from(sample.as_str()),
+                Some(pos) => esmorph::Sample::from((sample, pos)),
+                None => esmorph::Sample::from(sample),
             };
-            (word.as_str(), sample)
+            (word, sample)
         });
         // Many words take a while: other threads run meanwhile
         let dictionary = (py.detach(|| (*this.dictionary).clone().with_words(samples)))
@@ -1529,7 +1578,7 @@ impl Analyzer {
             saved_for_analyses: PyOnceLock::new(),
             tag_strings: PyOnceLock::new(),
             verified: AtomicBool::new(this.verified.load(Ordering::Relaxed)),
-            words: words.into(),
+            words: Arc::new(words),
             words_object: PyOnceLock::new(),
             _base: Some(base),
         })
