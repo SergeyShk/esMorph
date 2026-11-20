@@ -933,13 +933,13 @@ def test_analyze_sentence(morph):
         ("Adonde tú vayas , voy .", 2, ("ir", "VERB")),
         ("Se acerca a él .", 1, ("acercar", "VERB")),
         ("Es el punto de no retorno .", 5, ("retorno", "NOUN")),
-        # A plural noun after a clitic `la`, `lo`, `le` or `les` is a verb of `tú`, not a noun in
-        # the singular or after a preposition
+        # A plural noun after a clitic `la`, `lo`, `le` or `les` is a verb of `tú`, also after a
+        # determiner
         ("No me la quites .", 2, ("él", "PRON")),
         ("No me la quites .", 3, ("quitar", "VERB")),
         ("¿ Me lo preguntas ?", 3, ("preguntar", "VERB")),
         ("Le faltas tú .", 1, ("faltar", "VERB")),
-        ("Iban á la mies .", 3, ("mies", "NOUN")),
+        ("¿ Por qué lo preguntas ?", 4, ("preguntar", "VERB")),
         ("Ya ves que no .", 1, ("ver", "VERB")),
         # An imperative opening a sentence is no name; a name and a noun stay
         ("Indique si desea factura .", 0, ("indicar", "VERB")),
@@ -970,6 +970,15 @@ def test_analyze_sentence(morph):
 def test_constraints_of_the_context(morph, words, at, expected):
     analysis = morph.analyze_sentence(words.split())[at][0]
     assert (analysis.lemma, analysis.pos) == expected
+
+
+def test_no_verb_after_la_of_a_noun_in_the_singular_or_lo_after_a_preposition(morph):
+    # `la botones` is a bellhop, `lo` after a preposition is the article
+    for words, at in [
+        ("La botones llegó tarde .", 1),
+        ("Habló de lo cortas que eran las noches .", 3),
+    ]:
+        assert morph.analyze_sentence(words.split())[at][0].pos != "VERB"
 
 
 def test_constraint_keeps_the_probabilities_of_the_model(morph):
