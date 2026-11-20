@@ -26,6 +26,28 @@ use pyo3::types::{
 /// Tokens of one word that take the words of their analysis, by their indices, and the words
 type TokenWords = Vec<(usize, Vec<String>)>;
 
+/// Whether a document has XPOS or MISC beyond the spaces around a token, which other words lose
+fn keeps_columns(document: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = document.py();
+    for name in [intern!(py, "xpos"), intern!(py, "misc")] {
+        for value in document
+            .call_method1(intern!(py, "column"), (name,))?
+            .try_iter()?
+        {
+            let value = value?;
+            if value.is_none() {
+                continue;
+            }
+            let text: String = value.extract()?;
+            if name.to_str()? == "xpos" || text.split('|').any(|entry| !esmorph::space_entry(entry))
+            {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 /// How many words `analyze_many` and `lemmatize` read and analyze at a time without the GIL: the
 /// input is not copied whole, and Ctrl+C is checked between the chunks
 const CHUNK: usize = 8192;
@@ -1125,8 +1147,9 @@ impl Analyzer {
     ///     "pónganselo" becomes the multiword token "pongan", "se", "lo", the imperative of
     ///     "poner" and two pronouns. Then the analysis goes to a new document with these words
     ///     (with_words), and the given one stays as it was; a document whose words cannot change
-    ///     (it has heads, enhanced dependencies or empty nodes, or no with_words) is filled
-    ///     itself, and such a token gets the analysis of the whole. The words of a multiword
+    ///     (it has heads, enhanced dependencies or empty nodes, or no with_words) or would lose
+    ///     its xpos or misc other than the spaces after a token is filled itself, and such a
+    ///     token gets the analysis of the whole. The words of a multiword
     ///     token are analyzed by the token: "dime" split into "di" and "me" is the imperative of
     ///     "decir" with the pronoun "me", and clitics after a verb are pronouns. Without context
     ///     the analyses of a token are ordered as analyze orders them. A word without analyses
@@ -1228,7 +1251,12 @@ impl Analyzer {
         let split = document.hasattr(intern!(py, "with_words"))?;
         let (mut columns, words) = self.columns(py, &forms, &tokens, &pieces, context, split)?;
         let mut annotated = document.clone();
-        if !words.is_empty() {
+        // Other words would lose the XPOS and MISC of a document read from CoNLL-U
+        if !words.is_empty() && keeps_columns(document)? {
+            columns = self
+                .columns(py, &forms, &tokens, &pieces, context, false)?
+                .0;
+        } else if !words.is_empty() {
             let mapping = PyDict::new(py);
             for (token, parts) in words {
                 mapping.set_item(token, parts)?;

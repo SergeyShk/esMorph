@@ -7,6 +7,7 @@ use crate::alphabet;
 use crate::clitics;
 
 /// Tokens of one word that take the words of their analysis, by their indices, and the words
+#[cfg(feature = "anyseg")]
 type TokenWords = Vec<(usize, Vec<String>)>;
 
 /// The fields of a word in CoNLL-U by its most probable analysis
@@ -252,15 +253,15 @@ impl Dictionary {
 
     /// The fields of every word of a document, as `annotate` gives them, and the document with
     /// the words of its tokens of one word whose analysis has several, if there are such; a
-    /// document whose words cannot change (it has heads, enhanced dependencies or empty nodes)
-    /// keeps them, and such a token gets the analysis of the whole
+    /// document whose words cannot change or would lose its columns (`keeps_words`) keeps them,
+    /// and such a token gets the analysis of the whole
     #[cfg(feature = "anyseg")]
     pub(crate) fn document_analysis(
         &self,
         document: &anyseg::Document,
         context: bool,
     ) -> Result<(Option<anyseg::Document>, Vec<Fields<'_>>), Error> {
-        let (fields, words) = self.document_fields(document, context, true)?;
+        let (fields, words) = self.document_fields(document, context, !keeps_words(document))?;
         if words.is_empty() {
             return Ok((None, fields));
         }
@@ -276,7 +277,9 @@ impl Dictionary {
     /// tokens. A token that the segmenter leaves as one word and whose analysis has several gets
     /// these words: `pónganselo` becomes the multiword token `pongan` + `se` + `lo`, the
     /// imperative of `poner` and two pronouns; a document with heads, enhanced dependencies or
-    /// empty nodes keeps its words, and such a token gets the analysis of the whole. The words of a token of several are analyzed by the token: `dime` split into `di` +
+    /// empty nodes keeps its words, and so does one whose words have XPOS or MISC other than the
+    /// spaces after a token, which other words would lose; such a token gets the analysis of the
+    /// whole. The words of a token of several are analyzed by the token: `dime` split into `di` +
     /// `me` is the imperative of `decir` with the pronoun `me`, and clitics after a verb are
     /// pronouns. A word without analyses gets its lower case as the lemma and the part of speech
     /// X; the earlier values of the columns are replaced
@@ -329,6 +332,31 @@ impl Dictionary {
         }
         set_fields(document, &fields)
     }
+}
+
+/// Whether a document keeps its words: other words cannot have its heads and enhanced
+/// dependencies and would lose its XPOS and MISC, except the spaces around a token, which anySeg
+/// gives the multiword token; a document of the segmenter has none of them
+#[cfg(feature = "anyseg")]
+fn keeps_words(document: &anyseg::Document) -> bool {
+    use anyseg::Column;
+
+    (0..document.word_count()).any(|word| {
+        document.head(word).is_some()
+            || document.column(Column::Deps, word).is_some()
+            || document.column(Column::Xpos, word).is_some()
+            || document
+                .column(Column::Misc, word)
+                .is_some_and(|misc| misc.split('|').any(|entry| !space_entry(entry)))
+    })
+}
+
+/// Whether an entry of MISC is the spaces around a token
+#[doc(hidden)]
+pub fn space_entry(entry: &str) -> bool {
+    ["SpaceAfter=", "SpacesAfter=", "SpacesBefore="]
+        .iter()
+        .any(|name| entry.starts_with(name))
 }
 
 /// The columns LEMMA, UPOS and FEATS of the words of a document from their fields
@@ -686,5 +714,19 @@ mod tests {
         assert_eq!(parsed.word_count(), 2);
         assert_eq!(parsed.column(Column::Lemma, 0), Some("devolver"));
         assert_eq!(parsed.column(Column::Upos, 0), Some("VERB"));
+        // So does one whose words have XPOS or MISC beyond the spaces, which other words lose; the
+        // spaces go to the multiword token
+        for (xpos, misc, words) in [
+            ("VMM02S0", "SpaceAfter=No", 2),
+            ("_", "SpaceAfter=No|start_char=0", 2),
+            ("_", "SpaceAfter=No", 3),
+        ] {
+            let text = format!(
+                "1\tDevuélvenos\t_\t_\t{xpos}\t_\t_\t_\t_\t{misc}\n2\t.\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+            );
+            let mut read = anyseg::read_conllu(&text).unwrap().remove(0);
+            dictionary.annotate(&mut read).unwrap();
+            assert_eq!(read.word_count(), words, "{misc}");
+        }
     }
 }

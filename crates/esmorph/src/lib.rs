@@ -45,6 +45,8 @@ pub use anyseg;
 pub use builder::Builder;
 #[doc(hidden)]
 pub use dictionary::Fields;
+#[doc(hidden)]
+pub use dictionary::space_entry;
 pub use dictionary::{Analysis, Dictionary, Entry, SENTENCE_CHUNK, Sample, Source, sentence_parts};
 pub use error::Error;
 #[doc(hidden)]
