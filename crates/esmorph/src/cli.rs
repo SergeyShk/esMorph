@@ -499,6 +499,41 @@ fn add_words(dictionary: Dictionary, paths: &[PathBuf]) -> Result<Dictionary, St
     })
 }
 
+/// The ends of the runs of sentences of CoNLL-U, each run either of sentences with heads, enhanced
+/// dependencies or empty nodes or of sentences without them, and the number of lines of each
+fn sentence_runs(text: &str) -> Vec<(usize, usize)> {
+    // An empty node, a head or enhanced dependencies: the ID, HEAD and DEPS of a word line
+    let fixes = |line: &str| {
+        let mut cols = line.split('\t');
+        let id = cols.next().unwrap_or_default();
+        let (head, deps) = (cols.nth(5), cols.nth(1));
+        !line.starts_with('#')
+            && deps.is_some()
+            && (id.contains('.') || head != Some("_") || deps != Some("_"))
+    };
+    let mut runs: Vec<(usize, usize, bool)> = Vec::new();
+    let (mut lines, mut fixed) = (0, false);
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        at += line.len();
+        lines += 1;
+        fixed = fixed || fixes(line);
+        if line.trim().is_empty() || at == text.len() {
+            match runs.last_mut() {
+                Some(run) if run.2 == fixed => {
+                    run.0 = at;
+                    run.1 += lines;
+                }
+                _ => runs.push((at, lines, fixed)),
+            }
+            (lines, fixed) = (0, false);
+        }
+    }
+    runs.into_iter()
+        .map(|(end, lines, _)| (end, lines))
+        .collect()
+}
+
 /// An error of input and output in plain words for the frequent cases
 fn describe(err: &io::Error) -> String {
     match err.kind() {
@@ -946,7 +981,15 @@ impl Writer<'_> {
                 let ready = std::mem::replace(&mut self.lines, rest);
                 let first = std::mem::replace(&mut self.first_line, self.next_line);
                 self.ready = 0;
-                self.write_conllu(&ready, first)?;
+                // Sentences with heads, enhanced dependencies or empty nodes keep their words, and
+                // a document of such sentences keeps all its words: such sentences and the others
+                // go apart, so a sentence and not its neighbours decides
+                let (mut start, mut first) = (0, first);
+                for (end, lines) in sentence_runs(&ready) {
+                    self.write_conllu(&ready[start..end], first)?;
+                    first += lines;
+                    start = end;
+                }
             }
         }
         Ok(())

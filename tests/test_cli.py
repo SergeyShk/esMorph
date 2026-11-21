@@ -59,6 +59,13 @@ def test_formats(tmp_path):
     ]
 
 
+EMPTY_NODE = (
+    "1\tVoy\t_\t_\t_\t_\t_\t_\t_\t_\n1.1\tvoy\t_\t_\t_\t_\t_\t_\t_\t_\n"
+    "2\tdevuélvenos\t_\t_\t_\t_\t_\t_\t_\t_\n3-4\tdel\t_\t_\t_\t_\t_\t_\t_\t_\n"
+    "3\tde\t_\t_\t_\t_\t_\t_\t_\t_\n4\tel\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+)
+
+
 def test_tokens_and_conllu_input():
     # A token gets the words of its analysis
     assert run("-i", "tokens", text="dime\nla\n\nverdad\n").stdout == "decir yo el\nverdad\n"
@@ -67,6 +74,30 @@ def test_tokens_and_conllu_input():
     assert lines[2].split("\t")[:4] == ["1", "Di", "decir", "VERB"]
     columns = lines[3].split("\t")
     assert (columns[:4], columns[6:8]) == (["2", "me", "yo", "PRON"], ["1", "iobj"])
+    # A sentence with an empty node keeps its words, and the next one does not
+    conllu = (
+        "1\tVoy\t_\t_\t_\t_\t_\t_\t_\t_\n1.1\tvoy\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+        "1\tDevuélvenos\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+    )
+    lines = run("-i", "conllu", "-f", "conllu", text=conllu).stdout.splitlines()
+    assert [line.split("\t")[1] for line in lines if "\t" in line] == [
+        "Voy",
+        "voy",
+        "Devuélvenos",
+        "Devuelve",
+        "nos",
+    ]
+    # A token of a sentence with an empty node keeps its word with the analysis of the whole, and
+    # the words of a multiword token keep theirs
+    lines = run("-i", "conllu", "-f", "conllu", text=EMPTY_NODE).stdout.splitlines()
+    assert [line.split("\t")[1:3] for line in lines if "\t" in line] == [
+        ["Voy", "ir"],
+        ["voy", "_"],
+        ["devuélvenos", "devolver"],
+        ["del", "_"],
+        ["de", "de"],
+        ["el", "el"],
+    ]
 
 
 def test_version_and_help():

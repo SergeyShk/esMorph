@@ -1,14 +1,24 @@
 //! The fields of CoNLL-U of the words of a token and the analysis of a document of the anySeg
 //! segmenter
 
-use super::{Analysis, Dictionary, SENTENCE_CHUNK, normalized, sentence_parts};
+use super::{Analysis, Dictionary, SENTENCE_CHUNK, Source, normalized, sentence_parts};
 use crate::Error;
 use crate::alphabet;
 use crate::clitics;
 
 /// Tokens of one word that take the words of their analysis, by their indices, and the words
 #[cfg(feature = "anyseg")]
-type TokenWords = Vec<(usize, Vec<String>)>;
+type TokenWords<'d> = Vec<Split<'d>>;
+
+/// A token of one word that takes the words of its analysis: its number, the words and the fields
+/// of the whole token, which a document that keeps its words gets
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Split<'d> {
+    pub token: usize,
+    pub words: Vec<String>,
+    pub whole: Fields<'d>,
+}
 
 /// The fields of a word in CoNLL-U by its most probable analysis
 #[doc(hidden)]
@@ -44,8 +54,10 @@ impl Dictionary {
     /// ordered by the context model, without it as `analyze` orders them. `start` - whether the
     /// tokens start the sentence: a sentence given by pieces of `sentence_parts` of a multiple of
     /// `SENTENCE_CHUNK` tokens gets the fields of the whole; the analyses are kept by parts. With
-    /// `words` a token of one word whose analysis has several gets their fields, and the number
-    /// of the token among `tokens` and the words go to `words`: `dámelo` is `da` + `me` + `lo`
+    /// `words` a token of one word whose analysis of a verb with clitics or a contraction has
+    /// several words gets their fields, and the number of the token among `tokens`, the words and
+    /// the fields of the whole go to `words`: `dámelo` is `da` + `me` + `lo`; a token for which
+    /// `keep` gives true keeps its word
     ///
     /// # Errors
     ///
@@ -57,7 +69,8 @@ impl Dictionary {
         context: bool,
         start: bool,
         fields: &mut Vec<Fields<'d>>,
-        mut words: Option<&mut Vec<(usize, Vec<String>)>>,
+        mut words: Option<&mut Vec<Split<'d>>>,
+        keep: &dyn Fn(usize) -> bool,
     ) -> Result<(), Error> {
         for (number, range) in sentence_parts(tokens.len(), SENTENCE_CHUNK).enumerate() {
             let part = &tokens[range.clone()];
@@ -70,11 +83,16 @@ impl Dictionary {
                 texts.iter().map(|text| self.analyze(text)).collect()
             };
             for (at, ((token, forms), analyses)) in range.zip(part.iter().zip(analyses)) {
-                let split = words.is_some();
-                if let Some(parts) = self.token_fields_with(token, forms, analyses, fields, split)
+                let split = words.is_some() && !keep(at);
+                if let Some((parts, whole)) =
+                    self.token_fields_with(token, forms, analyses, fields, split)
                     && let Some(words) = words.as_deref_mut()
                 {
-                    words.push((at, parts));
+                    words.push(Split {
+                        token: at,
+                        words: parts,
+                        whole,
+                    });
                 }
             }
         }
@@ -118,7 +136,8 @@ impl Dictionary {
     /// `token_fields` with the analyses of the token in their order: of its text for a token of
     /// several words, of its word for a token of one. With `split` a token of one word whose
     /// first analysis has several words gets the fields of these words, in the case of the token,
-    /// and they are returned
+    /// and they are returned with the fields of the whole token; the words of a number with a
+    /// unit stay one, as the treebanks have them (`48km`)
     fn token_fields_with<'d, S: AsRef<str>>(
         &'d self,
         token: &str,
@@ -126,15 +145,16 @@ impl Dictionary {
         analyses: Vec<Analysis>,
         fields: &mut Vec<Fields<'d>>,
         split: bool,
-    ) -> Option<Vec<String>> {
+    ) -> Option<(Vec<String>, Fields<'d>)> {
         if split
-            && words.len() == 1
+            && let [word] = words
             && let Some(parts) = (analyses.first())
-                .filter(|analysis| analysis.words.len() > 1)
+                .filter(|analysis| analysis.words.len() > 1 && analysis.source != Source::Rule)
                 .map(|analysis| cased(&analysis.words, token))
         {
+            let whole = self.fields(word.as_ref(), analyses.first().cloned());
             self.token_fields_with(token, &parts, analyses, fields, false);
-            return Some(parts);
+            return Some((parts, whole));
         }
         let (first, rest) = words.split_first()?;
         let first = first.as_ref();
@@ -219,7 +239,7 @@ impl Dictionary {
         document: &anyseg::Document,
         context: bool,
         split: bool,
-    ) -> Result<(Vec<Fields<'_>>, TokenWords), Error> {
+    ) -> Result<(Vec<Fields<'_>>, TokenWords<'_>), Error> {
         let mut fields = Vec::with_capacity(document.word_count());
         let mut words = Vec::new();
         let spans = document.tokens();
@@ -237,37 +257,42 @@ impl Dictionary {
                 .map(|(token, forms)| (spans[token].slice(document.text()), forms.as_slice()))
                 .collect();
             let first = words.len();
+            let keep = |at: usize| keeps_columns(document, sentence.tokens.start + at);
             self.sentence_fields(
                 &tokens,
                 context,
                 true,
                 &mut fields,
                 split.then_some(&mut words),
+                &keep,
             )?;
-            for (token, _) in &mut words[first..] {
-                *token += sentence.tokens.start;
+            for split in &mut words[first..] {
+                split.token += sentence.tokens.start;
             }
         }
         Ok((fields, words))
     }
 
     /// The fields of every word of a document, as `annotate` gives them, and the document with
-    /// the words of its tokens of one word whose analysis has several, if there are such; a
-    /// document whose words cannot change or would lose its columns (`keeps_words`) keeps them,
-    /// and such a token gets the analysis of the whole
+    /// the words of its tokens of one word whose analysis has several, if there are such. A
+    /// document with heads or enhanced dependencies keeps its words, as does a token whose word
+    /// has XPOS or MISC other than the spaces around it, which other words would lose (`keeps_columns`);
+    /// a token that keeps its word gets the analysis of the whole
     #[cfg(feature = "anyseg")]
     pub(crate) fn document_analysis(
         &self,
         document: &anyseg::Document,
         context: bool,
     ) -> Result<(Option<anyseg::Document>, Vec<Fields<'_>>), Error> {
-        let (fields, words) = self.document_fields(document, context, !keeps_words(document))?;
+        let (fields, words) = self.document_fields(document, context, !fixed_ids(document))?;
         if words.is_empty() {
             return Ok((None, fields));
         }
-        match document.clone().with_words(words) {
-            Ok(document) => Ok((Some(document), fields)),
-            Err(_) => Ok((None, self.document_fields(document, context, false)?.0)),
+        let parts = (words.iter()).map(|split| (split.token, split.words.clone()));
+        match document.clone().with_words(parts) {
+            Ok(other) => Ok((Some(other), fields)),
+            // A document with empty nodes keeps its words too
+            Err(_) => Ok((None, whole_fields(document, fields, words))),
         }
     }
 
@@ -277,9 +302,9 @@ impl Dictionary {
     /// tokens. A token that the segmenter leaves as one word and whose analysis has several gets
     /// these words: `pónganselo` becomes the multiword token `pongan` + `se` + `lo`, the
     /// imperative of `poner` and two pronouns; a document with heads, enhanced dependencies or
-    /// empty nodes keeps its words, and so does one whose words have XPOS or MISC other than the
-    /// spaces after a token, which other words would lose; such a token gets the analysis of the
-    /// whole. The words of a token of several are analyzed by the token: `dime` split into `di` +
+    /// empty nodes keeps its words, and so does a token whose word has XPOS or MISC other than
+    /// the spaces after a token, which other words would lose; such a token gets the analysis of
+    /// the whole. A number with a unit stays one word, as in the treebanks (`48km`). The words of a token of several are analyzed by the token: `dime` split into `di` +
     /// `me` is the imperative of `decir` with the pronoun `me`, and clitics after a verb are
     /// pronouns. A word without analyses gets its lower case as the lemma and the part of speech
     /// X; the earlier values of the columns are replaced
@@ -334,21 +359,51 @@ impl Dictionary {
     }
 }
 
-/// Whether a document keeps its words: other words cannot have its heads and enhanced
-/// dependencies and would lose its XPOS and MISC, except the spaces around a token, which anySeg
-/// gives the multiword token; a document of the segmenter has none of them
+/// Whether the words of a document cannot change: other words cannot have its heads and enhanced
+/// dependencies, which refer to the numbers of words; a document of the segmenter has none
 #[cfg(feature = "anyseg")]
-fn keeps_words(document: &anyseg::Document) -> bool {
+fn fixed_ids(document: &anyseg::Document) -> bool {
     use anyseg::Column;
 
-    (0..document.word_count()).any(|word| {
-        document.head(word).is_some()
-            || document.column(Column::Deps, word).is_some()
-            || document.column(Column::Xpos, word).is_some()
+    (0..document.word_count())
+        .any(|word| document.head(word).is_some() || document.column(Column::Deps, word).is_some())
+}
+
+/// Whether a token keeps its words: other words would lose their XPOS and MISC, except the spaces
+/// around a token, which anySeg gives the multiword token
+#[cfg(feature = "anyseg")]
+fn keeps_columns(document: &anyseg::Document, token: usize) -> bool {
+    use anyseg::Column;
+
+    document.token_words(token).any(|word| {
+        document.column(Column::Xpos, word).is_some()
             || document
                 .column(Column::Misc, word)
                 .is_some_and(|misc| misc.split('|').any(|entry| !space_entry(entry)))
     })
+}
+
+/// The fields of a document whose tokens keep their words: a token that the analysis splits gets
+/// the fields of the whole instead of those of its words
+#[cfg(feature = "anyseg")]
+fn whole_fields<'d>(
+    document: &anyseg::Document,
+    fields: Vec<Fields<'d>>,
+    words: TokenWords<'d>,
+) -> Vec<Fields<'d>> {
+    let mut whole = Vec::with_capacity(document.word_count());
+    let mut rows = fields.into_iter();
+    let mut splits = words.into_iter().peekable();
+    for token in 0..document.tokens().len() {
+        match splits.next_if(|split| split.token == token) {
+            Some(split) => {
+                rows.by_ref().take(split.words.len()).for_each(drop);
+                whole.push(split.whole);
+            }
+            None => whole.extend(rows.by_ref().take(document.token_words(token).len())),
+        }
+    }
+    whole
 }
 
 /// Whether an entry of MISC is the spaces around a token
@@ -600,7 +655,8 @@ mod tests {
                 .map(|(token, words)| (*token, words.as_slice()))
                 .collect();
             let mut fields = Vec::new();
-            (dictionary.sentence_fields(&tokens, context, true, &mut fields, None)).unwrap();
+            (dictionary.sentence_fields(&tokens, context, true, &mut fields, None, &|_| false))
+                .unwrap();
             fields.into_iter().map(|word| word.pos).collect::<Vec<_>>()
         };
         assert_eq!(pos(&["Ella", "la", "vio"], true), ["PRON", "PRON", "VERB"]);
