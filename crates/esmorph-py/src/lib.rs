@@ -1343,19 +1343,24 @@ impl Analyzer {
             set_columns.call((), Some(&columns))?;
             return Ok(document.clone());
         };
-        set_columns.call((), Some(&whole))?;
         let mapping = PyDict::new(py);
         for (token, parts) in words {
             mapping.set_item(token, parts)?;
         }
-        // A document with heads, enhanced dependencies or empty nodes keeps its words
-        match document.call_method1(intern!(py, "with_words"), (mapping,)) {
-            Ok(other) => {
+        // The new document is made before the given one is filled, so it copies no columns; a
+        // document with heads, enhanced dependencies or empty nodes keeps its words
+        let other = match document.call_method1(intern!(py, "with_words"), (mapping,)) {
+            Ok(other) => Some(other),
+            Err(err) if err.is_instance_of::<PyValueError>(py) => None,
+            Err(err) => return Err(err),
+        };
+        set_columns.call((), Some(&whole))?;
+        match other {
+            Some(other) => {
                 other.call_method(intern!(py, "set_columns"), (), Some(&columns))?;
                 Ok(other)
             }
-            Err(err) if err.is_instance_of::<PyValueError>(py) => Ok(document.clone()),
-            Err(err) => Err(err),
+            None => Ok(document.clone()),
         }
     }
 
@@ -1577,27 +1582,27 @@ impl Analyzer {
             return Ok((dict([&lemmas, &parts, &feats])?, None, Vec::new()));
         }
         // The columns of the words as they are: a token that takes other words has the analysis
-        // of the whole instead of their rows
+        // of the whole instead of their rows; the rows between such tokens are copied by slices
         let whole = [PyList::empty(py), PyList::empty(py), PyList::empty(py)];
         let split_columns = [&lemmas, &parts, &feats];
-        let mut at = 0;
-        let mut splits = words.iter().peekable();
-        for (token, (_, range)) in tokens.iter().enumerate() {
-            match splits.next_if(|word| word.token == token) {
-                Some(word) => {
-                    row(word.whole.clone(), [&whole[0], &whole[1], &whole[2]])?;
-                    at += word.words.len();
-                }
-                None => {
-                    for _ in range.clone() {
-                        for (list, from) in whole.iter().zip(split_columns) {
-                            list.append(from.get_item(at)?)?;
-                        }
-                        at += 1;
-                    }
-                }
+        let extend = intern!(py, "extend");
+        let copy = |start: usize, end: usize| -> PyResult<()> {
+            for (list, from) in whole.iter().zip(split_columns) {
+                list.call_method1(extend, (from.get_slice(start, end),))?;
             }
+            Ok(())
+        };
+        // Only a token of one word is split: its rows start at its word moved by the words that
+        // the splits before it gained
+        let (mut copied, mut gained) = (0, 0);
+        for word in &words {
+            let at = tokens[word.token].1.start + gained;
+            copy(copied, at)?;
+            row(word.whole.clone(), [&whole[0], &whole[1], &whole[2]])?;
+            copied = at + word.words.len();
+            gained += word.words.len() - 1;
         }
+        copy(copied, lemmas.len())?;
         let token_words: TokenWords = (words.into_iter())
             .map(|word| (word.token, word.words))
             .collect();

@@ -59,6 +59,13 @@ def test_formats(tmp_path):
     ]
 
 
+EMPTY_NODE = (
+    "1\tVoy\t_\t_\t_\t_\t_\t_\t_\t_\n1.1\tvoy\t_\t_\t_\t_\t_\t_\t_\t_\n"
+    "2\tdevuélvenos\t_\t_\t_\t_\t_\t_\t_\t_\n3-4\tdel\t_\t_\t_\t_\t_\t_\t_\t_\n"
+    "3\tde\t_\t_\t_\t_\t_\t_\t_\t_\n4\tel\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+)
+
+
 def test_tokens_and_conllu_input():
     # A token gets the words of its analysis
     assert run("-i", "tokens", text="dime\nla\n\nverdad\n").stdout == "decir yo el\nverdad\n"
@@ -79,6 +86,17 @@ def test_tokens_and_conllu_input():
         "Devuélvenos",
         "Devuelve",
         "nos",
+    ]
+    # A token of a sentence with an empty node keeps its word with the analysis of the whole, and
+    # the words of a multiword token keep theirs
+    lines = run("-i", "conllu", "-f", "conllu", text=EMPTY_NODE).stdout.splitlines()
+    assert [line.split("\t")[1:3] for line in lines if "\t" in line] == [
+        ["Voy", "ir"],
+        ["voy", "_"],
+        ["devuélvenos", "devolver"],
+        ["del", "_"],
+        ["de", "de"],
+        ["el", "el"],
     ]
 
 

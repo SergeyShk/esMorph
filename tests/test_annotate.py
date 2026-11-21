@@ -81,6 +81,15 @@ def test_words_that_cannot_change(morph):
     annotated = morph.annotate(mixed)
     assert [word.form for word in annotated.words] == ["Devuélvenos", ",", "di", "me", "lo"]
     assert mixed.column("lemma") == ["devolver", ",", "decir"]
+    # So does a document with an empty node, which with_words refuses: its multiword token keeps
+    # the words, and the token of one word gets the analysis of the whole
+    empty = anyseg.read_conllu(
+        "1\tVoy\t_\t_\t_\t_\t_\t_\t_\t_\n1.1\tvoy\t_\t_\t_\t_\t_\t_\t_\t_\n"
+        "2\tdevuélvenos\t_\t_\t_\t_\t_\t_\t_\t_\n3-4\tdel\t_\t_\t_\t_\t_\t_\t_\t_\n"
+        "3\tde\t_\t_\t_\t_\t_\t_\t_\t_\n4\tel\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+    )[0]
+    assert morph.annotate(empty) is empty
+    assert empty.column("lemma") == ["ir", "devolver", "de", "el"]
     # A document without with_words keeps its words too
     document = Document(["Devuélvenos", "."])
     assert morph.annotate(document) is document

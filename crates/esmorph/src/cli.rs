@@ -502,30 +502,31 @@ fn add_words(dictionary: Dictionary, paths: &[PathBuf]) -> Result<Dictionary, St
 /// The ends of the runs of sentences of CoNLL-U, each run either of sentences with heads, enhanced
 /// dependencies or empty nodes or of sentences without them, and the number of lines of each
 fn sentence_runs(text: &str) -> Vec<(usize, usize)> {
-    let fixed = |sentence: &str| {
-        sentence.lines().any(|line| {
-            let cols: Vec<&str> = line.split('\t').collect();
-            !line.starts_with('#')
-                && cols.len() == 10
-                && (cols[0].contains('.') || cols[6] != "_" || cols[8] != "_")
-        })
+    // An empty node, a head or enhanced dependencies: the ID, HEAD and DEPS of a word line
+    let fixes = |line: &str| {
+        let mut cols = line.split('\t');
+        let id = cols.next().unwrap_or_default();
+        let (head, deps) = (cols.nth(5), cols.nth(1));
+        !line.starts_with('#')
+            && deps.is_some()
+            && (id.contains('.') || head != Some("_") || deps != Some("_"))
     };
     let mut runs: Vec<(usize, usize, bool)> = Vec::new();
-    let (mut start, mut lines) = (0, 0);
+    let (mut lines, mut fixed) = (0, false);
     let mut at = 0;
     for line in text.split_inclusive('\n') {
         at += line.len();
         lines += 1;
+        fixed = fixed || fixes(line);
         if line.trim().is_empty() || at == text.len() {
-            let kind = fixed(&text[start..at]);
             match runs.last_mut() {
-                Some(run) if run.2 == kind => {
+                Some(run) if run.2 == fixed => {
                     run.0 = at;
                     run.1 += lines;
                 }
-                _ => runs.push((at, lines, kind)),
+                _ => runs.push((at, lines, fixed)),
             }
-            (start, lines) = (at, 0);
+            (lines, fixed) = (0, false);
         }
     }
     runs.into_iter()
