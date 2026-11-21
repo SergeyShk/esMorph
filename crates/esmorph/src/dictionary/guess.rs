@@ -132,6 +132,10 @@ impl Dictionary {
                 if !infinitive && !host.ends_with("ndo") {
                     continue;
                 }
+                // The guesses below keep only an infinitive or a gerund
+                if !host.ends_with('r') && !host.ends_with("ndo") {
+                    continue;
+                }
                 let mut guessed = self.prefixed(&host);
                 if guessed.is_empty() {
                     guessed = self.by_ending(&host);
@@ -227,7 +231,7 @@ impl Dictionary {
         }
         let found = match self.paradigm_model() {
             Ok(Some(model)) => self.by_model(model, word),
-            // The model was checked when the dictionary was read
+            // A damaged model is an error of `verify`; the lists guess without it
             _ => self.by_counts(word),
         };
         // Forms of one lemma and tag in several tables are one analysis

@@ -414,8 +414,9 @@ fn build(
         if !gaps.is_empty() {
             return Err(Error::Build(format!(
                 "the context model was trained with a dictionary without the tags {}: build the \
-                 dictionary without the model (three arguments), train the model with it \
-                 (scripts/train_context.py --dictionary) and build the dictionary again",
+                 dictionary without the context model (`-`, with the paradigm model as the fifth \
+                 argument), train the model with it (scripts/train_context.py --dictionary) and \
+                 build the dictionary again",
                 gaps.join(", ")
             )));
         }

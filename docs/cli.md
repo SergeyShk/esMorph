@@ -22,7 +22,7 @@ decir yo el verdad de el caso .
 | `-i`, `--input` | `text` | [Input](#input): `text`, `tokens`, `conllu` |
 | `-d`, `--dictionary` | the package dictionary | An esMorph dictionary file, checked whole as with [`verify=True`](analyzer.md#parameters) |
 | `-w`, `--words` | | A file of [own words](analyzer.md#words): per line a word and its sample separated by a tab, and the part of speech if the sample has lexemes of several (several are separated by commas: `ADJ,NOUN`); the option may repeat |
-| `--no-context` | | Order the analyses of a word as [`analyze`](analyzer.md#analyze) does, without the context model: faster; for a list of words and a dictionary without a model |
+| `--no-context` | | Order the analyses of a word as [`analyze`](analyzer.md#analyze) does, without the context model: faster; for a list of words and a dictionary without a context model |
 | `-o`, `--output` | the standard output | The result file; `-` is the standard output |
 | `-h`, `--help` | | Show the help |
 | `-V`, `--version` | | Show the version |

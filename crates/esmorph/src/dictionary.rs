@@ -378,7 +378,10 @@ impl Dictionary {
         let forms = dictionary.table_forms();
         dictionary.check_records(&forms)?;
         dictionary.check_guesses(&forms)?;
-        if dictionary.tag_weights().len() != dictionary.ud.len() {
+        // A weight is the frequency of the tag plus one: a zero would give probabilities NaN
+        if dictionary.tag_weights().len() != dictionary.ud.len()
+            || dictionary.tag_weights().contains(&0)
+        {
             return Err(Error::Format(
                 "the weights of the tags do not match the tags".into(),
             ));
@@ -460,15 +463,15 @@ impl Dictionary {
         &self.meta
     }
 
-    /// Checks every node of the automata as a lookup reads it and reads the context model, for a
-    /// dictionary of a source that is not trusted: loading checks the checksum and the structure of
-    /// the tables, while a crafted automaton with a right checksum loads and makes the analysis
-    /// panic. Takes tens of milliseconds. A panic of the walk becomes an error, so it needs the
+    /// Checks every node of the automata as a lookup reads it and reads the context and the
+    /// paradigm models, for a dictionary of a source that is not trusted: loading checks the
+    /// checksum and the structure of the tables, while a crafted automaton with a right checksum
+    /// loads and makes the analysis panic. Takes tens of milliseconds. A panic of the walk becomes an error, so it needs the
     /// default `panic = "unwind"`; the panic hook may still print its message
     ///
     /// # Errors
     ///
-    /// [`Error::Format`] if an automaton or the context model is damaged
+    /// [`Error::Format`] if an automaton or a model is damaged
     pub fn verify(&self) -> Result<(), Error> {
         for (name, map) in [("word forms", &self.words), ("endings", &self.guesses)] {
             let walked =

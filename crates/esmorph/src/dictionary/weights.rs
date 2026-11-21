@@ -498,13 +498,11 @@ fn cell_step(gates: &mut [f32], h: &mut [f32], c: &mut [f32]) {
     }
 }
 
-/// A layer of an LSTM of one direction: the state after the last of `n` inputs
+/// A layer of an LSTM of one direction over the input parts of the gates of its inputs, the
+/// input matrix times the input plus the biases: the state after the last of them
 #[inline(always)]
-pub(super) fn lstm<const FMA: bool>(cell: &Lstm, input: &[f32], n: usize) -> Vec<f32> {
+pub(super) fn lstm<const FMA: bool>(cell: &Lstm, gates_input: &mut [f32]) -> Vec<f32> {
     let hidden = cell.hidden.cols;
-    let mut gates_input = vec![0.0f32; n * 4 * hidden];
-    cell.input
-        .apply_all::<FMA>(input, &cell.bias, &mut gates_input);
     let (mut h, mut c) = (vec![0.0f32; hidden], vec![0.0f32; hidden]);
     for gates in gates_input.chunks_exact_mut(4 * hidden) {
         cell.hidden.apply_add::<FMA>(&h, gates);
@@ -648,6 +646,47 @@ pub(crate) mod tests {
             let alone = bilstm::<FMA>(&layer, std::slice::from_ref(input), d);
             assert_eq!(alone[0], output);
         }
+    }
+
+    #[test]
+    fn lstm_as_the_forward_direction() {
+        // The state of one direction after the last input is the forward half of the output of
+        // the BiLSTM at the last token, to the last bit
+        let (hidden, d, n) = (10, 20, 6);
+        let mut seed = 7u32;
+        let mut random = |count: usize| -> Vec<f32> {
+            (0..count)
+                .map(|_| {
+                    seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    (seed >> 8) as f32 / (1 << 24) as f32 - 0.5
+                })
+                .collect()
+        };
+        let mut cell = || Lstm {
+            input: Tiled::new(&Matrix {
+                rows: 4 * hidden,
+                cols: d,
+                data: random(4 * hidden * d),
+            }),
+            hidden: Tiled::new(&Matrix {
+                rows: 4 * hidden,
+                cols: hidden,
+                data: random(4 * hidden * hidden),
+            }),
+            bias: random(4 * hidden),
+        };
+        let layer = [cell(), cell()];
+        let input = random(n * d);
+        let mut gates = vec![0.0; n * 4 * hidden];
+        layer[0]
+            .input
+            .apply_all::<false>(&input, &layer[0].bias, &mut gates);
+        let state = lstm::<false>(&layer[0], &mut gates);
+        let output = bilstm::<false>(&layer, std::slice::from_ref(&input), 2 * hidden).remove(0);
+        assert_eq!(
+            state,
+            output[(n - 1) * 2 * hidden..(n - 1) * 2 * hidden + hidden]
+        );
     }
 
     #[test]

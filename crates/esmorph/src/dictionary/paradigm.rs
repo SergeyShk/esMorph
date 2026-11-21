@@ -142,6 +142,8 @@ pub(crate) struct Paradigms {
     /// Row of the tables of suffixes of the model by the number of a suffix of the dictionary: 0 -
     /// the training had no such suffix
     suffix_rows: Vec<u32>,
+    /// The input parts of the gates of the LSTM for every row of the table of letters
+    letter_gates: Vec<f32>,
 }
 
 impl Paradigms {
@@ -166,10 +168,18 @@ impl Paradigms {
                     .unwrap_or(0)
             })
             .collect();
+        let gates = 4 * model.lstm.hidden.cols;
+        let mut letter_gates = vec![0.0; model.char.rows * gates];
+        (model.lstm.input).apply_all::<false>(
+            &model.char.data,
+            &model.lstm.bias,
+            &mut letter_gates,
+        );
         Paradigms {
             model,
             tags,
             suffix_rows,
+            letter_gates,
         }
     }
 
@@ -177,13 +187,13 @@ impl Paradigms {
     /// end. The products are not fused: the scores are the same on every processor
     pub fn word(&self, lower: &str) -> Word {
         let model = &self.model;
-        let dchar = model.char.cols;
-        let mut input = Vec::with_capacity(model.max_chars * dchar);
+        let gates = 4 * model.lstm.hidden.cols;
+        let mut input = Vec::with_capacity(model.max_chars * gates);
         for letter in lower.chars().rev().take(model.max_chars) {
-            let row = model.chars.get(&letter).copied().unwrap_or(1);
-            input.extend_from_slice(model.char.row(row as usize));
+            let row = model.chars.get(&letter).copied().unwrap_or(1) as usize;
+            input.extend_from_slice(&self.letter_gates[row * gates..(row + 1) * gates]);
         }
-        let state = lstm::<false>(&model.lstm, &input, input.len() / dchar);
+        let state = lstm::<false>(&model.lstm, &mut input);
         let mut vector = vec![0.0; model.hidden.rows + 1];
         model.hidden.apply(&state, &mut vector[..model.hidden.rows]);
         for (value, bias) in vector.iter_mut().zip(&model.hidden_bias) {

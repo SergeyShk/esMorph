@@ -39,8 +39,8 @@ Description:
     repository (`--with-editable .`)
 
     A dictionary with new parts of speech or features needs a new model: the dictionary to train
-    with is built without the model (`esmorph-build` with three arguments), and then the
-    dictionary is built with the new model
+    with is built without the context model and with the paradigm model (`esmorph-build` with `-`
+    for the context model), and then the dictionary is built with the new model
 
 Example:
     uv run --with-editable . scripts/train_context.py --data target/context --output data/es-context.bin

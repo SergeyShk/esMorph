@@ -272,10 +272,16 @@ fn check_header(data: &[u8]) -> Result<(), Error> {
         return Err(truncated());
     };
     let version = u32::from_le_bytes([header[8], header[9], header[10], header[11]]);
-    if version != VERSION {
+    if version < VERSION {
         return Err(Error::Format(format!(
             "format version {version}, supported {VERSION}: build the dictionary again with this \
              version of esMorph"
+        )));
+    }
+    if version > VERSION {
+        return Err(Error::Format(format!(
+            "format version {version}, supported {VERSION}: the dictionary is of a newer esMorph, \
+             update esmorph"
         )));
     }
     Ok(())
@@ -719,6 +725,14 @@ pub(crate) mod tests {
                 .unwrap()
                 .to_string()
                 .contains("format version 10, supported 11: build the dictionary again")
+        );
+        other[8] = 12;
+        assert!(
+            layout(&other, true)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("format version 12, supported 11: the dictionary is of a newer esMorph")
         );
         let mut foreign = data.clone();
         foreign[0] = b'X';
