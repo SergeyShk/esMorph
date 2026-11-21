@@ -7,7 +7,7 @@
 use super::paradigm::{Features, Paradigms};
 use super::{Analysis, Dictionary, Entry, Host, Source, guess_list, with_host_source};
 use crate::clitics;
-use crate::format::{MAX_ENDING, MIN_ENDING_COUNT};
+use crate::format::{EXTRA, MAX_ENDING, MIN_ENDING_COUNT};
 
 /// Prefixes after which an unknown word is analyzed as the dictionary word without them, the
 /// longest first; prefixes of two letters (`re`, `co`, `ex`) start too many other words
@@ -395,11 +395,20 @@ impl Dictionary {
 
     /// Examples of the training of the paradigm model: the candidates of a lowercase word of the
     /// dictionary as if the dictionary had not the word, and whether each is right - the form of
-    /// a table of an analysis of the dictionary, or its lemma and UD tag
+    /// a table of an analysis of the dictionary, or its lemma and UD tag. A word of a lexeme with
+    /// forms of the extra source gives none: the lists count it under a table without them, so it
+    /// cannot be taken out of them
     #[doc(hidden)]
     pub fn guess_examples(&self, word: &str) -> Vec<GuessCandidate> {
         let own = self.found(word);
         let entries: Vec<Entry> = own.iter().filter_map(|analysis| analysis.entry).collect();
+        let extra = |entry: &Entry| {
+            (self.lexeme(*entry, word))
+                .is_some_and(|lexeme| lexeme.cells.iter().any(|&cell| cell & EXTRA != 0))
+        };
+        if entries.iter().any(extra) {
+            return Vec::new();
+        }
         (self.guess_candidates(word, &entries).into_iter())
             .filter_map(|candidate| {
                 let cell = self.guess_cell(candidate.entry, word)?;
