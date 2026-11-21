@@ -69,8 +69,9 @@ const AL_PHRASES: [&str; 12] = [
     "punto",
     "revés",
 ];
-/// Words a verb follows, not a noun without a determiner: the negation and the subject `tú`
-const BEFORE_VERB: [&str; 2] = ["no", "tú"];
+/// Words a verb follows, not a noun without a determiner: the negation and the subjects `tú` and
+/// `yo`
+const BEFORE_VERB: [&str; 3] = ["no", "tú", "yo"];
 /// Lemmas of the verbs followed by a bare infinitive: `puede ser`, `suele parecer`, but `tiene
 /// poder`, `perdió poder`
 const BEFORE_INFINITIVE: [&str; 16] = [
@@ -345,7 +346,8 @@ impl Dictionary {
     }
 
     /// A word the model reads as a noun after a reflexive or a dative clitic, the negation or
-    /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`; so is one it reads as
+    /// `tú` is a finite verb, after `yo` a verb of the first person: `que te vayas`, `no vayas`,
+    /// `adonde tú vayas`, `yo bebo`; so is one it reads as
     /// an adverb, an adjective or a participle after such a clitic, which no participle follows:
     /// `se acerca`, `te quedas`, `me visto`, and a plural noun after another clitic: `le faltas`,
     /// `lo preguntas`
@@ -361,10 +363,10 @@ impl Dictionary {
         let clitic = PROCLITICS.contains(&lower[before].as_str())
             && self.top_pos(sentence, before) == "PRON";
         // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`;
-        // `tú` after a verb is its subject: `¿has visto tú cosa igual?`
+        // `tú` and `yo` after a verb are its subject: `¿has visto tú cosa igual?`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
             && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"))
-            && !(lower[before] == "tú"
+            && !(matches!(lower[before].as_str(), "tú" | "yo")
                 && before > 0
                 && matches!(self.top_pos(sentence, before - 1), "VERB" | "AUX"));
         // No clitic follows a preposition (`por lo duras que eran`), while a determiner may come
@@ -385,8 +387,12 @@ impl Dictionary {
         {
             return None;
         }
+        // After `yo` the verb agrees with it: `porque yo calle`, while `yo casa` stays a noun
+        let person = (negation && lower[before] == "yo").then_some("1");
         list.iter().position(|analysis| {
-            matches!(self.pos(analysis), "VERB" | "AUX") && self.has(analysis, "VerbForm", "Fin")
+            matches!(self.pos(analysis), "VERB" | "AUX")
+                && self.has(analysis, "VerbForm", "Fin")
+                && person.is_none_or(|person| self.has(analysis, "Person", person))
         })
     }
 

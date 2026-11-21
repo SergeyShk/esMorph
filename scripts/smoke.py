@@ -23,6 +23,9 @@ assert morph.analyze("camion")[0].word == "camión"
 assert morph.is_known("hablamos")
 assert morph.lemmatize(["Hablo", "qzxw"]) == ["hablar", "qzxw"]
 assert pickle.loads(pickle.dumps(analysis)) == analysis
+# The dictionary has both models: an unknown lowercase word is guessed by the paradigm model
+assert {"context", "paradigms"} <= morph.dictionary_info.keys(), morph.dictionary_info
+assert morph.analyze("zumbeábamos")[0].lemma == "zumbear"
 assert "site-packages" in esmorph.__file__, esmorph.__file__
 # In Python without the GIL importing the module must not enable the GIL again
 if sysconfig.get_config_var("Py_GIL_DISABLED"):
