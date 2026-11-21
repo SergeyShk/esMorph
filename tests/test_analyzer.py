@@ -2005,6 +2005,13 @@ def test_plurals_of_letters_that_are_verbs_of_tu(morph):
     assert [form.word for form in letter.forms()] == ["ve"]
 
 
+def test_gerund_used_as_an_adverb(morph):
+    # A gerund is the verb, as UD has it, though a dictionary gives it as an adverb too
+    assert {a.pos for a in morph.analyze("queriendo")} == {"VERB", "AUX"}
+    words = ["Y", ",", "queriendo", "leer", ",", "abrió", "el", "libro", "."]
+    assert morph.analyze_sentence(words)[2][0].lemma == "querer"
+
+
 def test_conventions_of_the_dictionary(morph):
     def verb(lemma):
         return next(a for a in morph.analyze(lemma) if a.lemma == lemma and a.pos == "VERB")

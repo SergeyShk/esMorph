@@ -1213,10 +1213,13 @@ def export(output: Path) -> int:
     kinds |= extra_rows(
         download(extra_url, output / "raw" / extra_name, extra_digest), kinds, closed
     )
+    # An adverb that is the gerund of a verb is the verb, as UD has gerunds: `lo hizo queriendo`
+    gerunds = {row[2] for row in kinds if "VerbForm=Ger" in row[3]}
     kinds = {
         row: k
         for row, k in kinds.items()
-        if (row[0], row[2]) not in LETTER_PLURALS or row[1] != "NOUN"
+        if ((row[0], row[2]) not in LETTER_PLURALS or row[1] != "NOUN")
+        and (row[1] != "ADV" or row[2] not in gerunds)
     }
     with (output / "lexemes.tsv").open("w", encoding="utf-8", newline="\n") as out:
         out.writelines(
