@@ -6,11 +6,12 @@ use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, Read, Write};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use anyseg::{ConlluWriter, Document, Segmenter, Span, read_conllu};
 
-use crate::dictionary::{one_line, set_fields};
+use crate::dictionary::{PART_GROUP, one_line, set_fields};
 use crate::{Analysis, Dictionary, Sample};
 
 const HELP: &str = "\
@@ -675,6 +676,13 @@ impl From<io::Error> for Failure {
     }
 }
 
+/// Analyses in context of sentences of a document from the sentence `start`
+#[derive(Default)]
+struct Analyzed {
+    start: usize,
+    analyses: Vec<Vec<Vec<Analysis>>>,
+}
+
 struct Writer<'a> {
     dictionary: &'a Dictionary,
     segmenter: Segmenter,
@@ -1141,6 +1149,7 @@ impl Writer<'_> {
             }
         }
         self.out.clear();
+        let mut analyzed = Analyzed::default();
         // What the last piece kept and what was read since may end the paragraph before the first
         // token
         let lead = (document.tokens().first()).map_or("", |token| &document.text()[..token.start]);
@@ -1159,6 +1168,13 @@ impl Writer<'_> {
                 self.paragraphs += 1;
             }
             for sentence in sentences.start..sentences.end.min(count) {
+                // JSON Lines in context: the analyses of `PART_GROUP` sentences at a time
+                if self.format == Format::Jsonl
+                    && self.context
+                    && sentence >= analyzed.start + analyzed.analyses.len()
+                {
+                    analyzed = self.analyzed(&document, sentence..count.min(sentence + PART_GROUP));
+                }
                 match self.format {
                     Format::Lemmas => {
                         for (number, word) in document.sentence(sentence).words.enumerate() {
@@ -1184,7 +1200,12 @@ impl Writer<'_> {
                         }
                         self.out.push('\n');
                     }
-                    Format::Jsonl => self.json_sentence(&document, sentence),
+                    Format::Jsonl => {
+                        let analyses = (analyzed.analyses)
+                            .get(sentence.wrapping_sub(analyzed.start))
+                            .map_or(&[][..], Vec::as_slice);
+                        self.json_sentence(&document, sentence, analyses);
+                    }
                     Format::Conllu => {
                         (self.conllu).write(&document, sentence..sentence + 1, &mut self.out);
                     }
@@ -1205,9 +1226,26 @@ impl Writer<'_> {
         Ok(())
     }
 
+    /// The analyses in context of the sentences `sentences` of a document
+    fn analyzed(&self, document: &Document, sentences: Range<usize>) -> Analyzed {
+        let texts: Vec<Vec<&str>> = (sentences.clone())
+            .map(|sentence| {
+                (document.sentence(sentence).tokens)
+                    .map(|token| document.tokens()[token].slice(document.text()))
+                    .collect()
+            })
+            .collect();
+        let parts: Vec<(&[&str], bool)> = texts.iter().map(|texts| (&texts[..], true)).collect();
+        Analyzed {
+            start: sentences.start,
+            // The model was checked when the dictionary was loaded
+            analyses: (self.dictionary.analyze_sentence_parts(&parts)).unwrap_or_default(),
+        }
+    }
+
     /// A sentence in JSON Lines: its text (not for tokens, which have none) and every token with
-    /// all its analyses
-    fn json_sentence(&mut self, document: &Document, sentence: usize) {
+    /// all its analyses, in context `analyses`; without them a token gets those of `analyze`
+    fn json_sentence(&mut self, document: &Document, sentence: usize, analyses: &[Vec<Analysis>]) {
         let sentence = document.sentence(sentence);
         self.out.push('{');
         if self.input != Input::Tokens {
@@ -1219,11 +1257,6 @@ impl Writer<'_> {
         let texts: Vec<&str> = (sentence.tokens.clone())
             .map(|token| document.tokens()[token].slice(document.text()))
             .collect();
-        // The model was checked when the dictionary was loaded
-        let analyses = match self.context {
-            true => (self.dictionary.analyze_sentence(&texts)).unwrap_or_default(),
-            false => Vec::new(),
-        };
         for (number, text) in texts.iter().enumerate() {
             if number > 0 {
                 self.out.push_str(", ");

@@ -123,23 +123,38 @@ impl Tiled {
                     };
                 }
             }
-            for (tile, columns) in self.columns.chunks_exact(self.cols).enumerate() {
-                // Four sums apart, not an array: so they stay in registers in any build profile
-                let (mut s0, mut s1, mut s2, mut s3) =
-                    ([0.0f32; TILE], [0.0; TILE], [0.0; TILE], [0.0; TILE]);
-                for (column, values) in columns.iter().zip(&padded) {
-                    axpy::<FMA>(&mut s0, column, values[0]);
-                    axpy::<FMA>(&mut s1, column, values[1]);
-                    axpy::<FMA>(&mut s2, column, values[2]);
-                    axpy::<FMA>(&mut s3, column, values[3]);
-                }
-                let sums = [s0, s1, s2, s3];
-                for (b, sums) in sums.iter().enumerate().take(batch) {
-                    for (j, sum) in sums.iter().enumerate() {
-                        let row = tile * TILE + j;
-                        if row < self.rows {
-                            out[(first + b) * self.rows + row] = sum + bias[row];
-                        }
+            let out = &mut out[first * self.rows..(first + batch) * self.rows];
+            self.batch::<FMA, false>(&padded, batch, bias, out);
+        }
+    }
+
+    /// `out[b] = self · vectors[b] + bias` for `count` vectors by columns, or with `ADD`
+    /// `out[b] += self · vectors[b]`: the sums of a vector are those of `apply_add` to the last bit
+    #[inline(always)]
+    fn batch<const FMA: bool, const ADD: bool>(
+        &self,
+        columns: &[[f32; BATCH]],
+        count: usize,
+        bias: &[f32],
+        out: &mut [f32],
+    ) {
+        for (tile, weights) in self.columns.chunks_exact(self.cols).enumerate() {
+            // Four sums apart, not an array: so they stay in registers in any build profile
+            let (mut s0, mut s1, mut s2, mut s3) =
+                ([0.0f32; TILE], [0.0; TILE], [0.0; TILE], [0.0; TILE]);
+            for (column, values) in weights.iter().zip(columns) {
+                axpy::<FMA>(&mut s0, column, values[0]);
+                axpy::<FMA>(&mut s1, column, values[1]);
+                axpy::<FMA>(&mut s2, column, values[2]);
+                axpy::<FMA>(&mut s3, column, values[3]);
+            }
+            let sums = [s0, s1, s2, s3];
+            for (b, sums) in sums.iter().enumerate().take(count) {
+                for (j, sum) in sums.iter().enumerate() {
+                    let row = tile * TILE + j;
+                    if row < self.rows {
+                        let out = &mut out[b * self.rows + row];
+                        *out = if ADD { *out + sum } else { sum + bias[row] };
                     }
                 }
             }
@@ -493,6 +508,15 @@ impl Model {
     }
 }
 
+/// A sentence or a part of it for `Context::rank`: its tokens, their analyses and whether they
+/// start the sentence
+#[derive(Debug)]
+pub(crate) struct Sentence<'a> {
+    pub words: Vec<&'a str>,
+    pub analyses: Vec<Vec<Analysis>>,
+    pub first: bool,
+}
+
 /// The model and, for every UD tag of the dictionary and number of words of a token, the sums of
 /// the rows of the tags of an analysis: input, output and bias
 #[derive(Debug)]
@@ -601,61 +625,76 @@ impl Context {
             .map_or(&[], |at| &table[at * dc..(at + 1) * dc])
     }
 
-    /// Analyses of the tokens of a sentence by the score of the model, highest first; the
-    /// probability is the share in the context. The model sees the first `kmax` analyses of a
-    /// token, the others follow them with the probability 0. `words` are the tokens normalized as
-    /// `analyze` reads them, `first` - whether they start the sentence: its start is the first
-    /// token with a letter or a digit, after a dash of a dialogue, a quote or a bracket
-    pub fn rank(
-        &self,
-        words: &[&str],
-        analyses: Vec<Vec<Analysis>>,
-        first: bool,
-    ) -> Vec<Vec<Analysis>> {
+    /// Analyses of the tokens of sentences by the score of the model, highest first; the
+    /// probability is the share in the context. A sentence is its tokens, their analyses and
+    /// whether they start the sentence (`first`): its start is the first token with a letter or
+    /// a digit, after a dash of a dialogue, a quote or a bracket. The model sees the first `kmax`
+    /// analyses of a token, the others follow them with the probability 0; the tokens are
+    /// normalized as `analyze` reads them. The BiLSTM runs over four sentences at once, and the
+    /// analyses of a sentence are those of it alone to the last bit
+    pub fn rank(&self, sentences: Vec<Sentence<'_>>) -> Vec<Vec<Vec<Analysis>>> {
         // A build for x86-64 knows no fused multiply-add and no AVX2: a processor that has them
         // takes the copy of the model built for them, whose scores are those of arm64 to the last
         // bit
         #[cfg(target_arch = "x86_64")]
         if !FUSED && is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
             // SAFETY: the processor has the features of the function
-            return unsafe { self.rank_fused(words, analyses, first) };
+            return unsafe { self.rank_fused(sentences) };
         }
-        self.rank_with::<FUSED>(words, analyses, first)
+        self.rank_with::<FUSED>(sentences)
     }
 
     /// `rank` with the instructions of AVX2 and the fused multiply-add
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2,fma")]
-    fn rank_fused(
-        &self,
-        words: &[&str],
-        analyses: Vec<Vec<Analysis>>,
-        first: bool,
-    ) -> Vec<Vec<Analysis>> {
-        self.rank_with::<true>(words, analyses, first)
+    fn rank_fused(&self, sentences: Vec<Sentence<'_>>) -> Vec<Vec<Vec<Analysis>>> {
+        self.rank_with::<true>(sentences)
     }
 
-    /// `rank` with the fused multiply-add if `FMA`; inlined into each copy with its instructions
+    /// `rank` with the fused multiply-add if `FMA`; inlined into each copy with its instructions.
+    /// The products go in loops, not in closures: a closure that is not inlined has none of the
+    /// instructions of the copy
     #[inline(always)]
-    fn rank_with<const FMA: bool>(
-        &self,
-        words: &[&str],
-        analyses: Vec<Vec<Analysis>>,
-        first: bool,
-    ) -> Vec<Vec<Analysis>> {
-        let model = &self.model;
-        let n = words.len();
-        if n == 0 {
-            return analyses;
+    fn rank_with<const FMA: bool>(&self, sentences: Vec<Sentence<'_>>) -> Vec<Vec<Vec<Analysis>>> {
+        let mut hidden = Vec::with_capacity(sentences.len());
+        for sentence in &sentences {
+            hidden.push(self.input::<FMA>(sentence));
         }
+        // Four sentences of close lengths go together: the longest first, so the steps of a batch
+        // are mostly those of all four
+        let mut order: Vec<usize> = (0..sentences.len()).collect();
+        order.sort_by_key(|&at| std::cmp::Reverse(sentences[at].words.len()));
+        let d = self.model.input.rows;
+        for batch in order.chunks(BATCH) {
+            let mut states: Vec<Vec<f32>> = (batch.iter())
+                .map(|&at| std::mem::take(&mut hidden[at]))
+                .collect();
+            for layer in &self.model.lstm {
+                states = bilstm::<FMA>(layer, &states, d);
+            }
+            for (&at, states) in batch.iter().zip(states) {
+                hidden[at] = states;
+            }
+        }
+        let mut result = Vec::with_capacity(sentences.len());
+        for (sentence, hidden) in sentences.into_iter().zip(&hidden) {
+            result.push(self.scores(sentence.analyses, hidden));
+        }
+        result
+    }
+
+    /// The input of the BiLSTM for the tokens of a sentence, `n × d`: the input of a token is its
+    /// shape, the mean of the tags of its analyses, the word and its endings
+    #[inline(always)]
+    fn input<const FMA: bool>(&self, sentence: &Sentence<'_>) -> Vec<f32> {
+        let model = &self.model;
+        let (words, n) = (sentence.words.as_slice(), sentence.words.len());
         let (d, dc) = (model.input.rows, model.tag_in.cols);
         let din = model.input.cols;
         let mut x = vec![0.0f32; n * din];
-        let lead = (words.iter().position(|word| kind(word) != 0)).filter(|_| first);
+        let lead = (words.iter().position(|word| kind(word) != 0)).filter(|_| sentence.first);
         let (mut normal, mut key) = (String::new(), String::new());
-        for (t, (word, list)) in words.iter().zip(&analyses).enumerate() {
-            // Input of a token: the shape, the mean of the tags of its analyses, the word and its
-            // endings
+        for (t, (word, list)) in words.iter().zip(&sentence.analyses).enumerate() {
             let row = &mut x[t * din..(t + 1) * din];
             let (shape_row, rest) = row.split_at_mut(model.shape.cols);
             shape_row.copy_from_slice(model.shape.row(shape(word, lead == Some(t))));
@@ -678,7 +717,6 @@ impl Context {
                 out.copy_from_slice(model.suffix.row(number as usize));
             }
         }
-
         let mut hidden = vec![0.0f32; n * d];
         model
             .input
@@ -686,13 +724,17 @@ impl Context {
         for value in &mut hidden {
             *value = value.max(0.0);
         }
-        for layer in &model.lstm {
-            hidden = bilstm::<FMA>(layer, &hidden, n, d);
-        }
+        hidden
+    }
 
+    /// The analyses of the tokens of a sentence by their scores for the output of the BiLSTM
+    #[inline(always)]
+    fn scores(&self, analyses: Vec<Vec<Analysis>>, hidden: &[f32]) -> Vec<Vec<Analysis>> {
+        let model = &self.model;
+        let (d, dc) = (model.input.rows, model.tag_in.cols);
         let mut query = vec![0.0f32; dc];
         let mut normed = vec![0.0f32; d];
-        let mut result = Vec::with_capacity(n);
+        let mut result = Vec::with_capacity(analyses.len());
         for (t, mut list) in analyses.into_iter().enumerate() {
             let h = &hidden[t * d..(t + 1) * d];
             let (mut sum, mut squares) = (0.0f32, 0.0f32);
@@ -753,51 +795,101 @@ fn softmax(analyses: &mut [Analysis]) {
     }
 }
 
-/// A layer of a BiLSTM: the output of a token is the states of the forward and the backward
-/// direction in a row. Both directions go in one loop: their chains are independent, and the
-/// processor runs them at once
+/// A layer of a BiLSTM over the inputs of at most `BATCH` sentences, `n × d` each, the longest
+/// first: the output of a token is the states of the forward and the backward direction in a row.
+/// Both directions go in one loop: their chains are independent, and the processor runs them at
+/// once. On every step the recurrent matrix of a direction multiplies the states of all the
+/// sentences, read once for them; the states of a sentence are those of it alone to the last bit
 #[inline(always)]
-fn bilstm<const FMA: bool>(layer: &[Lstm; 2], input: &[f32], n: usize, d: usize) -> Vec<f32> {
+fn bilstm<const FMA: bool>(layer: &[Lstm; 2], inputs: &[Vec<f32>], d: usize) -> Vec<Vec<f32>> {
     let hidden = d / 2;
-    let mut output = vec![0.0f32; n * d];
-    // The input part of all gates for all tokens at once. The products go in loops, not in
-    // closures: a closure that is not inlined has none of the instructions of the copy of `rank`
-    let mut gates_input = [(); 2].map(|()| vec![0.0f32; n * 4 * hidden]);
-    for (cell, gates) in layer.iter().zip(&mut gates_input) {
-        cell.input.apply_all::<FMA>(input, &cell.bias, gates);
+    let lens: Vec<usize> = inputs.iter().map(|input| input.len() / d).collect();
+    debug_assert!(inputs.len() <= BATCH && lens.is_sorted_by(|a, b| a >= b));
+    let mut outputs: Vec<Vec<f32>> = lens.iter().map(|&n| vec![0.0f32; n * d]).collect();
+    // The input part of all gates for all tokens at once
+    let mut gates_input = Vec::with_capacity(inputs.len());
+    for (input, &n) in inputs.iter().zip(&lens) {
+        let mut gates = [(); 2].map(|()| vec![0.0f32; n * 4 * hidden]);
+        for (cell, gates) in layer.iter().zip(&mut gates) {
+            cell.input.apply_all::<FMA>(input, &cell.bias, gates);
+        }
+        gates_input.push(gates);
     }
-    let mut states = [(); 2].map(|()| (vec![0.0f32; hidden], vec![0.0f32; hidden]));
-    let mut gates = [(); 2].map(|()| vec![0.0f32; 4 * hidden]);
-    for step in 0..n {
+    // The states and the gates of the sentences in a row
+    let count = inputs.len();
+    let mut states = [(); 2].map(|()| (vec![0.0f32; count * hidden], vec![0.0f32; count * hidden]));
+    let mut gates = [(); 2].map(|()| vec![0.0f32; count * 4 * hidden]);
+    let mut columns = vec![[0.0f32; BATCH]; hidden];
+    for step in 0..lens.first().copied().unwrap_or(0) {
+        // The sentences that have this step: the longer ones, the first
+        let active = lens.iter().take_while(|&&n| n > step).count();
         for direction in 0..2 {
-            let t = if direction == 0 { step } else { n - 1 - step };
             let (h, c) = &mut states[direction];
-            let gates = &mut gates[direction];
-            gates.copy_from_slice(&gates_input[direction][t * 4 * hidden..(t + 1) * 4 * hidden]);
-            layer[direction].hidden.apply_add::<FMA>(h, gates);
-            // Gates i, f, g, o; every loop goes over an array without branches
-            let (sigmoids, rest) = gates.split_at_mut(2 * hidden);
-            let (candidates, outputs) = rest.split_at_mut(hidden);
-            for value in sigmoids.iter_mut() {
-                *value = sigmoid(*value);
+            let gates = &mut gates[direction][..active * 4 * hidden];
+            for (s, gates) in gates.chunks_exact_mut(4 * hidden).enumerate() {
+                let t = if direction == 0 {
+                    step
+                } else {
+                    lens[s] - 1 - step
+                };
+                gates.copy_from_slice(
+                    &gates_input[s][direction][t * 4 * hidden..(t + 1) * 4 * hidden],
+                );
             }
-            for value in candidates.iter_mut() {
-                *value = tanh(*value);
+            let cell = &layer[direction].hidden;
+            if active == 1 {
+                cell.apply_add::<FMA>(&h[..hidden], gates);
+            } else {
+                // The states by columns: a column holds a number of the state of every sentence
+                for (col, values) in columns.iter_mut().enumerate() {
+                    for (b, value) in values.iter_mut().enumerate().take(active) {
+                        *value = h[b * hidden + col];
+                    }
+                }
+                cell.batch::<FMA, true>(&columns, active, &[], gates);
             }
-            for value in outputs.iter_mut() {
-                *value = sigmoid(*value);
+            for (s, gates) in gates.chunks_exact_mut(4 * hidden).enumerate() {
+                let t = if direction == 0 {
+                    step
+                } else {
+                    lens[s] - 1 - step
+                };
+                let (h, c) = (
+                    &mut h[s * hidden..(s + 1) * hidden],
+                    &mut c[s * hidden..(s + 1) * hidden],
+                );
+                cell_step(gates, h, c);
+                outputs[s][t * d + direction * hidden..t * d + (direction + 1) * hidden]
+                    .copy_from_slice(h);
             }
-            let (inputs, forgets) = sigmoids.split_at(hidden);
-            for i in 0..hidden {
-                c[i] = forgets[i] * c[i] + inputs[i] * candidates[i];
-            }
-            for i in 0..hidden {
-                h[i] = outputs[i] * tanh(c[i]);
-            }
-            output[t * d + direction * hidden..t * d + (direction + 1) * hidden].copy_from_slice(h);
         }
     }
-    output
+    outputs
+}
+
+/// A step of an LSTM cell: the new states `h` and `c` by the sums of its gates i, f, g, o; every
+/// loop goes over an array without branches
+#[inline(always)]
+fn cell_step(gates: &mut [f32], h: &mut [f32], c: &mut [f32]) {
+    let hidden = h.len();
+    let (sigmoids, rest) = gates.split_at_mut(2 * hidden);
+    let (candidates, outputs) = rest.split_at_mut(hidden);
+    for value in sigmoids.iter_mut() {
+        *value = sigmoid(*value);
+    }
+    for value in candidates.iter_mut() {
+        *value = tanh(*value);
+    }
+    for value in outputs.iter_mut() {
+        *value = sigmoid(*value);
+    }
+    let (inputs, forgets) = sigmoids.split_at(hidden);
+    for i in 0..hidden {
+        c[i] = forgets[i] * c[i] + inputs[i] * candidates[i];
+    }
+    for i in 0..hidden {
+        h[i] = outputs[i] * tanh(c[i]);
+    }
 }
 
 /// A word in lower case, as `str::to_lowercase` gives it, into `out`
@@ -989,7 +1081,13 @@ pub(crate) mod tests {
     /// Analyses of a sentence in the order of the model alone, without the constraints
     fn ranked(dictionary: &Dictionary, words: &[&str]) -> Vec<Vec<Analysis>> {
         let analyses = words.iter().map(|word| dictionary.analyze(word)).collect();
-        dictionary.context().unwrap().rank(words, analyses, true)
+        let sentence = Sentence {
+            words: words.to_vec(),
+            analyses,
+            first: true,
+        };
+        let context = dictionary.context().unwrap();
+        context.rank(vec![sentence]).pop().unwrap()
     }
 
     #[test]
@@ -1211,7 +1309,7 @@ pub(crate) mod tests {
             hidden: zeros(1),
             bias: bias.clone(),
         };
-        let output = bilstm::<FUSED>(&[cell(), cell()], &[0.0; 6], 3, 2);
+        let output = bilstm::<FUSED>(&[cell(), cell()], &[vec![0.0; 6]], 2).remove(0);
         let (i, f, g, o) = (sigmoid(0.5), sigmoid(-0.3), 0.8f32.tanh(), sigmoid(0.2));
         let mut states = Vec::new();
         let mut c = 0.0;
@@ -1250,6 +1348,52 @@ pub(crate) mod tests {
             let mut added = bias.clone();
             tiled.apply_add::<FMA>(&inputs[t * cols..(t + 1) * cols], &mut added);
             assert_eq!(added, expected);
+        }
+        let columns: Vec<[f32; BATCH]> = (0..cols)
+            .map(|col| [0, 1, 2, 3].map(|t| inputs[t * cols + col]))
+            .collect();
+        let mut added: Vec<f32> = (0..BATCH).flat_map(|_| bias.iter().copied()).collect();
+        tiled.batch::<FMA, true>(&columns, BATCH, &[], &mut added);
+        assert_eq!(added, out[..BATCH * rows]);
+    }
+
+    #[test]
+    fn sentences_together_as_alone() {
+        sentences_together_as_alone_with::<false>();
+        sentences_together_as_alone_with::<true>();
+    }
+
+    fn sentences_together_as_alone_with<const FMA: bool>() {
+        // A hidden state of 10: 40 rows of gates, three tiles. Four sentences, the longest first
+        let (hidden, d) = (10, 20);
+        let mut seed = 1u32;
+        let mut random = |count: usize| -> Vec<f32> {
+            (0..count)
+                .map(|_| {
+                    seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    (seed >> 8) as f32 / (1 << 24) as f32 - 0.5
+                })
+                .collect()
+        };
+        let mut cell = || Lstm {
+            input: Tiled::new(&Matrix {
+                rows: 4 * hidden,
+                cols: d,
+                data: random(4 * hidden * d),
+            }),
+            hidden: Tiled::new(&Matrix {
+                rows: 4 * hidden,
+                cols: hidden,
+                data: random(4 * hidden * hidden),
+            }),
+            bias: random(4 * hidden),
+        };
+        let layer = [cell(), cell()];
+        let inputs: Vec<Vec<f32>> = [7, 5, 2, 1].map(|n| random(n * d)).into();
+        let together = bilstm::<FMA>(&layer, &inputs, d);
+        for (input, output) in inputs.iter().zip(together) {
+            let alone = bilstm::<FMA>(&layer, std::slice::from_ref(input), d);
+            assert_eq!(alone[0], output);
         }
     }
 

@@ -34,7 +34,7 @@ pub(crate) use context::sources as context_sources;
 #[doc(hidden)]
 pub use annotate::{Fields, Split, space_entry};
 #[cfg(feature = "cli")]
-pub(crate) use annotate::{one_line, set_fields};
+pub(crate) use annotate::{PART_GROUP, one_line, set_fields};
 pub use own::Sample;
 
 /// Where an analysis comes from
@@ -954,44 +954,87 @@ impl Dictionary {
         words: &[S],
         start: bool,
     ) -> Result<Vec<Vec<Analysis>>, Error> {
+        let mut sentences = self.analyze_sentence_parts(&[(words, start)])?;
+        Ok(sentences.pop().unwrap_or_default())
+    }
+
+    /// `analyze_sentence_part` of several parts of sentences at once: the model runs over four
+    /// of them together, and the analyses are those of every part alone
+    #[doc(hidden)]
+    pub fn analyze_sentence_parts<S: AsRef<str>>(
+        &self,
+        parts: &[(&[S], bool)],
+    ) -> Result<Vec<Vec<Vec<Analysis>>>, Error> {
         let context = self.context()?;
         // The model sees a token as `analyze` reads it: without invisible characters and with
         // combined accents
-        let normal: Vec<Cow<str>> = words.iter().map(|word| normalized(word.as_ref())).collect();
+        let normal: Vec<Vec<Cow<str>>> = (parts.iter())
+            .map(|(words, _)| words.iter().map(|word| normalized(word.as_ref())).collect())
+            .collect();
         // ... and an older or colloquial spelling as the word it stands for: `fué` as `fue`
-        let mut seen: Vec<Cow<str>> = Vec::with_capacity(words.len());
-        let opening = (normal.iter())
-            .position(|word| word.chars().any(char::is_alphanumeric))
-            .filter(|_| start);
-        let mut sentence = Vec::with_capacity(words.len());
+        let mut seen: Vec<Vec<Cow<str>>> = Vec::with_capacity(parts.len());
         // The shares of the verbs of every word in the counts, before the model scores
-        let mut shares = Vec::with_capacity(words.len());
-        for (number, range) in sentence_parts(words.len(), SENTENCE_CHUNK).enumerate() {
-            let analyses: Vec<Vec<Analysis>> = words[range.clone()]
-                .iter()
-                .map(|word| self.analyze(word.as_ref()))
-                .collect();
-            shares.extend(analyses.iter().map(|list| self.verb_shares(list)));
-            for (at, list) in range.clone().zip(&analyses) {
-                let word = normal[at].as_ref();
-                seen.push(match standard_word(word, list, opening == Some(at)) {
-                    Some(standard) => Cow::Owned(standard),
-                    None => Cow::Borrowed(word),
-                });
+        let mut shares = Vec::with_capacity(parts.len());
+        // The analyses of the pieces of the parts by `sentence_parts`: the number of the part,
+        // the tokens and whether the piece starts the sentence
+        let mut pieces = Vec::new();
+        for (number, ((words, start), normal)) in parts.iter().zip(&normal).enumerate() {
+            let opening = (normal.iter())
+                .position(|word| word.chars().any(char::is_alphanumeric))
+                .filter(|_| *start);
+            let mut part_seen = Vec::with_capacity(words.len());
+            let mut part_shares = Vec::with_capacity(words.len());
+            for (piece, range) in sentence_parts(words.len(), SENTENCE_CHUNK).enumerate() {
+                let analyses: Vec<Vec<Analysis>> = words[range.clone()]
+                    .iter()
+                    .map(|word| self.analyze(word.as_ref()))
+                    .collect();
+                part_shares.extend(analyses.iter().map(|list| self.verb_shares(list)));
+                for (at, list) in range.clone().zip(&analyses) {
+                    let word = normal[at].as_ref();
+                    part_seen.push(match standard_word(word, list, opening == Some(at)) {
+                        Some(standard) => Cow::Owned(standard),
+                        None => Cow::Borrowed(word),
+                    });
+                }
+                pieces.push((number, range, analyses, *start && piece == 0));
             }
-            // Without neighbors the model chooses worse than the counts of the dictionary
-            if range.len() < 2 {
-                sentence.extend(analyses);
-                continue;
+            seen.push(part_seen);
+            shares.push(part_shares);
+        }
+        // Without neighbors the model chooses worse than the counts of the dictionary
+        let ranked = |range: &Range<usize>| range.len() >= 2;
+        let sentences = (pieces.iter_mut())
+            .filter(|(_, range, _, _)| ranked(range))
+            .map(|(number, range, analyses, first)| context::Sentence {
+                words: seen[*number][range.clone()]
+                    .iter()
+                    .map(AsRef::as_ref)
+                    .collect(),
+                analyses: std::mem::take(analyses),
+                first: *first,
+            })
+            .collect();
+        let mut ordered = context.rank(sentences).into_iter();
+        let mut result: Vec<Vec<Vec<Analysis>>> = (parts.iter())
+            .map(|(words, _)| Vec::with_capacity(words.len()))
+            .collect();
+        for (number, range, analyses, _) in pieces {
+            let analyses = match ranked(&range) {
+                true => ordered.next().unwrap_or_default(),
+                false => analyses,
+            };
+            result[number].extend(analyses);
+        }
+        for (((sentence, seen), shares), (words, start)) in
+            result.iter_mut().zip(&seen).zip(&shares).zip(parts)
+        {
+            if words.len() > 1 {
+                let seen: Vec<&str> = seen.iter().map(AsRef::as_ref).collect();
+                self.constrain(&seen, sentence, shares, *start);
             }
-            let part: Vec<&str> = seen[range].iter().map(AsRef::as_ref).collect();
-            sentence.extend(context.rank(&part, analyses, start && number == 0));
         }
-        if words.len() > 1 {
-            let seen: Vec<&str> = seen.iter().map(AsRef::as_ref).collect();
-            self.constrain(&seen, &mut sentence, &shares, start);
-        }
-        Ok(sentence)
+        Ok(result)
     }
 
     /// Whether the dictionary has a context model for `analyze_sentence`

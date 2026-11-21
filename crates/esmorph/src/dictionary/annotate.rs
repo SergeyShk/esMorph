@@ -1,10 +1,15 @@
 //! The fields of CoNLL-U of the words of a token and the analysis of a document of the anySeg
 //! segmenter
 
+use std::ops::Range;
+
 use super::{Analysis, Dictionary, SENTENCE_CHUNK, Source, normalized, sentence_parts};
 use crate::Error;
 use crate::alphabet;
 use crate::clitics;
+
+/// Parts of sentences that `sentence_fields` analyzes at a time
+pub(crate) const PART_GROUP: usize = 32;
 
 /// Tokens of one word that take the words of their analysis, by their indices, and the words
 #[cfg(feature = "anyseg")]
@@ -49,15 +54,15 @@ impl Dictionary {
         self.token_fields_with(token, words, analyses, fields, false);
     }
 
-    /// The fields of CoNLL-U of the words of the tokens of a sentence, each token - its text and
-    /// its words, as `token_fields` gives them. With `context` the analyses of the tokens are
-    /// ordered by the context model, without it as `analyze` orders them. `start` - whether the
-    /// tokens start the sentence: a sentence given by pieces of `sentence_parts` of a multiple of
-    /// `SENTENCE_CHUNK` tokens gets the fields of the whole; the analyses are kept by parts. With
-    /// `words` a token of one word whose analysis of a verb with clitics or a contraction has
-    /// several words gets their fields, and the number of the token among `tokens`, the words and
-    /// the fields of the whole go to `words`: `dámelo` is `da` + `me` + `lo`; a token for which
-    /// `keep` gives true keeps its word
+    /// The fields of CoNLL-U of the words of the tokens of sentences, each token - its text and
+    /// its words, as `token_fields` gives them; a sentence is a range of `tokens` and whether the
+    /// range starts the sentence: a sentence given by pieces of `sentence_parts` of a multiple of
+    /// `SENTENCE_CHUNK` tokens gets the fields of the whole. With `context` the analyses of the
+    /// tokens are ordered by the context model, without it as `analyze` orders them. With `words`
+    /// a token of one word whose analysis of a verb with clitics or a contraction has several
+    /// words gets their fields, and the number of the token among `tokens`, the words and the
+    /// fields of the whole go to `words`: `dámelo` is `da` + `me` + `lo`; a token for which `keep`
+    /// gives true keeps its word
     ///
     /// # Errors
     ///
@@ -66,33 +71,55 @@ impl Dictionary {
     pub fn sentence_fields<'d, S: AsRef<str>>(
         &'d self,
         tokens: &[(&str, &[S])],
+        sentences: &[(Range<usize>, bool)],
         context: bool,
-        start: bool,
         fields: &mut Vec<Fields<'d>>,
         mut words: Option<&mut Vec<Split<'d>>>,
         keep: &dyn Fn(usize) -> bool,
     ) -> Result<(), Error> {
-        for (number, range) in sentence_parts(tokens.len(), SENTENCE_CHUNK).enumerate() {
-            let part = &tokens[range.clone()];
-            let texts: Vec<&str> = (part.iter())
-                .map(|(token, words)| token_text(token, words))
+        // The parts the model analyzes, a group at a time: the model takes four of a group with
+        // close lengths together, and the analyses of a group are few; without the model a part
+        // at a time keeps them in the cache
+        let parts: Vec<(Range<usize>, bool)> = (sentences.iter())
+            .flat_map(|(range, start)| {
+                (sentence_parts(range.len(), SENTENCE_CHUNK).enumerate()).map(|(number, part)| {
+                    let at = range.start + part.start..range.start + part.end;
+                    (at, *start && number == 0)
+                })
+            })
+            .collect();
+        for group in parts.chunks(if context { PART_GROUP } else { 1 }) {
+            let texts: Vec<Vec<&str>> = (group.iter())
+                .map(|(range, _)| {
+                    (tokens[range.clone()].iter())
+                        .map(|(token, words)| token_text(token, words))
+                        .collect()
+                })
                 .collect();
             let analyses = if context {
-                self.analyze_sentence_part(&texts, start && number == 0)?
+                let group: Vec<(&[&str], bool)> = (texts.iter().zip(group))
+                    .map(|(texts, (_, start))| (texts.as_slice(), *start))
+                    .collect();
+                self.analyze_sentence_parts(&group)?
             } else {
-                texts.iter().map(|text| self.analyze(text)).collect()
+                (texts.iter())
+                    .map(|texts| texts.iter().map(|text| self.analyze(text)).collect())
+                    .collect()
             };
-            for (at, ((token, forms), analyses)) in range.zip(part.iter().zip(analyses)) {
-                let split = words.is_some() && !keep(at);
-                if let Some((parts, whole)) =
-                    self.token_fields_with(token, forms, analyses, fields, split)
-                    && let Some(words) = words.as_deref_mut()
-                {
-                    words.push(Split {
-                        token: at,
-                        words: parts,
-                        whole,
-                    });
+            for ((range, _), analyses) in group.iter().zip(analyses) {
+                for (at, analyses) in range.clone().zip(analyses) {
+                    let (token, forms) = &tokens[at];
+                    let split = words.is_some() && !keep(at);
+                    if let Some((parts, whole)) =
+                        self.token_fields_with(token, forms, analyses, fields, split)
+                        && let Some(words) = words.as_deref_mut()
+                    {
+                        words.push(Split {
+                            token: at,
+                            words: parts,
+                            whole,
+                        });
+                    }
                 }
             }
         }
@@ -243,31 +270,42 @@ impl Dictionary {
         let mut fields = Vec::with_capacity(document.word_count());
         let mut words = Vec::new();
         let spans = document.tokens();
-        for number in 0..document.sentence_count() {
-            let sentence = document.sentence(number);
-            let forms: Vec<Vec<&str>> = (sentence.tokens.clone())
+        let mut number = 0;
+        while number < document.sentence_count() {
+            // Sentences of about `PART_GROUP` parts at a time: the tokens and analyses of a
+            // document are not kept whole
+            let first = document.sentence(number).tokens.start;
+            let mut end = first;
+            let mut sentences = Vec::new();
+            while number < document.sentence_count() && sentences.len() < PART_GROUP {
+                let tokens = document.sentence(number).tokens;
+                sentences.push((tokens.start - first..tokens.end - first, true));
+                end = tokens.end;
+                number += 1;
+            }
+            let forms: Vec<Vec<&str>> = (first..end)
                 .map(|token| {
                     (document.token_words(token))
                         .map(|word| document.form(word))
                         .collect()
                 })
                 .collect();
-            let tokens: Vec<(&str, &[&str])> = (sentence.tokens.clone())
+            let tokens: Vec<(&str, &[&str])> = (first..end)
                 .zip(&forms)
                 .map(|(token, forms)| (spans[token].slice(document.text()), forms.as_slice()))
                 .collect();
-            let first = words.len();
-            let keep = |at: usize| keeps_columns(document, sentence.tokens.start + at);
+            let known = words.len();
+            let keep = |at: usize| keeps_columns(document, first + at);
             self.sentence_fields(
                 &tokens,
+                &sentences,
                 context,
-                true,
                 &mut fields,
                 split.then_some(&mut words),
                 &keep,
             )?;
-            for split in &mut words[first..] {
-                split.token += sentence.tokens.start;
+            for split in &mut words[known..] {
+                split.token += first;
             }
         }
         Ok((fields, words))
@@ -655,7 +693,9 @@ mod tests {
                 .map(|(token, words)| (*token, words.as_slice()))
                 .collect();
             let mut fields = Vec::new();
-            (dictionary.sentence_fields(&tokens, context, true, &mut fields, None, &|_| false))
+            let sentences = [(0..tokens.len(), true)];
+            let keep = |_| false;
+            (dictionary.sentence_fields(&tokens, &sentences, context, &mut fields, None, &keep))
                 .unwrap();
             fields.into_iter().map(|word| word.pos).collect::<Vec<_>>()
         };
