@@ -2268,12 +2268,13 @@ fn standard_word(token: &str, analyses: &[Analysis], opening: bool) -> Option<St
 }
 
 /// A query in the terms of the dictionary: invisible characters are dropped, a combining mark
-/// joins its letter, and a hyphen of Unicode is the hyphen-minus. Tokens of a text keep them
+/// joins its letter, a hyphen of Unicode is the hyphen-minus and a ligature of a PDF its letters
+/// (`ﬁn` is `fin`). Tokens of a text keep them
 fn normalized(word: &str) -> Cow<'_, str> {
     if word.is_ascii()
-        || !word
-            .chars()
-            .any(|c| is_invisible(c) || is_hyphen(c) || combined(' ', c).is_some())
+        || !word.chars().any(|c| {
+            is_invisible(c) || is_hyphen(c) || ligature(c).is_some() || combined(' ', c).is_some()
+        })
     {
         return Cow::Borrowed(word);
     }
@@ -2286,6 +2287,10 @@ fn normalized(word: &str) -> Cow<'_, str> {
             out.push('-');
             continue;
         }
+        if let Some(letters) = ligature(c) {
+            out.push_str(letters);
+            continue;
+        }
         match out.chars().next_back().and_then(|last| combined(last, c)) {
             Some(joined) => {
                 out.pop();
@@ -2295,6 +2300,19 @@ fn normalized(word: &str) -> Cow<'_, str> {
         }
     }
     Cow::Owned(out)
+}
+
+/// The letters of a Latin ligature of Unicode, which text taken from a PDF often has
+fn ligature(c: char) -> Option<&'static str> {
+    match c {
+        '\u{FB00}' => Some("ff"),
+        '\u{FB01}' => Some("fi"),
+        '\u{FB02}' => Some("fl"),
+        '\u{FB03}' => Some("ffi"),
+        '\u{FB04}' => Some("ffl"),
+        '\u{FB05}' | '\u{FB06}' => Some("st"),
+        _ => None,
+    }
 }
 
 /// Soft hyphen, zero width characters, marks of the direction of text, invisible operators,
@@ -3909,6 +3927,9 @@ pub(crate) mod tests {
         assert_eq!(lemmas(&dictionary, "\u{FEFF}casa\u{200B}"), ["casa"]);
         assert!(dictionary.is_known("ca\u{AD}sa"));
         assert!(dictionary.analyze("\u{AD}").is_empty());
+        // A ligature of a PDF
+        assert_eq!(normalized("\u{FB01}n"), "fin");
+        assert_eq!(normalized("a\u{FB03}cio\u{FB06}"), "afficiost");
         // A mark on a letter that does not take it
         assert!(dictionary.analyze("cas\u{301}a").is_empty());
         assert_eq!(normalized("casa"), Cow::Borrowed("casa"));

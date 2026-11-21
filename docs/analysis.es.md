@@ -27,7 +27,7 @@ Un análisis es un objeto `Analysis` que devuelven los métodos `analyze` y `ana
 
 | Atributo | Tipo | Descripción |
 | :------- | :--- | :---------- |
-| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; para una [grafía coloquial](#spelling), su grafía estándar (`trabajado` de `trabajao`); un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con `-` en lugar de los guiones U+2010 y U+2011 |
+| `word` | `str` | La forma de palabra tal como la escribe el diccionario, con sus tildes; para una [grafía coloquial](#spelling), su grafía estándar (`trabajado` de `trabajao`); un verbo con [clíticos](#clitics) tal como está escrito, en minúsculas; un token de las [reglas](#rules) tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras, con `-` en lugar de los guiones U+2010 y U+2011 y con las letras de una ligadura (`ﬁ` es `fi`) |
 | `lemma` | `str` | El lema |
 | `pos` | `str` | Categoría gramatical de UD: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP`, etc. |
 | `feats` | `dict[str, str]` | Rasgos de UD: `{"Gender": "Fem", "Number": "Plur"}`; un diccionario nuevo cada vez, cambiarlo no cambia el análisis |
@@ -68,7 +68,7 @@ Los análisis van del más probable al menos probable. `prob` es la parte de un 
 
 ## Diminutivos { #diminutives }
 
-Un diminutivo conserva su propio lema, como en los treebanks: `casitas` es una forma de `casita`. `diminutive_of` da la palabra de la que es diminutivo, tal como la da Wikcionario en la primera acepción de la palabra: `casita` es diminutivo de `casa`, `poquito` de `poco`, `ahorita` de `ahora`. Una palabra que es sobre todo una palabra propia, aunque Wikcionario también la tenga como diminutivo, no lo tiene: `señorita`, `granito`. Lo tienen unos dos mil sustantivos, adjetivos y adverbios del diccionario.
+Un diminutivo conserva su propio lema, como en los treebanks: `casitas` es una forma de `casita`. `diminutive_of` da la palabra de la que es diminutivo, tal como la da Wikcionario en la primera acepción de la palabra: `casita` es diminutivo de `casa`, `poquito` de `poco`, `ahorita` de `ahora`. Una palabra cuya primera acepción en Wikcionario es propia no lo tiene, aunque Wikcionario también la tenga como diminutivo: `señorita`, `granito`; una palabra cuya primera acepción es la de un diminutivo lo conserva, aunque los textos la usen sobre todo como palabra propia: `patilla` es diminutivo de `pata`. Lo tienen unos dos mil sustantivos, adjetivos y adverbios del diccionario.
 
 === "Código"
 
