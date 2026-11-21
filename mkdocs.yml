@@ -15,6 +15,10 @@ nav:
     - Inflection: inflection.md
     - The esmorph command: cli.md
 
+# The page of the removed spaCy component stays for the links of earlier versions
+not_in_nav: |
+    /spacy*.md
+
 theme:
   name: material
   language: en
