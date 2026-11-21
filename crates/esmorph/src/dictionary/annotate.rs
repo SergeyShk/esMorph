@@ -78,7 +78,8 @@ impl Dictionary {
         keep: &dyn Fn(usize) -> bool,
     ) -> Result<(), Error> {
         // The parts the model analyzes, a group at a time: the model takes four of a group with
-        // close lengths together, and the analyses of a group are few
+        // close lengths together, and the analyses of a group are few; without the model a part
+        // at a time keeps them in the cache
         let parts: Vec<(Range<usize>, bool)> = (sentences.iter())
             .flat_map(|(range, start)| {
                 (sentence_parts(range.len(), SENTENCE_CHUNK).enumerate()).map(|(number, part)| {
@@ -87,7 +88,7 @@ impl Dictionary {
                 })
             })
             .collect();
-        for group in parts.chunks(PART_GROUP) {
+        for group in parts.chunks(if context { PART_GROUP } else { 1 }) {
             let texts: Vec<Vec<&str>> = (group.iter())
                 .map(|(range, _)| {
                     (tokens[range.clone()].iter())
