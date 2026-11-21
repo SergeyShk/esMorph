@@ -446,7 +446,7 @@ wheels = [
 
 [[package]]
 name = "esmorph"
-version = "0.5.0.dev11"
+version = "0.5.0.dev12"
 source = { editable = "." }
 
 [package.dev-dependencies]

@@ -22,7 +22,7 @@ pub struct Sample<'a> {
     /// The word of the dictionary
     pub word: &'a str,
     /// The UD part of speech (`"VERB"`) or several separated by commas (`"ADJ,NOUN"`): needed if
-    /// the sample has lexemes of several
+    /// the sample has lexemes of several; an empty one is none
     pub pos: Option<&'a str>,
 }
 
@@ -60,6 +60,9 @@ pub(super) struct OwnWords {
     /// Lexemes that have forms of one key, in the order they were added: each group is its length
     /// and its lexemes
     groups: Vec<u32>,
+    /// Lexemes that the automaton has not yet, by the keys of their stems: those added by a call
+    /// before it ends, which a later sample of the call may be a form of
+    pending: HashMap<Box<[u8]>, Vec<u32>>,
 }
 
 /// The bit of a value of `OwnWords::keys` that gives the place of a group of lexemes
@@ -118,15 +121,6 @@ impl OwnWords {
         self.lexemes.is_empty()
     }
 
-    /// Whether the sample of a lexeme has a form of the ending `rest`
-    fn has_ending(&self, lexeme: u32, rest: &[u8]) -> bool {
-        let sample = (self.lexemes.get(lexeme as usize))
-            .and_then(|lexeme| self.samples.get(lexeme.sample as usize));
-        (sample.into_iter().flat_map(|sample| sample.forms.iter())).any(|form| {
-            (self.endings.get(form.ending as usize)).is_some_and(|(ending, _)| **ending == *rest)
-        })
-    }
-
     /// The key of the stem of a lexeme
     fn stem(&self, lexeme: &OwnLexeme) -> &[u8] {
         let start = lexeme.stem as usize;
@@ -138,19 +132,30 @@ impl OwnWords {
     /// The forms of the own words of the bytes of a key; a form of two lexemes of one table and
     /// the same accents is given once, by the lexeme added first
     fn forms(&self, bytes: &[u8]) -> Vec<OwnForm> {
-        let Some(value) = self.keys.get(bytes) else {
+        let value = self.keys.get(bytes);
+        if value.is_none() && self.pending.is_empty() {
             return Vec::new();
+        }
+        let single = value.map(|value| [value as u32]);
+        let lexemes: &[u32] = match value {
+            None => &[],
+            Some(value) if value & GROUP == 0 => single.as_ref().map_or(&[], |single| single),
+            Some(value) => {
+                let at = (value & !GROUP) as usize;
+                let len = self.groups.get(at).map_or(0, |&len| len as usize);
+                self.groups.get(at + 1..at + 1 + len).unwrap_or_default()
+            }
         };
-        let single = [value as u32];
-        let lexemes: &[u32] = if value & GROUP == 0 {
-            &single
-        } else {
-            let at = (value & !GROUP) as usize;
-            let len = self.groups.get(at).map_or(0, |&len| len as usize);
-            self.groups.get(at + 1..at + 1 + len).unwrap_or_default()
-        };
+        // The lexemes of the automaton were added before those that it has not yet
+        let mut pending: Vec<u32> = Vec::new();
+        if !self.pending.is_empty() {
+            for len in 1..=bytes.len() {
+                pending.extend(self.pending.get(&bytes[..len]).into_iter().flatten());
+            }
+            pending.sort_unstable();
+        }
         let mut found: Vec<OwnForm> = Vec::new();
-        for &number in lexemes {
+        for &number in lexemes.iter().chain(&pending) {
             let Some(lexeme) = self.lexemes.get(number as usize) else {
                 continue;
             };
@@ -237,6 +242,7 @@ impl OwnWords {
         }
         self.keys = builder.into_map();
         self.groups = groups;
+        self.pending = HashMap::new();
         // The vectors grew by doubling: an analyzer keeps them as long as it lives
         self.endings.shrink_to_fit();
         self.samples.shrink_to_fit();
@@ -269,7 +275,8 @@ impl Dictionary {
     /// # Errors
     ///
     /// [`Error::Word`] if the sample is not in the dictionary, has lexemes of several parts of
-    /// speech and none is given, has no lexemes of a given part of speech, the word does not
+    /// speech and none is given, has no lexemes of a given part of speech, the parts of speech
+    /// given have an empty one between commas, the word does not
     /// inflect as the sample (the sample has another ending or the word has no stem), or the word
     /// is no token: it has a space or a control character
     pub fn with_words<'a, S: Into<Sample<'a>>>(
@@ -298,34 +305,8 @@ impl Dictionary {
                 )
             })
             .collect();
-        // Lexemes of this call that the lookup has not yet, by the keys of their stems: a sample
-        // that may be a form of one of them is looked for after the lookup is built anew
-        let mut fresh: HashMap<Box<[u8]>, Vec<u32>> = HashMap::new();
         for (word, sample) in words {
-            let sample = sample.into();
-            let own = &self.own_words;
-            let key = (!fresh.is_empty())
-                .then(|| {
-                    self.alphabet
-                        .input_key(&normalized(sample.word).to_lowercase())
-                })
-                .flatten();
-            let of_fresh = key.is_some_and(|key| {
-                let diaeresis = self.alphabet.diaeresis_keys(&key);
-                (std::iter::once(&key).chain(&diaeresis)).any(|key| {
-                    let bytes = key.bytes();
-                    (1..=bytes.len()).any(|len| {
-                        (fresh.get(&bytes[..len])).is_some_and(|lexemes| {
-                            (lexemes.iter()).any(|&lexeme| own.has_ending(lexeme, &bytes[len..]))
-                        })
-                    })
-                })
-            });
-            if of_fresh {
-                Arc::make_mut(&mut self.own_words).index()?;
-                fresh.clear();
-            }
-            let specs = self.sample_forms(word, sample)?;
+            let specs = self.sample_forms(word, sample.into())?;
             for spec in &specs {
                 let forms: Vec<u16> = spec.forms.iter().map(|&(form, _)| form).collect();
                 let id = (spec.table, Box::from(spec.like.as_str()), forms);
@@ -380,7 +361,10 @@ impl Dictionary {
                 if lexemes.insert((key.bytes().into(), key.marks, sample)) {
                     let own = Arc::make_mut(&mut self.own_words);
                     let number = own.lexemes.len() as u32;
-                    fresh.entry(key.bytes().into()).or_default().push(number);
+                    own.pending
+                        .entry(key.bytes().into())
+                        .or_default()
+                        .push(number);
                     own.lexemes.push(OwnLexeme {
                         marks: key.marks,
                         stem: own.stems.len() as u32,
@@ -462,8 +446,16 @@ impl Dictionary {
         let mut found: Vec<&str> = analyses.iter().map(pos).collect();
         found.sort_unstable();
         found.dedup();
-        if let Some(wanted) = sample.pos {
-            let wanted: Vec<&str> = wanted.split(',').map(str::trim).collect();
+        // An empty part of speech is none, as an empty column of a file of the command
+        let given = sample.pos.filter(|pos| !pos.trim().is_empty());
+        if let Some(text) = given {
+            let wanted: Vec<&str> = text.split(',').map(str::trim).collect();
+            if wanted.contains(&"") {
+                return Err(Error::Word(format!(
+                    "the parts of speech {text:?} of the sample {like:?} have an empty one: \
+                     separate them by single commas"
+                )));
+            }
             if let Some(missing) = wanted.iter().find(|wanted| !found.contains(wanted)) {
                 return Err(Error::Word(format!(
                     "the sample {like:?} has no lexemes of {missing}, only of {}",
@@ -474,7 +466,7 @@ impl Dictionary {
         }
         // A sample that is a lemma gives its lexemes of that lemma: `bajo` of `bajar` is no sample
         // of a noun; of several parts of speech given, within each (`helado` as a noun and `helar`)
-        if sample.pos.is_some() {
+        if given.is_some() {
             let of_lemma: Vec<&str> = (analyses.iter())
                 .filter(|analysis| analysis.lemma == like)
                 .map(pos)
@@ -484,7 +476,7 @@ impl Dictionary {
         } else if analyses.iter().any(|analysis| analysis.lemma == like) {
             analyses.retain(|analysis| analysis.lemma == like);
         }
-        if sample.pos.is_none() {
+        if given.is_none() {
             let mut kept: Vec<&str> = analyses.iter().map(pos).collect();
             kept.sort_unstable();
             kept.dedup();
@@ -561,7 +553,8 @@ impl Dictionary {
             let endings: Vec<String> = endings.iter().map(|ending| format!("{ending:?}")).collect();
             return Err(Error::Word(format!(
                 "{word:?} does not inflect as {like:?}: the word needs the ending {} of the sample \
-                 and a stem before it",
+                 and a stem before it; a sample is a word of the same part of speech with the same \
+                 ending",
                 endings.join(" or ")
             )));
         }
@@ -1021,6 +1014,7 @@ mod tests {
             ("ar", Sample::from("bloguear"), "does not inflect"),
             ("tui tear", Sample::from("bloguear"), "no token"),
             ("", Sample::from("bloguear"), "no token"),
+            ("cajo", Sample::from(("bajo", "NOUN,")), "have an empty one"),
         ] {
             let Err(error) = dictionary.clone().with_words([(word, sample)]) else {
                 panic!("{word:?} like {sample:?} is no error");
@@ -1030,5 +1024,11 @@ mod tests {
         }
         let cajo = dictionary.with_words([("cajo", ("bajo", "NOUN"))]).unwrap();
         assert_eq!(first(&cajo, "cajos"), ("cajos".into(), "cajo".into()));
+        // An empty part of speech is none
+        let tuitear = cajo.with_words([("tuitear", ("bloguear", " "))]).unwrap();
+        assert_eq!(
+            first(&tuitear, "tuiteo"),
+            ("tuiteo".into(), "tuitear".into())
+        );
     }
 }

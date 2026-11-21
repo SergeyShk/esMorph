@@ -74,14 +74,14 @@ def _analysis(
 def _analyzer(
     path: str | PathLike[str] | None = None,
     verify: bool = False,
-    words: Mapping[str, str | Sequence[str]] | None = None,
+    words: str | Mapping[str, str | Sequence[str]] | None = None,
 ) -> Analyzer:
     """Restores an analyzer from pickle"""
 
 def _analyses_analyzer(
     path: str | PathLike[str] | None = None,
     verify: bool = False,
-    words: Mapping[str, str | Sequence[str]] | None = None,
+    words: str | Mapping[str, str | Sequence[str]] | None = None,
 ) -> Analyzer:
     """Restores the analyzer of analyses from pickle"""
 

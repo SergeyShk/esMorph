@@ -307,7 +307,9 @@ The property `dictionary_info` describes the dictionary of the analyzer: the sou
 The parameter `words` adds words that the dictionary does not have. Each word comes with its sample: a word of the dictionary in the same form, usually the lemma.
 
 - The word takes the forms of the lexemes of its sample with their features, order and shares: `{"tiktokear": "bloguear"}` gives `tiktokeo`, `tiktokeó` and `tiktokeando`.
-- A sample with lexemes of several parts of speech needs the part of speech, a UD tag in capitals, in a pair: `{"zajo": ("bajo", "NOUN")}`; the pair may be a list, and several parts of speech are separated by commas: `{"tiktokero": ("bloguero", "ADJ,NOUN")}`.
+- A sample with lexemes of several parts of speech needs the part of speech, a UD tag in capitals, in a pair: `{"zajo": ("bajo", "NOUN")}`; the pair may be a list, and several parts of speech are separated by commas: `{"tiktokero": ("bloguero", "ADJ,NOUN")}`. An empty part of speech is none.
+- The word takes the endings of its sample, so the sample is a word of the same part of speech with the same ending: `{"marramiau": ("miau", "INTJ")}`, `{"Wolfsburgo": ("Hamburgo", "PROPN")}`.
+- A sample may be an own word given earlier: `{"tiktokear": "bloguear", "feisbuquear": "tiktokear"}`.
 - An own word may have letters that the dictionary has not.
 - A word of the dictionary given as an own word keeps its analyses, and the new ones join them.
 - The analyses of own words are those of words of the dictionary, with `source` equal to `"dictionary"`, and they are [inflected](inflection.md) like their samples.
@@ -328,7 +330,7 @@ The parameter `words` adds words that the dictionary does not have. Each word co
     [('tiktokear', 'VERB'), ('zajo', 'NOUN')]
     ```
 
-A sample that is not in the dictionary, a sample with lexemes of several parts of speech without one, a part of speech that the sample has not (`("bajo", "noun")`), a word without the ending of its sample (`"tiuteo"` as `"bloguear"`) and a word with a space raise `ValueError`. The analyzer shares the dictionary mapped into memory with the analyzers of the same file. Twenty thousand own words are added in about a fifth of a second, and the analysis is a few percent slower. Every analyzer keeps its own words in memory: twenty thousand words of the treebanks take about 4 MB, twenty thousand verbs about 2 MB. Adding them needs up to about 30 MB more for a moment, which the process may keep for later use, so a process with one such analyzer grows by 20-35 MB. Pickle keeps the own words, and a process that unpickles an analyzer with own words or its analyses many times, as a worker of a pool does, makes the analyzer once and keeps the last two such analyzers until the process ends. The [command](cli.md#options) takes own words from a file with `-w`.
+A sample that is not in the dictionary, a sample with lexemes of several parts of speech without one, a part of speech that the sample has not (`("bajo", "noun")`), a word without the ending of its sample (`"tiuteo"` as `"bloguear"`) and a word with a space raise `ValueError`. The analyzer shares the dictionary mapped into memory with the analyzers of the same file. Twenty thousand own words are added in a twentieth to a third of a second (verbs take the longest), and the analysis is a few percent slower. Every analyzer keeps its own words in memory: twenty thousand words of the treebanks take about 4 MB, twenty thousand verbs about 2 MB. Adding them needs up to about 35 MB more for a moment, which the process may keep for later use, so a process with one such analyzer grows by 10-40 MB. Pickle keeps the own words, and a process that unpickles an analyzer with own words or its analyses many times, as a worker of a pool does, makes the analyzer once and keeps the last two such analyzers until the process ends. The [command](cli.md#options) takes own words from a file with `-w`.
 
 ## Threads and processes { #parallel }
 
