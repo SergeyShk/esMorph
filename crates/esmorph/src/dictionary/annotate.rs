@@ -9,7 +9,7 @@ use crate::alphabet;
 use crate::clitics;
 
 /// Parts of sentences that `sentence_fields` analyzes at a time
-const PART_GROUP: usize = 32;
+pub(crate) const PART_GROUP: usize = 32;
 
 /// Tokens of one word that take the words of their analysis, by their indices, and the words
 #[cfg(feature = "anyseg")]

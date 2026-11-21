@@ -34,7 +34,7 @@ pub(crate) use context::sources as context_sources;
 #[doc(hidden)]
 pub use annotate::{Fields, Split, space_entry};
 #[cfg(feature = "cli")]
-pub(crate) use annotate::{one_line, set_fields};
+pub(crate) use annotate::{PART_GROUP, one_line, set_fields};
 pub use own::Sample;
 
 /// Where an analysis comes from
