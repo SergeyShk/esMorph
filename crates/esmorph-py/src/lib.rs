@@ -1,5 +1,6 @@
 //! Python module `esmorph._esmorph`
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::ffi::OsString;
@@ -641,11 +642,42 @@ fn _analyzer(
     verify: bool,
     words: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Py<Analyzer>> {
+    if let Some(analyzer) = known_own(py, &path, verify, words)? {
+        return Ok(analyzer);
+    }
     let words = own_words(words)?;
     if words.is_empty() {
         return shared(py, path, verify);
     }
     with_own_words(py, path, verify, words)
+}
+
+/// The analyzer with own words of the dictionary of the package or of the file at `path` that the
+/// process has, found by the text of its words in pickle: the text is read only for a new one
+fn known_own(
+    py: Python<'_>,
+    path: &Option<PathBuf>,
+    verify: bool,
+    words: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Option<Py<Analyzer>>> {
+    let Some(text) = words.and_then(|words| words.cast::<PyString>().ok()) else {
+        return Ok(None);
+    };
+    let known: Vec<Bound<'_, Analyzer>> = (OWN.lock_py_attached(py))
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .filter(|own| own.path == *path)
+        .filter_map(|own| own.analyzer.bind(py).upgrade())
+        .filter_map(|analyzer| analyzer.cast_into::<Analyzer>().ok())
+        .collect();
+    // The texts are compared after the lock: making one runs code of Python
+    for analyzer in known {
+        if analyzer.get().words_text(py).bind(py).as_any().eq(text)? {
+            verified(&analyzer, verify)?;
+            return Ok(Some(analyzer.unbind()));
+        }
+    }
+    Ok(None)
 }
 
 /// An analyzer with own words that pickle saved or restored: the path that pickle keeps (`None`
@@ -701,8 +733,8 @@ struct SavedAnalyzer {
     path: Option<OsString>,
     /// Set when the analyzer is verified, also after the first pickle
     verify: AtomicBool,
-    /// The own words of the analyzer, one object for all its analyses
-    words: Option<Py<PyDict>>,
+    /// The own words of the analyzer as pickle keeps them, one object for all its analyses
+    words: Option<Py<PyString>>,
 }
 
 #[pymethods]
@@ -731,6 +763,9 @@ fn _analyses_analyzer(
     verify: bool,
     words: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Py<Analyzer>> {
+    if let Some(analyzer) = known_own(py, &path, verify, words)? {
+        return Ok(analyzer);
+    }
     let words = own_words(words)?;
     let restore = |path: Option<PathBuf>| match words.is_empty() {
         true => shared(py, path, verify),
@@ -828,8 +863,9 @@ fn verified(analyzer: &Bound<'_, Analyzer>, verify: bool) -> PyResult<()> {
 ///         takes the forms of the lexemes of a word of the dictionary in the same form, usually the
 ///         lemma (`{"tiktokear": "bloguear"}` gives `tiktokeo`, `tiktokeó`), with the part of
 ///         speech in a pair, a tuple or a list, if the sample has lexemes of several
-///         (`{"zajo": ("bajo", "NOUN")}`; several are separated by commas: `"ADJ,NOUN"`). The
-///         analyses of own words are those of words of the dictionary; pickle keeps the words
+///         (`{"zajo": ("bajo", "NOUN")}`; several are separated by commas: `"ADJ,NOUN"`; an empty
+///         one is none). A sample may be an own word given before it. The analyses of own words
+///         are those of words of the dictionary; pickle keeps the words
 ///
 /// Raises:
 ///     FileNotFoundError: If there is no dictionary file
@@ -837,7 +873,8 @@ fn verified(analyzer: &Bound<'_, Analyzer>, verify: bool) -> PyResult<()> {
 ///     ValueError: If the file is no dictionary of esMorph or is damaged, the path has a NUL
 ///         character, or an own word does not follow its sample (the sample is not in the
 ///         dictionary, has lexemes of several parts of speech and none is given, has no lexemes
-///         of a given part of speech, has another ending, or the word has a space)
+///         of a given part of speech, has another ending, the parts of speech have an empty one
+///         between commas, or the word has a space)
 ///     TypeError: If the path is neither a string nor os.PathLike, verify is not a bool, or words
 ///         is no mapping of strings to strings or pairs of strings
 ///
@@ -870,7 +907,7 @@ struct Analyzer {
     /// Own words with their samples and parts of speech, in the order given
     words: Arc<OwnWordList>,
     /// The own words for pickle, made once: one object for the analyzer and all its analyses
-    words_object: PyOnceLock<Py<PyDict>>,
+    words_text: PyOnceLock<Py<PyString>>,
     /// The analyzer of the dictionary whose copy has the own words, kept: they share the mapped
     /// file and the context model, and unpickling its analyses finds it
     _base: Option<Py<Analyzer>>,
@@ -889,10 +926,15 @@ const NO_POS: u32 = 1 << 31;
 
 impl OwnWordList {
     fn push(&mut self, word: &str, sample: &str, pos: Option<&str>) -> PyResult<()> {
+        // The parts of speech without spaces around them, as the dictionary reads them
+        let pos = pos.map(|pos| match pos.split(',').all(|part| part.trim() == part) {
+            true => Cow::Borrowed(pos),
+            false => Cow::Owned(pos.split(',').map(str::trim).collect::<Vec<_>>().join(",")),
+        });
         for (field, given) in [
             (word, true),
             (sample, true),
-            (pos.unwrap_or_default(), pos.is_some()),
+            (pos.as_deref().unwrap_or_default(), pos.is_some()),
         ] {
             self.text.push_str(field);
             let end = (u32::try_from(self.text.len()).ok())
@@ -905,6 +947,39 @@ impl OwnWordList {
 
     fn is_empty(&self) -> bool {
         self.ends.is_empty()
+    }
+
+    /// The words as pickle keeps them: a line of each, its word, sample and part of speech, if
+    /// given, separated by tabs. No field of the words of an analyzer has a tab or a line break:
+    /// the dictionary refuses such a word or sample, and a part of speech is trimmed
+    fn text(&self) -> String {
+        let mut text = String::with_capacity(self.text.len() + self.ends.len());
+        for (word, sample, pos) in self.iter() {
+            text.extend([word, "\t", sample]);
+            if let Some(pos) = pos {
+                text.extend(["\t", pos]);
+            }
+            text.push('\n');
+        }
+        text
+    }
+
+    /// The words of the text that `text` makes
+    fn from_text(text: &str) -> PyResult<Self> {
+        let mut own = OwnWordList {
+            text: String::with_capacity(text.len()),
+            ends: Vec::with_capacity(3 * text.matches('\n').count()),
+        };
+        for line in text.split_terminator('\n') {
+            let mut fields = line.splitn(3, '\t');
+            let (Some(word), Some(sample)) = (fields.next(), fields.next()) else {
+                return Err(PyValueError::new_err(
+                    "the own words of the pickle are damaged",
+                ));
+            };
+            own.push(word, sample, fields.next())?;
+        }
+        Ok(own)
     }
 
     /// Own words: the word, the sample and the part of speech of each
@@ -934,6 +1009,10 @@ fn own_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<OwnWordList> {
     let Some(words) = words.filter(|words| !words.is_none()) else {
         return Ok(OwnWordList::default());
     };
+    // Pickle keeps them as text; one of an earlier version, as a mapping
+    if let Ok(text) = words.cast::<PyString>() {
+        return OwnWordList::from_text(&text.to_cow()?);
+    }
     let wrong = || PyTypeError::new_err("words must map strings to strings or pairs of strings");
     let items = words
         .call_method0(intern!(words.py(), "items"))
@@ -983,7 +1062,7 @@ impl Analyzer {
         if this.words.is_empty() {
             return Ok((restore, (path, verified).into_pyobject(py)?));
         }
-        let words = this.words_object(py)?;
+        let words = this.words_text(py);
         Ok((restore, (path, verified, words).into_pyobject(py)?))
     }
 
@@ -1657,7 +1736,7 @@ impl Analyzer {
             tag_strings: PyOnceLock::new(),
             verified: AtomicBool::new(this.verified.load(Ordering::Relaxed)),
             words: Arc::new(words),
-            words_object: PyOnceLock::new(),
+            words_text: PyOnceLock::new(),
             _base: Some(base),
         })
     }
@@ -1725,24 +1804,16 @@ impl Analyzer {
             tag_strings: PyOnceLock::new(),
             verified: AtomicBool::new(verify),
             words: Arc::default(),
-            words_object: PyOnceLock::new(),
+            words_text: PyOnceLock::new(),
             _base: None,
         })
     }
 
-    /// The own words for pickle as a mapping, made once
-    fn words_object(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
-        let words = self.words_object.get_or_try_init(py, || -> PyResult<_> {
-            let words = PyDict::new(py);
-            for (word, sample, pos) in self.words.iter() {
-                match pos {
-                    Some(pos) => words.set_item(word, (sample, pos))?,
-                    None => words.set_item(word, sample)?,
-                }
-            }
-            Ok(words.unbind())
-        })?;
-        Ok(words.clone_ref(py))
+    /// The own words for pickle, made once
+    fn words_text(&self, py: Python<'_>) -> Py<PyString> {
+        (self.words_text)
+            .get_or_init(py, || PyString::new(py, &self.words.text()).unbind())
+            .clone_ref(py)
     }
 
     /// The handle of the analyzer for the analyses of this thread: one per analyzer and thread
@@ -1844,7 +1915,7 @@ impl Analyzer {
             let path = Analyzer::saved_path(analyzer)?.and(Some(this.path.clone().into()));
             let words = match this.words.is_empty() {
                 true => None,
-                false => Some(this.words_object(py)?),
+                false => Some(this.words_text(py)),
             };
             Py::new(
                 py,

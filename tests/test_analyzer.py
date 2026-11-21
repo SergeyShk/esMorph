@@ -8,6 +8,7 @@ import pickle
 import subprocess
 import sys
 import threading
+import time
 import zlib
 from pathlib import Path
 
@@ -259,6 +260,19 @@ def test_own_word_as_a_sample_of_another():
     assert {a.pos for a in morph.analyze("feisbuqueros")} == {"ADJ", "NOUN"}
 
 
+def test_chain_of_own_words_is_added_at_once():
+    # Every second word takes the word before it as its sample, and the words are added at once
+    words, word = {}, "bloguear"
+    for number in range(2000):
+        sample = word if number % 2 else "bloguear"
+        word = "zq" + "".join(chr(ord("a") + int(digit)) for digit in f"{number:04d}") + "ear"
+        words[word] = sample
+    start = time.perf_counter()
+    morph = Analyzer(words=words)
+    assert time.perf_counter() - start < 3
+    assert morph.analyze(word[:-2] + "o")[0].lemma == word
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows replaces no open file")
 def test_own_words_of_a_file_built_again(tmp_path):
     path = tmp_path / "es.dict"
@@ -306,6 +320,17 @@ def test_pickle_keeps_own_words():
     single = pickle.loads(pickle.dumps(analyses[1]))
     assert [form.word for form in single.forms()] == forms[1]
     assert pickle.loads(pickle.dumps(morph)) is morph
+    # Pickle keeps the words as text, and one of an earlier version as a mapping
+    text = morph.__reduce__()[1][2]
+    assert text == "zogur\tyogur\nsobretener\ttener\n"
+    assert esmorph._esmorph._analyzer(None, False, text) is morph
+    assert (
+        esmorph._esmorph._analyzer(None, False, {"zogur": "yogur", "sobretener": "tener"}) is morph
+    )
+    # A part of speech is kept without the spaces around it
+    pair = Analyzer(words={"tiktokero": ("bloguero", "ADJ, NOUN")})
+    assert pair.__reduce__()[1][2] == "tiktokero\tbloguero\tADJ,NOUN\n"
+    assert pickle.loads(pickle.dumps(pair.analyze("tiktokeros"))) == pair.analyze("tiktokeros")
     # A new process makes the analyzer once, for the analyzer and the analyses of every pickle
     result = subprocess.run(
         [sys.executable, "-X", "utf8", "-c", OWN_WORDS_PICKLE],
@@ -334,6 +359,8 @@ def test_own_words_keep_the_forms_of_other_words():
         ({"tuitearse": "bloguearse"}, ValueError, 'without se, "bloguear"'),
         ({"zajo": ("bajo", "NOUN", "ADJ")}, TypeError, "words must map"),
         ({"tiktok ear": "bloguear"}, ValueError, "a space"),
+        ({"zajo": ("bajo", "NOUN,")}, ValueError, "have an empty one"),
+        ({"guau": ("ay", "INTJ")}, ValueError, "the same part of speech with the same ending"),
         ({"tiktokear": 1}, TypeError, "words must map"),
         (["tiktokear"], TypeError, "words must map"),
     ],
@@ -341,6 +368,12 @@ def test_own_words_keep_the_forms_of_other_words():
 def test_wrong_own_words(words, error, message):
     with pytest.raises(error, match=message):
         Analyzer(words=words)
+
+
+def test_own_word_with_an_empty_part_of_speech():
+    # An empty part of speech is none, as in a file of the command
+    morph = Analyzer(words={"tiktokear": ("bloguear", "")})
+    assert morph.analyze("tiktokeo")[0].lemma == "tiktokear"
 
 
 def test_lost_diaeresis(morph):
