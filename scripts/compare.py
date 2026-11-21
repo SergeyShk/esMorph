@@ -55,31 +55,31 @@ from importlib import metadata
 from pathlib import Path
 from typing import NamedTuple
 
-# Treebank, file, commit of the UD 2.18 release and SHA-256
+# Treebank, file, commit of the UD 2.19 release and SHA-256
 DATASETS = {
     "AnCora": (
         "UD_Spanish-AnCora",
         "es_ancora-ud-test.conllu",
-        "197cca385e0e7db1b1fe26a5772dade1b6fbbee8",
-        "679f1c05ca654aa26801c80319df45f8f97606718fb534b91755b48f3e67fa6f",
+        "bdb41b5f95db8e0a64217fcb8d15cd3ad38c34db",
+        "4d74d95cfe5a53eacaa7adf3b7ae6ef76a7df9806fd519113e25d74c43ad2b9c",
     ),
     "GSD": (
         "UD_Spanish-GSD",
         "es_gsd-ud-test.conllu",
-        "6364fa8cf5420ff7156e6b383d25936d759c68a3",
-        "ecce253f44bffaa9803ae7ec0c10911c13e4f1fc3cb439dbd1db2cebe0a12741",
+        "c262f3ca7897ea3b7719731d5958948614e3a214",
+        "f6a7a64c61a089f311bc8299f87e62f3af5c92d444a5d51681d1fa42234dca95",
     ),
     "PUD": (
         "UD_Spanish-PUD",
         "es_pud-ud-test.conllu",
-        "8af7ac68bbd846bc47e525c3193d96f123dd388b",
-        "48a7b5c7f409100b24eba90c7397e01f6fecaaf3207315a9a1bda029f77e98d3",
+        "e7ae2691ecf36988467016f57647dffb43d047bd",
+        "542ab95a9240fb66ade9d3d234fc34dfd0d5b041bdd304f005ce3573d93418c7",
     ),
     "COSER": (
         "UD_Spanish-COSER",
         "es_coser-ud-test.conllu",
-        "253575e3acab8f7b91cdf525004bf71d0390b3d1",
-        "9bbbd54bb70ac448d6178b5446c70bef7d9285f93735a02791663872fc489fec",
+        "06f18e8286d5c1c042bfc218c1bf567af7307959",
+        "546565e466048e4c9c2c455d4873fc8a2902594a3ddcf176ab542ae42cab8648",
     ),
 }
 # Sets whose lemmas and features are assigned automatically: only the part of speech is compared
