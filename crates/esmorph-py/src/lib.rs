@@ -1612,34 +1612,40 @@ impl Analyzer {
         while piece < pieces.len() {
             // Pieces of about CHUNK words: Ctrl+C is checked between them
             let first = tokens[pieces[piece].0.start].1.start;
+            let mut last = piece;
+            while last < pieces.len() && tokens[pieces[last].0.start].1.start - first < CHUNK {
+                last += 1;
+            }
+            // The pieces go in a row: their tokens are one range
+            let base = pieces[piece].0.start;
+            let end = pieces[last - 1].0.end;
+            let sentences: Vec<(Range<usize>, bool)> = (pieces[piece..last].iter())
+                .map(|(range, start)| (range.start - base..range.end - base, *start))
+                .collect();
+            piece = last;
             py.detach(|| -> Result<(), esmorph::Error> {
-                while piece < pieces.len() && tokens[pieces[piece].0.start].1.start - first < CHUNK
-                {
-                    let (range, start) = pieces[piece].clone();
-                    let part: Vec<(&str, &[String])> = (tokens[range.clone()].iter())
-                        .map(|(text, range)| {
-                            let words = &forms[range.clone()];
-                            (text.unwrap_or(words[0].as_str()), words)
-                        })
-                        .collect();
-                    let keep = |at: usize| {
-                        let words = tokens[range.start + at].1.clone();
-                        words.into_iter().any(|word| kept.get(word) == Some(&true))
-                    };
-                    let known = words.len();
-                    let found = split.then_some(&mut words);
-                    (self.dictionary).sentence_fields(
-                        &part,
-                        context,
-                        start,
-                        &mut fields,
-                        found,
-                        &keep,
-                    )?;
-                    for word in &mut words[known..] {
-                        word.token += range.start;
-                    }
-                    piece += 1;
+                let part: Vec<(&str, &[String])> = (tokens[base..end].iter())
+                    .map(|(text, range)| {
+                        let words = &forms[range.clone()];
+                        (text.unwrap_or(words[0].as_str()), words)
+                    })
+                    .collect();
+                let keep = |at: usize| {
+                    let words = tokens[base + at].1.clone();
+                    words.into_iter().any(|word| kept.get(word) == Some(&true))
+                };
+                let known = words.len();
+                let found = split.then_some(&mut words);
+                (self.dictionary).sentence_fields(
+                    &part,
+                    &sentences,
+                    context,
+                    &mut fields,
+                    found,
+                    &keep,
+                )?;
+                for word in &mut words[known..] {
+                    word.token += base;
                 }
                 Ok(())
             })
