@@ -8,8 +8,9 @@ use crate::Error;
 use crate::alphabet;
 use crate::clitics;
 
-/// Parts of sentences that `sentence_fields` analyzes at a time
-pub(crate) const PART_GROUP: usize = 32;
+/// Parts of sentences that `sentence_fields` analyzes at a time: four batches of the context model
+/// sorted by length, and few analyses in memory
+pub(crate) const PART_GROUP: usize = 16;
 
 /// Tokens of one word that take the words of their analysis, by their indices, and the words
 #[cfg(feature = "anyseg")]

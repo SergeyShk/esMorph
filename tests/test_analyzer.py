@@ -1019,9 +1019,13 @@ def test_analyze_sentence(morph):
         ("Me fue de gran ayuda .", 1, ("ser", "AUX")),
         ("Su satisfacción fue al ver a su hijo .", 2, ("ser", "AUX")),
         ("Echó fuera a los intrusos .", 1, ("fuera", "ADV")),
-        # A name after `no` and a noun after `tú` that follows a verb stay
+        # A noun after the subject `yo` is the verb of the first person
+        ("Yo bebo agua .", 1, ("beber", "VERB")),
+        ("Yo canto bien .", 1, ("cantar", "VERB")),
+        # A name after `no` and a noun after `tú` or `yo` that follows a verb stay
         ("Ganó Madrid y no Lima .", 4, ("Lima", "PROPN")),
         ("¿ Has visto tú cosa igual ?", 4, ("cosa", "NOUN")),
+        ("Era yo canto y risa .", 2, ("canto", "NOUN")),
         # The frequent verb before an infinitive may be an auxiliary, and no form of `tú` follows
         # `se`
         ("No pudimos hablar más .", 1, ("poder", "AUX")),

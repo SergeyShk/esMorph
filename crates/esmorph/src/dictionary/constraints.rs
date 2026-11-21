@@ -69,8 +69,9 @@ const AL_PHRASES: [&str; 12] = [
     "punto",
     "revés",
 ];
-/// Words a verb follows, not a noun without a determiner: the negation and the subject `tú`
-const BEFORE_VERB: [&str; 2] = ["no", "tú"];
+/// Words a verb follows, not a noun without a determiner: the negation and the subjects `tú` and
+/// `yo`
+const BEFORE_VERB: [&str; 3] = ["no", "tú", "yo"];
 /// Lemmas of the verbs followed by a bare infinitive: `puede ser`, `suele parecer`, but `tiene
 /// poder`, `perdió poder`
 const BEFORE_INFINITIVE: [&str; 16] = [
@@ -361,10 +362,10 @@ impl Dictionary {
         let clitic = PROCLITICS.contains(&lower[before].as_str())
             && self.top_pos(sentence, before) == "PRON";
         // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`;
-        // `tú` after a verb is its subject: `¿has visto tú cosa igual?`
+        // `tú` and `yo` after a verb are its subject: `¿has visto tú cosa igual?`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
             && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"))
-            && !(lower[before] == "tú"
+            && !(matches!(lower[before].as_str(), "tú" | "yo")
                 && before > 0
                 && matches!(self.top_pos(sentence, before - 1), "VERB" | "AUX"));
         // No clitic follows a preposition (`por lo duras que eran`), while a determiner may come
