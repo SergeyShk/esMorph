@@ -27,7 +27,7 @@ An analysis is an `Analysis` object returned by the `analyze` and `analyze_many`
 
 | Attribute | Type | Description |
 | :-------- | :--- | :---------- |
-| `word` | `str` | The word form as the dictionary spells it, with its accents; for a [colloquial spelling](#spelling) its standard spelling (`trabajado` of `trabajao`); a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters and with `-` for the hyphens U+2010 and U+2011 |
+| `word` | `str` | The word form as the dictionary spells it, with its accents; for a [colloquial spelling](#spelling) its standard spelling (`trabajado` of `trabajao`); a verb with [clitics](#clitics) as written, in lower case; a token of the [rules](#rules) as written, without invisible characters, with combining marks joined to their letters, with `-` for the hyphens U+2010 and U+2011 and with the letters of a ligature (`ﬁ` is `fi`) |
 | `lemma` | `str` | The lemma |
 | `pos` | `str` | UD part of speech: `NOUN`, `VERB`, `ADJ`, `DET`, `ADP` and so on |
 | `feats` | `dict[str, str]` | UD features: `{"Gender": "Fem", "Number": "Plur"}`; a new dictionary each time, changing it does not change the analysis |
@@ -68,7 +68,7 @@ Analyses go from the most probable to the least. `prob` is the share of an analy
 
 ## Diminutives { #diminutives }
 
-A diminutive keeps its own lemma, as in the treebanks: `casitas` is a form of `casita`. `diminutive_of` gives the word it is a diminutive of, as Wiktionary gives it in the first sense of the word: `casita` is a diminutive of `casa`, `poquito` of `poco`, `ahorita` of `ahora`. A word that is mostly a word of its own, though Wiktionary also has it as a diminutive, has none: `señorita`, `granito`. About two thousand nouns, adjectives and adverbs of the dictionary have it.
+A diminutive keeps its own lemma, as in the treebanks: `casitas` is a form of `casita`. `diminutive_of` gives the word it is a diminutive of, as Wiktionary gives it in the first sense of the word: `casita` is a diminutive of `casa`, `poquito` of `poco`, `ahorita` of `ahora`. A word whose first sense in Wiktionary is its own has none, though Wiktionary also has it as a diminutive: `señorita`, `granito`; a word whose first sense is a diminutive keeps it, even if texts mostly use it as a word of its own: `patilla` is a diminutive of `pata`. About two thousand nouns, adjectives and adverbs of the dictionary have it.
 
 === "Code"
 

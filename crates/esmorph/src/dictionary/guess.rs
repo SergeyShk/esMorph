@@ -395,9 +395,9 @@ impl Dictionary {
 
     /// Examples of the training of the paradigm model: the candidates of a lowercase word of the
     /// dictionary as if the dictionary had not the word, and whether each is right - the form of
-    /// a table of an analysis of the dictionary, or its lemma and UD tag. A word of a lexeme with
-    /// forms of the extra source gives none: the lists count it under a table without them, so it
-    /// cannot be taken out of them
+    /// a table of an analysis of the dictionary, or its lemma and UD tag. A word that the lists
+    /// count under another table - a form of a lexeme that also has forms of the extra source -
+    /// gives none: it cannot be taken out of them
     #[doc(hidden)]
     pub fn guess_examples(&self, word: &str) -> Vec<GuessCandidate> {
         let own = self.found(word);

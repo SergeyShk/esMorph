@@ -115,6 +115,12 @@ def test_exact_spelling_wins_over_other_accents(morph):
     assert {a.word for a in morph.analyze("más")} == {"más"}
 
 
+def test_ligatures_of_a_pdf_are_their_letters(morph):
+    # Text taken from a PDF has the ligatures of Unicode
+    assert morph.analyze("\ufb01n")[0].lemma == "fin"
+    assert morph.is_known("a\ufb02igido") and morph.lemmatize(["o\ufb01cina"]) == ["oficina"]
+
+
 def test_word_absent_as_written_looks_through_accents(morph):
     assert morph.analyze("camion")[0].word == "camión"
     assert morph.analyze("atencion")[0].word == "atención"
