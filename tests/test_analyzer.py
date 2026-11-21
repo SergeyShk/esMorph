@@ -481,6 +481,18 @@ def test_what_takes_no_enclitic_without_an_accent(morph):
     assert [a.words for a in morph.analyze("acerqueme")] == [("acerqué", "me"), ("acerque", "me")]
 
 
+def test_imperative_before_usted(morph):
+    # The preterite without an accent goes first, but before `usted` the imperative does
+    assert (
+        morph.analyze_sentence(["Señora", ",", "perdoneme", "usted", "."])[2][0].feats["Mood"]
+        == "Imp"
+    )
+    assert (
+        morph.analyze_sentence(["Levanteme", "temprano", "y", "salí", "."])[0][0].feats["Mood"]
+        == "Ind"
+    )
+
+
 def test_words_of_the_dictionary_are_not_split(morph):
     assert {a.source for a in morph.analyze("comete")} == {"dictionary"}
     assert morph.analyze("cómetelo")[0].words == ("come", "te", "lo")

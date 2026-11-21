@@ -13,8 +13,9 @@ const SUFFIX: usize = 3;
 /// Weight of what the treebanks did not see against the counts of a form, as that many words
 const PRIOR: f64 = 1.0;
 /// Weight of the frequency of a verb in all its forms against its counts in a form, as that many
-/// words: a form the treebanks saw keeps the order they give it (`sienta` is `sentar`), while the
-/// rule of the frequent verb reads the frequency itself (`Dictionary::verb_frequency`)
+/// words: a form the treebanks saw keeps the order they give it (`sienta` is `sentar`), unless the
+/// verb is rare beside a frequent one (RARE, FREQUENT), while the rule of the frequent verb reads
+/// the frequency itself (`Dictionary::verb_frequency`)
 const LEXEME_PRIOR: f64 = 3.0;
 /// Shares of verbs of a form among all its verbs: the counts of the form are not those of a rare
 /// verb beside a frequent one, as a few mistakes of the treebanks would make `vengan` `vengar`;

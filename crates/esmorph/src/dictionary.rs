@@ -501,7 +501,8 @@ impl Dictionary {
     /// (`trabajao`, `caridá`, `juerza`, `estranjero`), as a participle without its `d` is before
     /// other accents (`perdío` is `perdido`, not `perdió`). A token that is none of these and
     /// splits as a finite form stressed on its last syllable with an enclitic without an accent is
-    /// first of all that verb (`quedose`), with a capital letter a name first. A token that is none
+    /// first of all that verb (`quedose`), with a capital letter a name first unless the enclitic is
+    /// `se`, `me` or `le` (`Vase`). A token that is none
     /// of these gets the analyses of the rules:
     /// punctuation, a symbol, a number, an ordinal number in digits, a Roman numeral, a name with a
     /// capital letter, an address, an abbreviation. A lowercase word that is none of these is
