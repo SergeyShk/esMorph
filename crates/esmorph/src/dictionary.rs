@@ -25,6 +25,7 @@ mod constraints;
 mod context;
 mod guess;
 mod own;
+mod weights;
 
 #[cfg(any(test, feature = "build"))]
 pub(crate) use context::Model;
