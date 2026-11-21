@@ -349,25 +349,6 @@
   
 
       
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../spacy/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  spaCy
-
-      </a>
-    </li>
-  
-
-      
     </ul>
   </div>
 </nav>
@@ -737,6 +718,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#diminutives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diminutives
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#clitics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -842,33 +834,6 @@
   
 
     
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../spacy/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    spaCy
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
   </ul>
 </nav>
                   </div>
@@ -922,6 +887,17 @@
     <span class="md-ellipsis">
       
         Order of analyses
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diminutives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diminutives
       
     </span>
   </a>
@@ -1060,6 +1036,11 @@
 <td style="text-align: left;"><code>str</code></td>
 <td style="text-align: left;">Where the analysis comes from: <code>"dictionary"</code> - the word form is in the dictionary, <code>"clitics"</code> - a verb of the dictionary with <a href="#clitics">clitics</a>, <code>"rule"</code> - an <a href="#rules">analysis by rule</a>, <code>"guess"</code> - a <a href="#guess">guessed analysis</a> of an unknown word</td>
 </tr>
+<tr>
+<td style="text-align: left;"><code>diminutive_of</code></td>
+<td style="text-align: left;"><code>str \| None</code></td>
+<td style="text-align: left;">The word of which the lemma is a <a href="#diminutives">diminutive</a>: <code>casa</code> for <code>casitas</code>; <code>None</code> for other words</td>
+</tr>
 </tbody>
 </table>
 <h2 id="ud">Parts of speech and features<a class="headerlink" href="#ud" title="Permanent link">&para;</a></h2>
@@ -1075,7 +1056,7 @@
 </ul>
 <p>If the part of speech of a word depends on context, the word has both analyses: <code>que</code> is <code>PRON</code> and <code>SCONJ</code>, <code>la</code> is <code>DET</code> and <code>PRON</code>, a participle is <code>VERB</code> and <code>ADJ</code>. Features: gender, number, person, tense, mood, verb form, degree, negation (<code>Polarity=Neg</code> of <code>no</code>), definiteness (<code>Definite</code>), the type of a pronoun or a determiner (<code>PronType</code>), possessiveness (<code>Poss</code>), reflexivity (<code>Reflex</code>), the case of personal pronouns (<code>Case</code>) and whether they follow a preposition (<code>PrepCase</code>), politeness (<code>Polite=Form</code> of <code>usted</code>), the type of a numeral (<code>NumType</code>) and how it is written (<code>NumForm</code>), and the kind of a sign of punctuation (<code>PunctType</code>, <code>PunctSide</code>).</p>
 <h2 id="order">Order of analyses<a class="headerlink" href="#order" title="Permanent link">&para;</a></h2>
-<p>Analyses go from the most probable to the least. <code>prob</code> is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; of the verbs of a form the one they have more often in all its forms has the larger share, even where a few counts of the form say otherwise: <code>vengo</code> is first of all <code>venir</code>, not <code>vengar</code>. For a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features; a form of several verbs they have seen in other forms gets shares by the frequency of the verbs and of the features instead (<code>vengamos</code> is first of all the subjunctive of <code>venir</code>). A word goes before its older spelling with other accents: <code>á</code> is first of all <code>a</code>, <code>tambien</code> is <code>también</code>. <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> orders the same analyses by the sentence.</p>
+<p>Analyses go from the most probable to the least. <code>prob</code> is the share of an analysis among the analyses of the word, by how often the treebanks UD Spanish AnCora and GSD have it; of the verbs of a form the one AnCora has more often as a verb in all its forms has the larger share where the treebanks have the form itself rarely: <code>vengo</code> is first of all <code>venir</code>, not <code>vengar</code>, while <code>sienta</code>, which they have as <code>sentar</code> more often, is first of all <code>sentar</code>; the form of a verb of less than a fifth of the frequency of the verbs of the form does not go first beside a verb of more than three fifths, even where the treebanks have it first: <code>vengan</code> is first of all <code>venir</code>, and <code>sume</code> is <code>sumar</code>. For a word they have not seen, the shares are equal and the order is a guess by the ending of the word and the most common features; a form of several verbs they have seen in other forms gets shares by the frequency of the verbs and of the features instead (<code>vengamos</code> is first of all the subjunctive of <code>venir</code>). A word goes before its older spelling with other accents: <code>á</code> is first of all <code>a</code>, <code>tambien</code> is <code>también</code>. <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> orders the same analyses by the sentence.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Code</label><label for="__tabbed_2_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1088,9 +1069,26 @@
 </div>
 </div>
 </div>
-<h2 id="clitics">Words with clitics<a class="headerlink" href="#clitics" title="Permanent link">&para;</a></h2>
-<p>A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and <code>words</code> gives the words of the token, as Universal Dependencies has them. In older and literary writing a finite form takes enclitics too, when the accent of the token marks it: <code>díjole</code> is <code>dijo</code> + <code>le</code>. <code>del</code> and <code>al</code> also have their two words, as do the contractions of <code>de</code> with a pronoun or a demonstrative in older writing: <code>desta</code> is <code>de</code> + <code>esta</code>. A word of the dictionary is not split: <code>comete</code> is a form of <code>cometer</code>, though a few are mostly verbs with clitics: <code>verse</code> is first of all <code>ver</code> + <code>se</code>, <code>cállate</code> is <code>calla</code> + <code>te</code>, and in a sentence they are always such verbs.</p>
+<h2 id="diminutives">Diminutives<a class="headerlink" href="#diminutives" title="Permanent link">&para;</a></h2>
+<p>A diminutive keeps its own lemma, as in the treebanks: <code>casitas</code> is a form of <code>casita</code>. <code>diminutive_of</code> gives the word it is a diminutive of, as Wiktionary gives it in the first sense of the word: <code>casita</code> is a diminutive of <code>casa</code>, <code>poquito</code> of <code>poco</code>, <code>ahorita</code> of <code>ahora</code>. A word that is mostly a word of its own, though Wiktionary also has it as a diminutive, has none: <code>señorita</code>, <code>granito</code>. About two thousand nouns, adjectives and adverbs of the dictionary have it.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Code</label><label for="__tabbed_3_2">Result</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="p">[</span>
+    <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">diminutive_of</span>
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"casitas"</span><span class="p">,</span> <span class="s2">"poquito"</span><span class="p">,</span> <span class="s2">"ahorita"</span><span class="p">,</span> <span class="s2">"señorita"</span><span class="p">,</span> <span class="s2">"granito"</span><span class="p">)</span>
+<span class="p">]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>['casa', 'poco', 'ahora', None, None]
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="clitics">Words with clitics<a class="headerlink" href="#clitics" title="Permanent link">&para;</a></h2>
+<p>A verb with enclitic pronouns is analyzed as its verb: the analysis describes the infinitive, the gerund or the imperative, and <code>words</code> gives the words of the token, as Universal Dependencies has them. In older and literary writing a finite form takes enclitics too, when the accent of the token marks it: <code>díjole</code> is <code>dijo</code> + <code>le</code>, <code>quedéme</code> is <code>quedé</code> + <code>me</code> (the imperative would be <code>quédeme</code>). Since 2010 such a token follows the general rules of accents, so a form stressed on its last syllable loses its accent: a lowercase word that is no word of the dictionary, no other verb with clitics and is such a form with one enclitic is first of all that verb, with guesses of the word after it (<code>quedose</code> is <code>quedó</code> + <code>se</code>, <code>fuime</code> is <code>fui</code> + <code>me</code>), and <a href="../analyzer/#is_known"><code>is_known</code></a> does not tell it. The enclitic is no <code>te</code> or <code>os</code>, nor <code>nos</code> after the first person, which end nouns more often: <code>anisete</code> and <code>macarenos</code> are nouns. A token that is also an imperative that would take an accent with the enclitic is first of all such a form too: <code>acerqueme</code> is <code>acerqué</code> + <code>me</code>, and then the imperative <code>acerque</code> + <code>me</code>, which the spelling writes <code>acérqueme</code>. <code>del</code> and <code>al</code> also have their two words, as do the contractions of <code>de</code> with a pronoun or a demonstrative in older writing: <code>desta</code> is <code>de</code> + <code>esta</code>. A word of the dictionary is not split: <code>comete</code> is a form of <code>cometer</code>, though a few are mostly verbs with clitics: <code>verse</code> is first of all <code>ver</code> + <code>se</code>, <code>cállate</code> is <code>calla</code> + <code>te</code>, and in a sentence they are always such verbs.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Code</label><label for="__tabbed_4_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[(</span><span class="n">a</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">pos</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">words</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">source</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"dámelo"</span><span class="p">)]</span>
@@ -1104,7 +1102,7 @@
 </div>
 <h2 id="spelling">Spelling<a class="headerlink" href="#spelling" title="Permanent link">&para;</a></h2>
 <p>Case does not matter for finding a word in the dictionary, though a token with a capital letter may also be a <a href="#rules">name</a>. A word spelled as in the dictionary gives the analyses of that spelling: <code>publico</code> is not <code>público</code>. A word absent as written may be a verb with clitics (<code>verte</code> is <code>ver</code> + <code>te</code>, not <code>verté</code>); otherwise it is looked for without its accents and with a lost diaeresis, and <code>word</code> shows the spelling of the dictionary; for a verb with clitics <code>word</code> is the token as written, in lower case.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Code</label><label for="__tabbed_4_2">Result</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Code</label><label for="__tabbed_5_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[</span><span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">word</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"CAMIÓN"</span><span class="p">,</span> <span class="s2">"camion"</span><span class="p">,</span> <span class="s2">"pinguino"</span><span class="p">]]</span>
@@ -1116,15 +1114,16 @@
 </div>
 </div>
 </div>
-<p>A lowercase word that the dictionary has not, even without its accents, may be a colloquial spelling of a word of the dictionary. Such a word gets the analyses of that word, and <code>word</code> is its standard spelling. The spellings are:</p>
+<p>A lowercase word that the dictionary has not, even without its accents, may be a colloquial or an older spelling of a word of the dictionary. Such a word gets the analyses of that word, and <code>word</code> is its standard spelling. The spellings are:</p>
 <ul>
 <li>a participle without its <code>d</code>: <code>trabajao</code> is <code>trabajado</code>, <code>sío</code> is <code>sido</code>; its accent is not lost, so <code>perdío</code> is <code>perdido</code>, not <code>perdió</code>;</li>
 <li>a final <code>-á</code>, <code>-é</code> or <code>-ú</code> for <code>-ad</code>, <code>-ed</code> or <code>-ud</code>: <code>caridá</code> is <code>caridad</code>, <code>virtú</code> is <code>virtud</code>;</li>
-<li>an aspirated <code>f</code> or <code>h</code>: <code>juerza</code> is <code>fuerza</code>, <code>juevo</code> is <code>huevo</code>, <code>juyendo</code> is <code>huyendo</code>.</li>
+<li>an aspirated <code>f</code> or <code>h</code>: <code>juerza</code> is <code>fuerza</code>, <code>juevo</code> is <code>huevo</code>, <code>juyendo</code> is <code>huyendo</code>;</li>
+<li><code>es</code> for <code>ex</code> before a consonant, as older writing has it: <code>estranjero</code> is <code>extranjero</code>, <code>esplicar</code> is <code>explicar</code>.</li>
 </ul>
 <p>A word with a capital letter is no such spelling: <code>Trabajao</code> and <code>Julita</code> are names, not <code>trabajado</code> and <code>fulita</code>.</p>
 <p>The dictionary also has spellings of words as they sound and common shortened forms: <code>na</code> and <code>naa</code> are <code>nada</code>, <code>pos</code> is <code>pues</code>, <code>to</code> is <code>todo</code>, <code>mu</code> is <code>muy</code>, <code>güeno</code> is <code>bueno</code>, <code>er</code> is <code>el</code>. They have the analyses of the standard word with its lemma and features, and <code>word</code> is the standard spelling; the context chooses among them and the other words of the same spelling (<code>mu</code> is also an interjection). As words of the dictionary, they are found in any case: <code>Güeno</code> is <code>bueno</code> too. The analyses of all these spellings have <code>source</code> equal to <code>"dictionary"</code>, while <a href="../analyzer/#is_known"><code>is_known</code></a> tells only the spellings of the dictionary: <code>na</code> is known, <code>trabajao</code> is not.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Code</label><label for="__tabbed_5_2">Result</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Code</label><label for="__tabbed_6_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[</span>
@@ -1153,8 +1152,8 @@
 <li>an abbreviation with a period in lower case that the dictionary does not have is a noun with itself as the lemma (<code>fig.</code>), and so is a lowercase letter (<code>b</code>).</li>
 </ul>
 <p>A lowercase abbreviation with a period that the dictionary has without the period gets the nouns and the symbols of that word, with <code>source</code> equal to <code>"dictionary"</code>: <code>kg.</code> is <code>kg</code>. A unit with its period and a number in one token is two words with these analyses: <code>km.24</code> is <code>km</code> with the words <code>km.</code> and <code>24</code>, and only its nouns and symbols count (<code>m.36</code> is no adjective). A word of the dictionary with a period of another part of speech gets no analyses: <code>come.</code> is a verb with the period of a sentence.</p>
-<p>A word with a capital letter that the dictionary knows may be a name too, with its share. An initial (<code>D.</code>) and a word without accents that the dictionary has only with them (<code>Angel</code>, <code>Perez</code>) are mostly names, so their name goes first, while another word with a capital letter is a name less often (<code>Estados</code>, <code>Comisión</code>), so its name usually goes after the analyses of the dictionary. Of the words in capitals, a word of up to four letters is mostly an acronym (<code>ETA</code>, <code>PP</code>), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (<code>CAMIONES</code>, <code>EL</code>), so their name usually goes after the analyses of the dictionary. A Roman numeral that the dictionary knows as a word, such as <code>VI</code>, <code>XI</code> or <code>X</code>, is a numeral first. A token with a capital letter that splits as a verb with clitics may be a name too: an imperative without an accent mostly is one (<code>Mandela</code> is first of all <code>PROPN</code>), while an infinitive, a gerund, an imperative with an accent and a finite form mostly are verbs (<code>Hacerlo</code>, <code>Déjame</code>, <code>Levantóse</code>). A lowercase word is a name rarely: <code>miró</code> is first of all <code>mirar</code>, <code>Miró</code> a name. An analysis of a rule has no other forms: <code>forms()</code> gives the analysis itself. <code>is_known</code> tells only the words of the dictionary.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Code</label><label for="__tabbed_6_2">Result</label></div>
+<p>A word with a capital letter that the dictionary knows may be a name too, with its share. An initial (<code>D.</code>) and a word without accents that the dictionary has only with them (<code>Angel</code>, <code>Perez</code>) are mostly names, so their name goes first, while another word with a capital letter is a name less often (<code>Estados</code>, <code>Comisión</code>), so its name usually goes after the analyses of the dictionary. Of the words in capitals, a word of up to four letters is mostly an acronym (<code>ETA</code>, <code>PP</code>), so its name usually goes first, while a longer word and a function word - a preposition, a determiner, a pronoun, a conjunction, an auxiliary - are mostly words of a headline (<code>CAMIONES</code>, <code>EL</code>), so their name usually goes after the analyses of the dictionary. A Roman numeral that the dictionary knows as a word, such as <code>VI</code>, <code>XI</code> or <code>X</code>, is a numeral first. A token with a capital letter that splits as a verb with clitics may be a name too: an imperative without an accent mostly is one (<code>Mandela</code> is first of all <code>PROPN</code>), and so is a finite form without an accent (<code>Vila</code>) but one with <code>se</code>, <code>me</code> or <code>le</code> (<code>Vase</code>, <code>Quedose</code>), while an infinitive, a gerund, an imperative with an accent and a finite form with an accent mostly are verbs (<code>Hacerlo</code>, <code>Déjame</code>, <code>Levantóse</code>). A lowercase word is a name rarely: <code>miró</code> is first of all <code>mirar</code>, <code>Miró</code> a name. An analysis of a rule has no other forms: <code>forms()</code> gives the analysis itself. <code>is_known</code> tells only the words of the dictionary.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Code</label><label for="__tabbed_7_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[(</span><span class="n">a</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">pos</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">feats</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">source</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"10.000"</span><span class="p">)]</span>
@@ -1177,7 +1176,7 @@
 <li>any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often AnCora train has their features; a word in <code>-ísimo</code> is an adjective of <code>Degree=Abs</code>: <code>esbeltísima</code> is a form of <code>esbeltísimo</code>.</li>
 </ul>
 <p>A guessed word has its forms, guessed too: <code>forms()</code> and <code>inflect()</code> work as for a word of the dictionary. <code>is_known</code> stays false for it.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Code</label><label for="__tabbed_7_2">Result</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Code</label><label for="__tabbed_8_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[(</span><span class="n">a</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">pos</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">prob</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"zumbeábamos"</span><span class="p">)]</span>

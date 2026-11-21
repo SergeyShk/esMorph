@@ -349,25 +349,6 @@
   
 
       
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../spacy/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  spaCy
-
-      </a>
-    </li>
-  
-
-      
     </ul>
   </div>
 </nav>
@@ -737,6 +718,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#diminutives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diminutivos
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#clitics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -842,33 +834,6 @@
   
 
     
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../spacy/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    spaCy
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
   </ul>
 </nav>
                   </div>
@@ -922,6 +887,17 @@
     <span class="md-ellipsis">
       
         Orden de los análisis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diminutives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diminutivos
       
     </span>
   </a>
@@ -1060,6 +1036,11 @@
 <td style="text-align: left;"><code>str</code></td>
 <td style="text-align: left;">De dónde viene el análisis: <code>"dictionary"</code> - la forma está en el diccionario, <code>"clitics"</code> - un verbo del diccionario con <a href="#clitics">clíticos</a>, <code>"rule"</code> - un <a href="#rules">análisis por regla</a>, <code>"guess"</code> - un <a href="#guess">análisis estimado</a> de una palabra desconocida</td>
 </tr>
+<tr>
+<td style="text-align: left;"><code>diminutive_of</code></td>
+<td style="text-align: left;"><code>str \| None</code></td>
+<td style="text-align: left;">La palabra de la que el lema es un <a href="#diminutives">diminutivo</a>: <code>casa</code> para <code>casitas</code>; <code>None</code> para las demás palabras</td>
+</tr>
 </tbody>
 </table>
 <h2 id="ud">Categorías y rasgos<a class="headerlink" href="#ud" title="Permanent link">&para;</a></h2>
@@ -1075,7 +1056,7 @@
 </ul>
 <p>Si la categoría de una palabra depende del contexto, la palabra tiene ambos análisis: <code>que</code> es <code>PRON</code> y <code>SCONJ</code>, <code>la</code> es <code>DET</code> y <code>PRON</code>, un participio es <code>VERB</code> y <code>ADJ</code>. Rasgos: género, número, persona, tiempo, modo, forma verbal, grado, negación (<code>Polarity=Neg</code> de <code>no</code>), definitud (<code>Definite</code>), el tipo de pronombre o de determinante (<code>PronType</code>), la posesión (<code>Poss</code>), la reflexividad (<code>Reflex</code>), el caso de los pronombres personales (<code>Case</code>) y si van tras una preposición (<code>PrepCase</code>), la cortesía (<code>Polite=Form</code> de <code>usted</code>), el tipo de numeral (<code>NumType</code>) y cómo se escribe (<code>NumForm</code>), y la clase de un signo de puntuación (<code>PunctType</code>, <code>PunctSide</code>).</p>
 <h2 id="order">Orden de los análisis<a class="headerlink" href="#order" title="Permanent link">&para;</a></h2>
-<p>Los análisis van del más probable al menos probable. <code>prob</code> es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; de los verbos de una forma, el que tienen más a menudo en todas sus formas tiene la parte mayor, aunque unos pocos casos de la forma digan otra cosa: <code>vengo</code> es ante todo <code>venir</code>, no <code>vengar</code>. Para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes; una forma de varios verbos que han visto en otras formas recibe en cambio partes según la frecuencia de los verbos y de los rasgos (<code>vengamos</code> es ante todo el subjuntivo de <code>venir</code>). Una palabra va antes que su grafía antigua con otras tildes: <code>á</code> es ante todo <code>a</code>, <code>tambien</code> es <code>también</code>. <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> ordena los mismos análisis por la oración.</p>
+<p>Los análisis van del más probable al menos probable. <code>prob</code> es la parte de un análisis entre los análisis de la palabra, según la frecuencia con que lo tienen los treebanks UD Spanish AnCora y GSD; de los verbos de una forma, el que AnCora tiene más a menudo como verbo en todas sus formas tiene la parte mayor donde la forma misma aparece poco en los treebanks: <code>vengo</code> es ante todo <code>venir</code>, no <code>vengar</code>, mientras que <code>sienta</code>, que tienen más a menudo como <code>sentar</code>, es ante todo <code>sentar</code>; la forma de un verbo de menos de una quinta parte de la frecuencia de los verbos de la forma no va primero junto a un verbo de más de tres quintas partes, aunque los treebanks la tengan así: <code>vengan</code> es ante todo <code>venir</code>, <code>sume</code>, <code>sumar</code>. Para una palabra que no han visto, las partes son iguales y el orden se estima por la terminación de la palabra y los rasgos más comunes; una forma de varios verbos que han visto en otras formas recibe en cambio partes según la frecuencia de los verbos y de los rasgos (<code>vengamos</code> es ante todo el subjuntivo de <code>venir</code>). Una palabra va antes que su grafía antigua con otras tildes: <code>á</code> es ante todo <code>a</code>, <code>tambien</code> es <code>también</code>. <a href="../analyzer/#analyze_sentence"><code>analyze_sentence</code></a> ordena los mismos análisis por la oración.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Código</label><label for="__tabbed_2_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1088,9 +1069,26 @@
 </div>
 </div>
 </div>
-<h2 id="clitics">Palabras con clíticos<a class="headerlink" href="#clitics" title="Permanent link">&para;</a></h2>
-<p>Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y <code>words</code> da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: <code>díjole</code> es <code>dijo</code> + <code>le</code>. <code>del</code> y <code>al</code> también tienen sus dos palabras, como las contracciones de <code>de</code> con un pronombre o un demostrativo en la escritura antigua: <code>desta</code> es <code>de</code> + <code>esta</code>. Una palabra del diccionario no se divide: <code>comete</code> es una forma de <code>cometer</code>, aunque unas pocas suelen ser verbos con clíticos: <code>verse</code> es ante todo <code>ver</code> + <code>se</code>, <code>cállate</code> es <code>calla</code> + <code>te</code>, y en una oración siempre son esos verbos.</p>
+<h2 id="diminutives">Diminutivos<a class="headerlink" href="#diminutives" title="Permanent link">&para;</a></h2>
+<p>Un diminutivo conserva su propio lema, como en los treebanks: <code>casitas</code> es una forma de <code>casita</code>. <code>diminutive_of</code> da la palabra de la que es diminutivo, tal como la da Wikcionario en la primera acepción de la palabra: <code>casita</code> es diminutivo de <code>casa</code>, <code>poquito</code> de <code>poco</code>, <code>ahorita</code> de <code>ahora</code>. Una palabra que es sobre todo una palabra propia, aunque Wikcionario también la tenga como diminutivo, no lo tiene: <code>señorita</code>, <code>granito</code>. Lo tienen unos dos mil sustantivos, adjetivos y adverbios del diccionario.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Código</label><label for="__tabbed_3_2">Resultado</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="p">[</span>
+    <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">diminutive_of</span>
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"casitas"</span><span class="p">,</span> <span class="s2">"poquito"</span><span class="p">,</span> <span class="s2">"ahorita"</span><span class="p">,</span> <span class="s2">"señorita"</span><span class="p">,</span> <span class="s2">"granito"</span><span class="p">)</span>
+<span class="p">]</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>['casa', 'poco', 'ahora', None, None]
+</code></pre></div>
+</div>
+</div>
+</div>
+<h2 id="clitics">Palabras con clíticos<a class="headerlink" href="#clitics" title="Permanent link">&para;</a></h2>
+<p>Un verbo con pronombres enclíticos se analiza como su verbo: el análisis describe el infinitivo, el gerundio o el imperativo, y <code>words</code> da las palabras del token, como las tiene Universal Dependencies. En la escritura antigua y literaria una forma personal también lleva enclíticos, si la tilde del token la marca: <code>díjole</code> es <code>dijo</code> + <code>le</code>, <code>quedéme</code> es <code>quedé</code> + <code>me</code> (el imperativo sería <code>quédeme</code>). Desde 2010 un token así sigue las reglas generales de acentuación, así que una forma aguda pierde su tilde: una palabra en minúsculas que no es palabra del diccionario ni otro verbo con clíticos y es una forma así con un enclítico es ante todo ese verbo, con las conjeturas de la palabra después (<code>quedose</code> es <code>quedó</code> + <code>se</code>, <code>fuime</code> es <code>fui</code> + <code>me</code>), y <a href="../analyzer/#is_known"><code>is_known</code></a> no la reconoce. El enclítico no es <code>te</code> ni <code>os</code>, ni <code>nos</code> tras la primera persona, que terminan más a menudo sustantivos: <code>anisete</code> y <code>macarenos</code> son sustantivos. Un token que también es un imperativo que llevaría tilde con el enclítico es ante todo una forma así también: <code>acerqueme</code> es <code>acerqué</code> + <code>me</code>, y luego el imperativo <code>acerque</code> + <code>me</code>, que la ortografía escribe <code>acérqueme</code>. <code>del</code> y <code>al</code> también tienen sus dos palabras, como las contracciones de <code>de</code> con un pronombre o un demostrativo en la escritura antigua: <code>desta</code> es <code>de</code> + <code>esta</code>. Una palabra del diccionario no se divide: <code>comete</code> es una forma de <code>cometer</code>, aunque unas pocas suelen ser verbos con clíticos: <code>verse</code> es ante todo <code>ver</code> + <code>se</code>, <code>cállate</code> es <code>calla</code> + <code>te</code>, y en una oración siempre son esos verbos.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Código</label><label for="__tabbed_4_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[(</span><span class="n">a</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">pos</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">words</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">source</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"dámelo"</span><span class="p">)]</span>
@@ -1104,7 +1102,7 @@
 </div>
 <h2 id="spelling">Ortografía<a class="headerlink" href="#spelling" title="Permanent link">&para;</a></h2>
 <p>Las mayúsculas no importan para buscar una palabra en el diccionario, aunque un token con mayúscula también puede ser un <a href="#rules">nombre</a>. Una palabra escrita como en el diccionario da los análisis de esa grafía: <code>publico</code> no es <code>público</code>. Una palabra que no está tal como se escribe puede ser un verbo con clíticos (<code>verte</code> es <code>ver</code> + <code>te</code>, no <code>verté</code>); si no lo es, se busca sin sus tildes y con la diéresis perdida, y <code>word</code> muestra la grafía del diccionario; para un verbo con clíticos <code>word</code> es el token tal como se escribe, en minúsculas.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Código</label><label for="__tabbed_4_2">Resultado</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Código</label><label for="__tabbed_5_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[</span><span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">word</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"CAMIÓN"</span><span class="p">,</span> <span class="s2">"camion"</span><span class="p">,</span> <span class="s2">"pinguino"</span><span class="p">]]</span>
@@ -1116,15 +1114,16 @@
 </div>
 </div>
 </div>
-<p>Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tildes, puede ser una grafía coloquial de una palabra del diccionario. Una palabra así recibe los análisis de esa palabra, y <code>word</code> es su grafía estándar. Las grafías son:</p>
+<p>Una palabra en minúsculas que el diccionario no tiene, ni siquiera sin sus tildes, puede ser una grafía coloquial o antigua de una palabra del diccionario. Una palabra así recibe los análisis de esa palabra, y <code>word</code> es su grafía estándar. Las grafías son:</p>
 <ul>
 <li>un participio sin su <code>d</code>: <code>trabajao</code> es <code>trabajado</code>, <code>sío</code> es <code>sido</code>; su tilde no es una tilde perdida, así que <code>perdío</code> es <code>perdido</code>, no <code>perdió</code>;</li>
 <li>una <code>-á</code>, <code>-é</code> o <code>-ú</code> final en lugar de <code>-ad</code>, <code>-ed</code> o <code>-ud</code>: <code>caridá</code> es <code>caridad</code>, <code>virtú</code> es <code>virtud</code>;</li>
-<li>una <code>f</code> o una <code>h</code> aspiradas: <code>juerza</code> es <code>fuerza</code>, <code>juevo</code> es <code>huevo</code>, <code>juyendo</code> es <code>huyendo</code>.</li>
+<li>una <code>f</code> o una <code>h</code> aspiradas: <code>juerza</code> es <code>fuerza</code>, <code>juevo</code> es <code>huevo</code>, <code>juyendo</code> es <code>huyendo</code>;</li>
+<li><code>es</code> en lugar de <code>ex</code> ante consonante, como en la escritura antigua: <code>estranjero</code> es <code>extranjero</code>, <code>esplicar</code> es <code>explicar</code>.</li>
 </ul>
 <p>Una palabra con mayúscula no es una grafía así: <code>Trabajao</code> y <code>Julita</code> son nombres, no <code>trabajado</code> y <code>fulita</code>.</p>
 <p>El diccionario tiene además grafías de palabras tal como suenan y formas abreviadas comunes: <code>na</code> y <code>naa</code> son <code>nada</code>, <code>pos</code> es <code>pues</code>, <code>to</code> es <code>todo</code>, <code>mu</code> es <code>muy</code>, <code>güeno</code> es <code>bueno</code>, <code>er</code> es <code>el</code>. Tienen los análisis de la palabra estándar con su lema y sus rasgos, y <code>word</code> es la grafía estándar; el contexto elige entre ellos y las otras palabras de la misma grafía (<code>mu</code> también es una interjección). Como palabras del diccionario, se encuentran con cualquier uso de mayúsculas: <code>Güeno</code> también es <code>bueno</code>. Los análisis de todas estas grafías tienen <code>source</code> igual a <code>"dictionary"</code>, mientras que <a href="../analyzer/#is_known"><code>is_known</code></a> solo reconoce las grafías del diccionario: <code>na</code> es conocida, <code>trabajao</code> no.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="5:2"><input checked="checked" id="__tabbed_5_1" name="__tabbed_5" type="radio" /><input id="__tabbed_5_2" name="__tabbed_5" type="radio" /><div class="tabbed-labels"><label for="__tabbed_5_1">Código</label><label for="__tabbed_5_2">Resultado</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Código</label><label for="__tabbed_6_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[</span>
@@ -1153,8 +1152,8 @@
 <li>una abreviatura con punto en minúsculas que el diccionario no tiene es un sustantivo con ella misma como lema (<code>fig.</code>), y lo mismo una letra minúscula (<code>b</code>).</li>
 </ul>
 <p>Una abreviatura con punto en minúsculas que el diccionario tiene sin el punto recibe los sustantivos y los símbolos de esa palabra, con <code>source</code> igual a <code>"dictionary"</code>: <code>kg.</code> es <code>kg</code>. Una unidad con su punto y un número en un solo token son dos palabras con estos análisis: <code>km.24</code> es <code>km</code> con las palabras <code>km.</code> y <code>24</code>, y solo cuentan sus sustantivos y símbolos (<code>m.36</code> no es un adjetivo). Una palabra del diccionario de otra categoría con un punto no recibe análisis: <code>come.</code> es un verbo con el punto de una oración.</p>
-<p>Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una inicial (<code>D.</code>) y una palabra sin tildes que el diccionario solo tiene con ellas (<code>Angel</code>, <code>Perez</code>) suelen ser nombres, así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (<code>Estados</code>, <code>Comisión</code>), así que su nombre suele ir después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (<code>ETA</code>, <code>PP</code>), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (<code>CAMIONES</code>, <code>EL</code>), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como <code>VI</code>, <code>XI</code> o <code>X</code>, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (<code>Mandela</code> es ante todo <code>PROPN</code>), mientras que un infinitivo, un gerundio, un imperativo con tilde y una forma personal suelen ser verbos (<code>Hacerlo</code>, <code>Déjame</code>, <code>Levantóse</code>). Una palabra en minúsculas rara vez es un nombre: <code>miró</code> es ante todo <code>mirar</code>, <code>Miró</code> es un nombre. Un análisis de una regla no tiene otras formas: <code>forms()</code> da el propio análisis. <code>is_known</code> solo indica las palabras del diccionario.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Código</label><label for="__tabbed_6_2">Resultado</label></div>
+<p>Una palabra con mayúscula que el diccionario conoce también puede ser un nombre, con su parte. Una inicial (<code>D.</code>) y una palabra sin tildes que el diccionario solo tiene con ellas (<code>Angel</code>, <code>Perez</code>) suelen ser nombres, así que su nombre va primero, mientras que otra palabra con mayúscula es un nombre con menos frecuencia (<code>Estados</code>, <code>Comisión</code>), así que su nombre suele ir después de los análisis del diccionario. De las palabras en mayúsculas, una palabra de hasta cuatro letras suele ser una sigla (<code>ETA</code>, <code>PP</code>), así que su nombre suele ir primero, mientras que una palabra más larga y una palabra funcional - una preposición, un determinante, un pronombre, una conjunción, un auxiliar - suelen ser palabras de un titular (<code>CAMIONES</code>, <code>EL</code>), así que su nombre suele ir después de los análisis del diccionario. Un número romano que el diccionario conoce como palabra, como <code>VI</code>, <code>XI</code> o <code>X</code>, es ante todo un numeral. Un token con mayúscula que se divide en un verbo con clíticos también puede ser un nombre: un imperativo sin tilde suele serlo (<code>Mandela</code> es ante todo <code>PROPN</code>), y también una forma personal sin tilde (<code>Vila</code>) salvo una con <code>se</code>, <code>me</code> o <code>le</code> (<code>Vase</code>, <code>Quedose</code>), mientras que un infinitivo, un gerundio, un imperativo con tilde y una forma personal con tilde suelen ser verbos (<code>Hacerlo</code>, <code>Déjame</code>, <code>Levantóse</code>). Una palabra en minúsculas rara vez es un nombre: <code>miró</code> es ante todo <code>mirar</code>, <code>Miró</code> es un nombre. Un análisis de una regla no tiene otras formas: <code>forms()</code> da el propio análisis. <code>is_known</code> solo indica las palabras del diccionario.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Código</label><label for="__tabbed_7_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[(</span><span class="n">a</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">pos</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">feats</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">source</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"10.000"</span><span class="p">)]</span>
@@ -1177,7 +1176,7 @@
 <li>cualquier otra palabra se analiza por las palabras del diccionario con la misma terminación de hasta cinco letras: sus categorías, rasgos y flexión, según cuántas palabras los tienen y con qué frecuencia AnCora train tiene sus rasgos; una palabra en <code>-ísimo</code> es un adjetivo de <code>Degree=Abs</code>: <code>esbeltísima</code> es una forma de <code>esbeltísimo</code>.</li>
 </ul>
 <p>Una palabra estimada tiene sus formas, también estimadas: <code>forms()</code> e <code>inflect()</code> funcionan como con una palabra del diccionario. <code>is_known</code> sigue siendo falso para ella.</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Código</label><label for="__tabbed_7_2">Resultado</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Código</label><label for="__tabbed_8_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><span class="p">[(</span><span class="n">a</span><span class="o">.</span><span class="n">lemma</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">pos</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">prob</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">morph</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="s2">"zumbeábamos"</span><span class="p">)]</span>
