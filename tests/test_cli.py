@@ -67,6 +67,19 @@ def test_tokens_and_conllu_input():
     assert lines[2].split("\t")[:4] == ["1", "Di", "decir", "VERB"]
     columns = lines[3].split("\t")
     assert (columns[:4], columns[6:8]) == (["2", "me", "yo", "PRON"], ["1", "iobj"])
+    # A sentence with an empty node keeps its words, and the next one does not
+    conllu = (
+        "1\tVoy\t_\t_\t_\t_\t_\t_\t_\t_\n1.1\tvoy\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+        "1\tDevuélvenos\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+    )
+    lines = run("-i", "conllu", "-f", "conllu", text=conllu).stdout.splitlines()
+    assert [line.split("\t")[1] for line in lines if "\t" in line] == [
+        "Voy",
+        "voy",
+        "Devuélvenos",
+        "Devuelve",
+        "nos",
+    ]
 
 
 def test_version_and_help():

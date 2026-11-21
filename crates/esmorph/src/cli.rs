@@ -499,6 +499,40 @@ fn add_words(dictionary: Dictionary, paths: &[PathBuf]) -> Result<Dictionary, St
     })
 }
 
+/// The ends of the runs of sentences of CoNLL-U, each run either of sentences with heads, enhanced
+/// dependencies or empty nodes or of sentences without them, and the number of lines of each
+fn sentence_runs(text: &str) -> Vec<(usize, usize)> {
+    let fixed = |sentence: &str| {
+        sentence.lines().any(|line| {
+            let cols: Vec<&str> = line.split('\t').collect();
+            !line.starts_with('#')
+                && cols.len() == 10
+                && (cols[0].contains('.') || cols[6] != "_" || cols[8] != "_")
+        })
+    };
+    let mut runs: Vec<(usize, usize, bool)> = Vec::new();
+    let (mut start, mut lines) = (0, 0);
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        at += line.len();
+        lines += 1;
+        if line.trim().is_empty() || at == text.len() {
+            let kind = fixed(&text[start..at]);
+            match runs.last_mut() {
+                Some(run) if run.2 == kind => {
+                    run.0 = at;
+                    run.1 += lines;
+                }
+                _ => runs.push((at, lines, kind)),
+            }
+            (start, lines) = (at, 0);
+        }
+    }
+    runs.into_iter()
+        .map(|(end, lines, _)| (end, lines))
+        .collect()
+}
+
 /// An error of input and output in plain words for the frequent cases
 fn describe(err: &io::Error) -> String {
     match err.kind() {
@@ -946,7 +980,15 @@ impl Writer<'_> {
                 let ready = std::mem::replace(&mut self.lines, rest);
                 let first = std::mem::replace(&mut self.first_line, self.next_line);
                 self.ready = 0;
-                self.write_conllu(&ready, first)?;
+                // Sentences with heads, enhanced dependencies or empty nodes keep their words, and
+                // a document of such sentences keeps all its words: such sentences and the others
+                // go apart, so a sentence and not its neighbours decides
+                let (mut start, mut first) = (0, first);
+                for (end, lines) in sentence_runs(&ready) {
+                    self.write_conllu(&ready[start..end], first)?;
+                    first += lines;
+                    start = end;
+                }
             }
         }
         Ok(())
