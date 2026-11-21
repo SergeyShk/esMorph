@@ -963,11 +963,15 @@ def test_analyze_sentence(morph):
         # A finite form with an enclitic opens a sentence, a name stays elsewhere
         ("Volviose la señora .", 0, ("volver", "VERB")),
         ("La casa de Vila .", 3, ("Vila", "PROPN")),
-        # A verb with clitics opening a sentence is no name, unless a finite verb follows; inside a
-        # sentence a word without the accent its clitics need is a name
+        # A verb with clitics opening a sentence is no name, unless a finite verb follows, also past
+        # `no` and clitics; inside a sentence a word without the accent its clitics need is a name,
+        # and an accent on a capital letter is one
         ("Dime , ¿ no te parece ?", 0, ("decir", "VERB")),
         ("Mandela dijo algo .", 0, ("Mandela", "PROPN")),
+        ("Lucila se había puesto el vestido de seda .", 0, ("Lucila", "PROPN")),
+        ("Ponte no quiso ser menos .", 0, ("Ponte", "PROPN")),
         ("Trabajó en Mirandola , Módena .", 2, ("Mirandola", "PROPN")),
+        ("Le dijo : Échale la culpa a él .", 3, ("echar", "VERB")),
         # A reflexive clitic that agrees with the form takes ir before `de`, a dative does not;
         # `al` before an infinitive and the adverb `fuera` have no goal
         ("Se fue de casa .", 1, ("ir", "VERB")),
@@ -977,8 +981,10 @@ def test_analyze_sentence(morph):
         # A name after `no` and a noun after `tú` that follows a verb stay
         ("Ganó Madrid y no Lima .", 4, ("Lima", "PROPN")),
         ("¿ Has visto tú cosa igual ?", 4, ("cosa", "NOUN")),
-        # The frequent verb may be an auxiliary, and no form of `tú` follows `se`
+        # The frequent verb before an infinitive may be an auxiliary, and no form of `tú` follows
+        # `se`
         ("No pudimos hablar más .", 1, ("poder", "AUX")),
+        ("Quise olvidarla y no pude .", 4, ("poder", "VERB")),
         ("Ella se viste de negro .", 2, ("vestir", "VERB")),
         # No clitic goes before a word whose finite forms are imperatives
         ("¡ Viva la libertá !", 2, ("el", "DET")),

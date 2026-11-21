@@ -122,7 +122,7 @@ impl Dictionary {
                 .or_else(|| self.opening_word(words, sentence, at, start))
                 .or_else(|| self.question_verb(words, sentence, at))
                 .or_else(|| self.imperative_of_usted(&lower, sentence, at))
-                .or_else(|| self.opening_clitic(words, sentence, at, start))
+                .or_else(|| self.opening_clitic(words, &lower, sentence, at, start))
                 .or_else(|| self.name_without_accent(words, sentence, at, start));
             if let Some(index) = chosen {
                 promote(&mut sentence[at], index);
@@ -132,9 +132,14 @@ impl Dictionary {
                 && PROCLITICS.contains(&lower[at - 1].as_str())
                 && self.top_pos(sentence, at - 1) == "PRON";
             let after_se = at > 0 && lower[at - 1] == "se";
-            if let Some(index) =
-                self.frequent_lemma(&sentence[at], &shares[at], after_clitic, after_se)
-            {
+            let before_infinitive = self.top_verb_form(sentence, at + 1, "Inf");
+            if let Some(index) = self.frequent_lemma(
+                &sentence[at],
+                &shares[at],
+                after_clitic,
+                after_se,
+                before_infinitive,
+            ) {
                 promote(&mut sentence[at], index);
             }
         }
@@ -482,11 +487,13 @@ impl Dictionary {
     }
 
     /// A capitalized verb with clitics opening a sentence that a rule reads as a name is the verb
-    /// when the dictionary has no such word and no finite verb follows: `Dime, ¿no te parece?`,
-    /// `Déjame, no me atormentes`, not `Mandela dijo`
+    /// when the dictionary has no such word and no finite verb follows, past the negation and
+    /// clitics: `Dime, ¿no te parece?`, `Déjame, no me atormentes`, not `Mandela dijo`, `Lucila se
+    /// había puesto`
     fn opening_clitic(
         &self,
         words: &[&str],
+        lower: &[String],
         sentence: &[Vec<Analysis>],
         at: usize,
         start: bool,
@@ -498,6 +505,25 @@ impl Dictionary {
                 list.first()
                     .is_some_and(|analysis| self.pos(analysis) == "PUNCT")
             });
+        // A finite verb past the negation and clitics is the verb of a name: `Lucila se había`
+        let verb_after = (at + 1..sentence.len())
+            .find(|&next| {
+                !matches!(
+                    lower[next].as_str(),
+                    "no" | "me"
+                        | "te"
+                        | "se"
+                        | "nos"
+                        | "os"
+                        | "lo"
+                        | "la"
+                        | "le"
+                        | "los"
+                        | "las"
+                        | "les"
+                )
+            })
+            .is_some_and(|next| self.top_verb_form(sentence, next, "Fin"));
         if !opening
             || top.source != Source::Rule
             || self.pos(top) != "PROPN"
@@ -505,7 +531,7 @@ impl Dictionary {
             || list
                 .iter()
                 .any(|analysis| analysis.source == Source::Dictionary)
-            || self.top_verb_form(sentence, at + 1, "Fin")
+            || verb_after
         {
             return None;
         }
@@ -533,7 +559,9 @@ impl Dictionary {
         if !inside
             || top.source != Source::Clitics
             || !word.chars().next().is_some_and(char::is_uppercase)
-            || word.chars().any(|c| clitics::without_acute(c) != c)
+            || (word.chars())
+                .flat_map(char::to_lowercase)
+                .any(|c| clitics::without_acute(c) != c)
             || (top.words.first()).is_none_or(|host| clitics::stressed_last(host))
         {
             return None;
@@ -596,6 +624,7 @@ impl Dictionary {
         shares: &[(String, f64)],
         after_clitic: bool,
         after_se: bool,
+        before_infinitive: bool,
     ) -> Option<usize> {
         let top = list.first()?;
         let share = |lemma: &str| {
@@ -614,11 +643,12 @@ impl Dictionary {
                 .and_then(|tag| tag.feats().find(|&(name, _)| name == "VerbForm"))
                 .map(|(_, value)| value)
         };
-        // The frequent verb may be an auxiliary (`pudimos`), and no form of `tú` follows `se`:
-        // `se viste` is `vestir`, not `ver`
+        // The frequent verb before an infinitive may be an auxiliary (`pudimos hablar`), and no
+        // form of `tú` follows `se`: `se viste` is `vestir`, not `ver`
         list.iter().position(|analysis| {
             analysis.lemma != top.lemma
-                && matches!(self.pos(analysis), "VERB" | "AUX")
+                && (self.pos(analysis) == "VERB"
+                    || (before_infinitive && self.pos(analysis) == "AUX"))
                 && (!after_clitic || form(analysis) == form(top))
                 && !(after_se && self.has(analysis, "Person", "2"))
                 && share(&analysis.lemma) > FREQUENT
