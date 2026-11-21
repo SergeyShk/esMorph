@@ -26,7 +26,7 @@
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../img/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
@@ -305,6 +305,25 @@
     
   
   Word analysis
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../models/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Models
 
       </a>
     </li>
@@ -826,6 +845,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../inflection/" class="md-nav__link">
         
   
@@ -1110,7 +1156,7 @@
 <p class="metric-meta"><code>analyze</code> · <code>list[Analysis]</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
 </code></pre></div>
-<p>Analyses of the word form, the most probable first; the probabilities sum to 1. Case does not matter for finding the word in the dictionary, though a token with a capital letter may also be a name, and a word absent as written is looked for without its accents and with a lost diaeresis (<a href="../analysis/#spelling">spelling</a>). A verb with enclitic pronouns is analyzed as its verb (<a href="../analysis/#clitics">clitics</a>), a token that the dictionary does not have - a sign, a number, a name - <a href="../analysis/#rules">by rules</a>, and an unknown lowercase word is <a href="../analysis/#guess">guessed</a>. A token that nothing analyzes - with a space or a control character, a lowercase word without a sample such as <code>qzxw</code> - has no analyses.</p>
+<p>Analyses of the word form, the most probable first; the probabilities sum to 1. Case does not matter for finding the word in the dictionary, though a token with a capital letter may also be a name, and a word absent as written is looked for without its accents and with a lost diaeresis (<a href="../analysis/#spelling">spelling</a>). A verb with enclitic pronouns is analyzed as its verb (<a href="../analysis/#clitics">clitics</a>), a token that the dictionary does not have - a sign, a number, a name - <a href="../analysis/#rules">by rules</a>, and an unknown lowercase word is <a href="../analysis/#guess">guessed</a>. A token that nothing analyzes - with a space or a control character, a lowercase word without a sample such as <code>qzxw</code> - has no analyses. The model of unknown words is read on the first guessed word, in about a millisecond and a half.</p>
 <table>
 <thead>
 <tr>
@@ -1206,7 +1252,7 @@
 <li>not when the model reads the adverb <code>fuera</code> after a verb, a preposition or an adverb (<code>echó fuera a los intrusos</code>);</li>
 </ul>
 </li>
-<li>a word after a clitic, the negation or <code>tú</code> is a verb (<code>que te vayas</code>, <code>no vayas</code>), though not after a preposition (<code>punto de no retorno</code>), nor a capitalized name after <code>no</code> (<code>y no Lima</code>), nor after <code>tú</code> that follows a verb (<code>¿has visto tú cosa igual?</code>); after a clitic so is an adverb, an adjective or a participle (<code>se acerca</code>, <code>te quedas</code>, <code>me visto</code>), and after <code>le</code>, <code>les</code>, <code>la</code> and <code>lo</code> a plural noun that may be a verb (<code>le faltas</code>);</li>
+<li>a word after a clitic, the negation, <code>tú</code> or <code>yo</code> is a verb (<code>que te vayas</code>, <code>no vayas</code>, <code>yo bebo</code>), though not after a preposition (<code>punto de no retorno</code>), nor a capitalized name after <code>no</code> (<code>y no Lima</code>), nor after <code>tú</code> or <code>yo</code> that follows a verb (<code>¿has visto tú cosa igual?</code>); after a clitic so is an adverb, an adjective or a participle (<code>se acerca</code>, <code>te quedas</code>, <code>me visto</code>), and after <code>le</code>, <code>les</code>, <code>la</code> and <code>lo</code> a plural noun that may be a verb (<code>le faltas</code>);</li>
 <li>a capitalized imperative opening a sentence is no name (<code>Indique si desea</code>), unless the model ranks a noun of the dictionary above it (<code>Sangre de Abel</code>), neither is a verb of <code>tú</code> after <code>¿</code> or <code>¡</code> before a lowercase word (<code>¿Quieres más?</code>, <code>¡Eres un ingrato!</code>), nor a verb with clitics opening a sentence that the dictionary has not as a word, unless a finite verb follows, also past <code>no</code> and clitics (<code>Dime, ¿no te parece?</code>, but <code>Mandela dijo</code>, <code>Lucila se había puesto</code>); a capitalized word inside a sentence that the clitics would give an accent it has not is a name (<code>en Mirandola</code>); a verb with clitics before <code>usted</code> is the imperative (<code>perdoneme usted</code>);</li>
 <li>a word of the dictionary that is mostly a verb with clitics is one (<code>¡Cállate!</code>);</li>
 <li>a rare verb gives way to a frequent one with the same form, before an infinitive also an auxiliary (<code>aunque vengan</code> is <code>venir</code>, not <code>vengar</code>, <code>no pudimos hablar</code> is <code>poder</code>), unless the model chose a participle (<code>había entrevisto</code>), and no form of <code>tú</code> follows <code>se</code> (<code>se viste</code> is <code>vestir</code>).</li>
@@ -1298,7 +1344,7 @@
 <p class="metric-meta"><code>annotate</code> · <code>anyseg.Document</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>Fills the columns <code>lemma</code>, <code>upos</code> and <code>feats</code> of the words of a document of the <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> segmenter with the most probable analysis of every word in the context of its sentence, as <a href="#analyze_sentence"><code>analyze_sentence</code></a> orders the analyses of its tokens, and returns the document; with <code>context=False</code>, as <code>analyze</code> orders them, about eight times faster. The earlier values of these columns are replaced. A token that the segmenter leaves as one word and whose analysis has several gets these words: <code>pónganselo</code> becomes the multiword token <code>pongan</code> + <code>se</code> + <code>lo</code>, the imperative of <code>poner</code> and two pronouns. The method then returns a new document with these words, while the given one is filled too, such a token with the analysis of the whole. A document whose words cannot change (it has heads, enhanced dependencies or empty nodes) keeps its words, and so does a token whose word has XPOS or MISC other than the spaces after a token, which other words would lose, as in a document read from CoNLL-U; such a token gets the analysis of the whole. A number with a unit stays one word, as in the treebanks: <code>48km</code>. The words of a multiword token are analyzed by the token: <code>dime</code> split into <code>di</code> + <code>me</code> is the imperative of <code>decir</code> with the pronoun <code>me</code>, and clitics after a verb are pronouns. A word without analyses gets its lower case as the lemma and the part of speech <code>X</code>. The method releases the GIL. esMorph does not depend on anySeg: the document is an <code>anyseg.Document</code> or an object with the same <code>column("form")</code>, <code>multiword_tokens</code> (a token has <code>text</code> and <code>words</code>, a word has <code>index</code>), <code>sentences</code> (a sentence has <code>words</code>) and <code>set_columns</code>; an object without <code>sentences</code> is one sentence, and with <code>context=False</code> they are not read; an object without <code>with_words</code> keeps its words.</p>
+<p>Fills the columns <code>lemma</code>, <code>upos</code> and <code>feats</code> of the words of a document of the <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> segmenter with the most probable analysis of every word in the context of its sentence, as <a href="#analyze_sentence"><code>analyze_sentence</code></a> orders the analyses of its tokens, and returns the document; with <code>context=False</code>, as <code>analyze</code> orders them, about seven times faster. The earlier values of these columns are replaced. A token that the segmenter leaves as one word and whose analysis has several gets these words: <code>pónganselo</code> becomes the multiword token <code>pongan</code> + <code>se</code> + <code>lo</code>, the imperative of <code>poner</code> and two pronouns. The method then returns a new document with these words, while the given one is filled too, such a token with the analysis of the whole. A document whose words cannot change (it has heads, enhanced dependencies or empty nodes) keeps its words, and so does a token whose word has XPOS or MISC other than the spaces after a token, which other words would lose, as in a document read from CoNLL-U; such a token gets the analysis of the whole. A number with a unit stays one word, as in the treebanks: <code>48km</code>. The words of a multiword token are analyzed by the token: <code>dime</code> split into <code>di</code> + <code>me</code> is the imperative of <code>decir</code> with the pronoun <code>me</code>, and clitics after a verb are pronouns. A word without analyses gets its lower case as the lemma and the part of speech <code>X</code>. The method releases the GIL. esMorph does not depend on anySeg: the document is an <code>anyseg.Document</code> or an object with the same <code>column("form")</code>, <code>multiword_tokens</code> (a token has <code>text</code> and <code>words</code>, a word has <code>index</code>), <code>sentences</code> (a sentence has <code>words</code>) and <code>set_columns</code>; an object without <code>sentences</code> is one sentence, and with <code>context=False</code> they are not read; an object without <code>with_words</code> keeps its words.</p>
 <table>
 <thead>
 <tr>
@@ -1392,7 +1438,7 @@
 </div>
 <h2 id="dictionary">Dictionary<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
 <p>The dictionary of the package is built from the English <a href="https://en.wiktionary.org">Wiktionary</a> of October 2026 with the words and forms that only the Spanish <a href="https://es.wiktionary.org">Wiktionary</a> of November 2026 has: 717 thousand word forms of 136 thousand lexemes. The Spanish edition adds nouns, adjectives, adverbs and interjections and new forms of the words of the English one, but no names and no new verbs; its word gives way to a colloquial or an older spelling of a word of the English edition (<code>juera</code> is <code>fuera</code>, <code>espectativa</code> is <code>expectativa</code>) and to a verb with clitics (<code>abrázala</code> is <code>abraza</code> + <code>la</code>), and with a capital letter it is mostly a name (<code>Navas</code>). Symbols of units (<code>km</code>, <code>kg</code>) come from a table of their own, and determiners, pronouns, prepositions, conjunctions and numerals in words from a table after the treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, whose conventions the lemmas and features follow (<a href="../analysis/#ud">Word analysis</a>). The probabilities of analyses come from the training parts of UD Spanish AnCora and <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; word forms they do not have get their order by their ending and the most common features. The dictionary is distributed under the <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> license.</p>
-<p>The property <code>dictionary_info</code> describes the dictionary of the analyzer: the source and its main snapshot with its SHA-256, the snapshots of all its sources with theirs (<code>snapshots</code>), the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, for a dictionary with a context model the release and the treebanks of its training (<code>context</code>), the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is <code>esmorph.DictionaryInfo</code>, and of <code>context</code> - <code>esmorph.ContextInfo</code>.</p>
+<p>The property <code>dictionary_info</code> describes the dictionary of the analyzer: the source and its main snapshot with its SHA-256, the snapshots of all its sources with theirs (<code>snapshots</code>), the license, the release of Universal Dependencies and the treebanks of the probabilities with their licenses, for a dictionary with a context model the release and the treebanks of its training (<code>context</code>), for a dictionary with a model of <a href="../analysis/#guess">unknown words</a> the snapshots and the number of the dictionary words it learned from (<code>paradigms</code>), the number of word forms and the checksum of the file. Every access returns a new dict; its type for type checkers is <code>esmorph.DictionaryInfo</code>, of <code>context</code> - <code>esmorph.ContextInfo</code>, and of <code>paradigms</code> - <code>esmorph.ParadigmsInfo</code>.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Code</label><label for="__tabbed_8_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">

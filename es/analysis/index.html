@@ -16,7 +16,7 @@
         <link rel="prev" href="../analyzer/">
       
       
-        <link rel="next" href="../inflection/">
+        <link rel="next" href="../models/">
       
       
         
@@ -26,7 +26,7 @@
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../img/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
@@ -305,6 +305,25 @@
     
   
   Análisis de palabras
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../models/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Modelos
 
       </a>
     </li>
@@ -787,6 +806,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modelos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../inflection/" class="md-nav__link">
         
   
@@ -1004,7 +1050,7 @@
 <tr>
 <td style="text-align: left;"><code>word</code></td>
 <td style="text-align: left;"><code>str</code></td>
-<td style="text-align: left;">La forma de palabra tal como la escribe el diccionario, con sus tildes; para una <a href="#spelling">grafía coloquial</a>, su grafía estándar (<code>trabajado</code> de <code>trabajao</code>); un verbo con <a href="#clitics">clíticos</a> tal como está escrito, en minúsculas; un token de las <a href="#rules">reglas</a> tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras y con <code>-</code> en lugar de los guiones U+2010 y U+2011</td>
+<td style="text-align: left;">La forma de palabra tal como la escribe el diccionario, con sus tildes; para una <a href="#spelling">grafía coloquial</a>, su grafía estándar (<code>trabajado</code> de <code>trabajao</code>); un verbo con <a href="#clitics">clíticos</a> tal como está escrito, en minúsculas; un token de las <a href="#rules">reglas</a> tal como está escrito, sin caracteres invisibles, con las marcas combinantes unidas a sus letras, con <code>-</code> en lugar de los guiones U+2010 y U+2011 y con las letras de una ligadura (<code>ﬁ</code> es <code>fi</code>)</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>lemma</code></td>
@@ -1070,7 +1116,7 @@
 </div>
 </div>
 <h2 id="diminutives">Diminutivos<a class="headerlink" href="#diminutives" title="Permanent link">&para;</a></h2>
-<p>Un diminutivo conserva su propio lema, como en los treebanks: <code>casitas</code> es una forma de <code>casita</code>. <code>diminutive_of</code> da la palabra de la que es diminutivo, tal como la da Wikcionario en la primera acepción de la palabra: <code>casita</code> es diminutivo de <code>casa</code>, <code>poquito</code> de <code>poco</code>, <code>ahorita</code> de <code>ahora</code>. Una palabra que es sobre todo una palabra propia, aunque Wikcionario también la tenga como diminutivo, no lo tiene: <code>señorita</code>, <code>granito</code>. Lo tienen unos dos mil sustantivos, adjetivos y adverbios del diccionario.</p>
+<p>Un diminutivo conserva su propio lema, como en los treebanks: <code>casitas</code> es una forma de <code>casita</code>. <code>diminutive_of</code> da la palabra de la que es diminutivo, tal como la da Wikcionario en la primera acepción de la palabra: <code>casita</code> es diminutivo de <code>casa</code>, <code>poquito</code> de <code>poco</code>, <code>ahorita</code> de <code>ahora</code>. Una palabra cuya primera acepción en Wikcionario es propia no lo tiene, aunque Wikcionario también la tenga como diminutivo: <code>señorita</code>, <code>granito</code>; una palabra cuya primera acepción es la de un diminutivo lo conserva, aunque los textos la usen sobre todo como palabra propia: <code>patilla</code> es diminutivo de <code>pata</code>. Lo tienen unos dos mil sustantivos, adjetivos y adverbios del diccionario.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Código</label><label for="__tabbed_3_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1173,7 +1219,7 @@
 <li>una palabra con guion se analiza por su última parte de una clase abierta o un numeral: <code>palestino-israelíes</code> es una forma de <code>palestino-israelí</code>;</li>
 <li>una palabra con un prefijo conocido se analiza por la palabra del diccionario sin él, de cuatro letras al menos tras un prefijo de tres: <code>supergallos</code> es una forma de <code>supergallo</code>, <code>sobreandan</code> de <code>sobreandar</code>;</li>
 <li>un verbo con clíticos se analiza por su gerundio estimado, o por su infinitivo estimado ante <code>se</code> o un clítico de tercera persona: <code>autogenerarse</code> es <code>autogenerar</code> + <code>se</code>;</li>
-<li>cualquier otra palabra se analiza por las palabras del diccionario con la misma terminación de hasta cinco letras: sus categorías, rasgos y flexión, según cuántas palabras los tienen y con qué frecuencia AnCora train tiene sus rasgos; una palabra en <code>-ísimo</code> es un adjetivo de <code>Degree=Abs</code>: <code>esbeltísima</code> es una forma de <code>esbeltísimo</code>.</li>
+<li>cualquier otra palabra se analiza por las formas y la flexión de las palabras del diccionario con las mismas terminaciones de hasta cinco letras, entre las que elige un modelo que lee las letras de la palabra: aprendió de las palabras del diccionario cómo termina una palabra de cada categoría y flexión, y prefiere los rasgos que los treebanks tienen con más frecuencia; una palabra en <code>-ísimo</code> es un adjetivo de <code>Degree=Abs</code>: <code>esbeltísima</code> es una forma de <code>esbeltísimo</code>.</li>
 </ul>
 <p>Una palabra estimada tiene sus formas, también estimadas: <code>forms()</code> e <code>inflect()</code> funcionan como con una palabra del diccionario. <code>is_known</code> sigue siendo falso para ella.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Código</label><label for="__tabbed_8_2">Resultado</label></div>
@@ -1184,7 +1230,7 @@
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code>[('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
+<div class="highlight"><pre><span></span><code>[('zumbear', 'VERB', 1.0)]
 'zumbeo'
 </code></pre></div>
 </div>

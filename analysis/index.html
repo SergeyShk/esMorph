@@ -16,7 +16,7 @@
         <link rel="prev" href="../analyzer/">
       
       
-        <link rel="next" href="../inflection/">
+        <link rel="next" href="../models/">
       
       
         
@@ -26,7 +26,7 @@
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../img/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
@@ -305,6 +305,25 @@
     
   
   Word analysis
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../models/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Models
 
       </a>
     </li>
@@ -787,6 +806,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../inflection/" class="md-nav__link">
         
   
@@ -1004,7 +1050,7 @@
 <tr>
 <td style="text-align: left;"><code>word</code></td>
 <td style="text-align: left;"><code>str</code></td>
-<td style="text-align: left;">The word form as the dictionary spells it, with its accents; for a <a href="#spelling">colloquial spelling</a> its standard spelling (<code>trabajado</code> of <code>trabajao</code>); a verb with <a href="#clitics">clitics</a> as written, in lower case; a token of the <a href="#rules">rules</a> as written, without invisible characters, with combining marks joined to their letters and with <code>-</code> for the hyphens U+2010 and U+2011</td>
+<td style="text-align: left;">The word form as the dictionary spells it, with its accents; for a <a href="#spelling">colloquial spelling</a> its standard spelling (<code>trabajado</code> of <code>trabajao</code>); a verb with <a href="#clitics">clitics</a> as written, in lower case; a token of the <a href="#rules">rules</a> as written, without invisible characters, with combining marks joined to their letters, with <code>-</code> for the hyphens U+2010 and U+2011 and with the letters of a ligature (<code>ﬁ</code> is <code>fi</code>)</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>lemma</code></td>
@@ -1070,7 +1116,7 @@
 </div>
 </div>
 <h2 id="diminutives">Diminutives<a class="headerlink" href="#diminutives" title="Permanent link">&para;</a></h2>
-<p>A diminutive keeps its own lemma, as in the treebanks: <code>casitas</code> is a form of <code>casita</code>. <code>diminutive_of</code> gives the word it is a diminutive of, as Wiktionary gives it in the first sense of the word: <code>casita</code> is a diminutive of <code>casa</code>, <code>poquito</code> of <code>poco</code>, <code>ahorita</code> of <code>ahora</code>. A word that is mostly a word of its own, though Wiktionary also has it as a diminutive, has none: <code>señorita</code>, <code>granito</code>. About two thousand nouns, adjectives and adverbs of the dictionary have it.</p>
+<p>A diminutive keeps its own lemma, as in the treebanks: <code>casitas</code> is a form of <code>casita</code>. <code>diminutive_of</code> gives the word it is a diminutive of, as Wiktionary gives it in the first sense of the word: <code>casita</code> is a diminutive of <code>casa</code>, <code>poquito</code> of <code>poco</code>, <code>ahorita</code> of <code>ahora</code>. A word whose first sense in Wiktionary is its own has none, though Wiktionary also has it as a diminutive: <code>señorita</code>, <code>granito</code>; a word whose first sense is a diminutive keeps it, even if texts mostly use it as a word of its own: <code>patilla</code> is a diminutive of <code>pata</code>. About two thousand nouns, adjectives and adverbs of the dictionary have it.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Code</label><label for="__tabbed_3_2">Result</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1173,7 +1219,7 @@
 <li>a word with a hyphen is analyzed by its last part of an open class or a numeral: <code>palestino-israelíes</code> is a form of <code>palestino-israelí</code>;</li>
 <li>a word with a known prefix is analyzed by the dictionary word without it, of four letters at least after a prefix of three: <code>supergallos</code> is a form of <code>supergallo</code>, <code>sobreandan</code> of <code>sobreandar</code>;</li>
 <li>a verb with clitics is analyzed by its guessed gerund, or by its guessed infinitive before <code>se</code> or a clitic of the third person: <code>autogenerarse</code> is <code>autogenerar</code> + <code>se</code>;</li>
-<li>any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often AnCora train has their features; a word in <code>-ísimo</code> is an adjective of <code>Degree=Abs</code>: <code>esbeltísima</code> is a form of <code>esbeltísimo</code>.</li>
+<li>any other word is analyzed by the forms and inflection of the dictionary words with the same endings of up to five letters, which a model that reads the letters of the word chooses among: it learned from the words of the dictionary how a word of every part of speech and inflection ends, and prefers the features that the treebanks have more often; a word in <code>-ísimo</code> is an adjective of <code>Degree=Abs</code>: <code>esbeltísima</code> is a form of <code>esbeltísimo</code>.</li>
 </ul>
 <p>A guessed word has its forms, guessed too: <code>forms()</code> and <code>inflect()</code> work as for a word of the dictionary. <code>is_known</code> stays false for it.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Code</label><label for="__tabbed_8_2">Result</label></div>
@@ -1184,7 +1230,7 @@
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code>[('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
+<div class="highlight"><pre><span></span><code>[('zumbear', 'VERB', 1.0)]
 'zumbeo'
 </code></pre></div>
 </div>

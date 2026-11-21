@@ -26,7 +26,7 @@
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../img/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
@@ -305,6 +305,25 @@
     
   
   Análisis de palabras
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../models/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Modelos
 
       </a>
     </li>
@@ -826,6 +845,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modelos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../inflection/" class="md-nav__link">
         
   
@@ -1110,7 +1156,7 @@
 <p class="metric-meta"><code>analyze</code> · <code>list[Analysis]</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">analyze</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>
 </code></pre></div>
-<p>Los análisis de la forma de palabra, primero el más probable; las probabilidades suman 1. Las mayúsculas no importan para buscar la palabra en el diccionario, aunque un token con mayúscula también puede ser un nombre, y una palabra que no está tal como se escribe se busca sin sus tildes y con una diéresis perdida (<a href="../analysis/#spelling">ortografía</a>). Un verbo con pronombres enclíticos se analiza como su verbo (<a href="../analysis/#clitics">clíticos</a>), un token que el diccionario no tiene - un signo, un número, un nombre - <a href="../analysis/#rules">por reglas</a>, y una palabra desconocida en minúsculas se <a href="../analysis/#guess">estima</a>. Un token que nada analiza - con un espacio o un carácter de control, una palabra en minúsculas sin modelo como <code>qzxw</code> - no tiene análisis.</p>
+<p>Los análisis de la forma de palabra, primero el más probable; las probabilidades suman 1. Las mayúsculas no importan para buscar la palabra en el diccionario, aunque un token con mayúscula también puede ser un nombre, y una palabra que no está tal como se escribe se busca sin sus tildes y con una diéresis perdida (<a href="../analysis/#spelling">ortografía</a>). Un verbo con pronombres enclíticos se analiza como su verbo (<a href="../analysis/#clitics">clíticos</a>), un token que el diccionario no tiene - un signo, un número, un nombre - <a href="../analysis/#rules">por reglas</a>, y una palabra desconocida en minúsculas se <a href="../analysis/#guess">estima</a>. Un token que nada analiza - con un espacio o un carácter de control, una palabra en minúsculas sin palabras del diccionario con su terminación como <code>qzxw</code> - no tiene análisis. El modelo de palabras desconocidas se lee con la primera palabra adivinada, en un milisegundo y medio.</p>
 <table>
 <thead>
 <tr>
@@ -1206,7 +1252,7 @@
 <li>no cuando el modelo lee el adverbio <code>fuera</code> tras un verbo, una preposición o un adverbio (<code>echó fuera a los intrusos</code>);</li>
 </ul>
 </li>
-<li>una palabra tras un clítico, la negación o <code>tú</code> es un verbo (<code>que te vayas</code>, <code>no vayas</code>), aunque no tras una preposición (<code>punto de no retorno</code>), ni un nombre con mayúscula tras <code>no</code> (<code>y no Lima</code>), ni tras un <code>tú</code> que sigue a un verbo (<code>¿has visto tú cosa igual?</code>); tras un clítico también lo es un adverbio, un adjetivo o un participio (<code>se acerca</code>, <code>te quedas</code>, <code>me visto</code>), y tras <code>le</code>, <code>les</code>, <code>la</code> y <code>lo</code>, un sustantivo en plural que puede ser un verbo (<code>le faltas</code>);</li>
+<li>una palabra tras un clítico, la negación, <code>tú</code> o <code>yo</code> es un verbo (<code>que te vayas</code>, <code>no vayas</code>, <code>yo bebo</code>), aunque no tras una preposición (<code>punto de no retorno</code>), ni un nombre con mayúscula tras <code>no</code> (<code>y no Lima</code>), ni tras un <code>tú</code> o un <code>yo</code> que sigue a un verbo (<code>¿has visto tú cosa igual?</code>); tras un clítico también lo es un adverbio, un adjetivo o un participio (<code>se acerca</code>, <code>te quedas</code>, <code>me visto</code>), y tras <code>le</code>, <code>les</code>, <code>la</code> y <code>lo</code>, un sustantivo en plural que puede ser un verbo (<code>le faltas</code>);</li>
 <li>un imperativo con mayúscula que abre una oración no es un nombre (<code>Indique si desea</code>), salvo que el modelo ponga por encima un sustantivo del diccionario (<code>Sangre de Abel</code>), tampoco lo es un verbo de <code>tú</code> tras <code>¿</code> o <code>¡</code> ante una palabra en minúsculas (<code>¿Quieres más?</code>, <code>¡Eres un ingrato!</code>), ni un verbo con clíticos que abre una oración y que el diccionario no tiene como palabra, salvo que siga un verbo en forma personal, también tras <code>no</code> y clíticos (<code>Dime, ¿no te parece?</code>, pero <code>Mandela dijo</code>, <code>Lucila se había puesto</code>); una palabra con mayúscula dentro de una oración a la que los clíticos darían una tilde que no tiene es un nombre (<code>en Mirandola</code>); un verbo con clíticos ante <code>usted</code> es el imperativo (<code>perdoneme usted</code>);</li>
 <li>una palabra del diccionario que suele ser un verbo con clíticos lo es (<code>¡Cállate!</code>);</li>
 <li>un verbo raro cede ante uno frecuente con la misma forma, ante un infinitivo también un auxiliar (<code>aunque vengan</code> es <code>venir</code>, no <code>vengar</code>, <code>no pudimos hablar</code> es <code>poder</code>), salvo que el modelo haya elegido un participio (<code>había entrevisto</code>), y ninguna forma de <code>tú</code> sigue a <code>se</code> (<code>se viste</code> es <code>vestir</code>).</li>
@@ -1298,7 +1344,7 @@
 <p class="metric-meta"><code>annotate</code> · <code>anyseg.Document</code></p>
 <div class="signature highlight"><pre><span></span><code><span class="n">annotate</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
-<p>Rellena las columnas <code>lemma</code>, <code>upos</code> y <code>feats</code> de las palabras de un documento del segmentador <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> con el análisis más probable de cada palabra en el contexto de su oración, en el orden en que <a href="#analyze_sentence"><code>analyze_sentence</code></a> ordena los análisis de sus tokens, y devuelve el documento; con <code>context=False</code>, en el orden de <code>analyze</code>, unas ocho veces más rápido. Los valores anteriores de estas columnas se sustituyen. Un token que el segmentador deja como una sola palabra y cuyo análisis tiene varias recibe esas palabras: <code>pónganselo</code> se convierte en el token multipalabra <code>pongan</code> + <code>se</code> + <code>lo</code>, el imperativo de <code>poner</code> y dos pronombres. El método devuelve entonces un documento nuevo con esas palabras, mientras que el dado también se rellena, ese token con el análisis del token entero. Un documento cuyas palabras no pueden cambiar (tiene núcleos, dependencias mejoradas o nodos vacíos) conserva sus palabras, y también un token cuya palabra tiene XPOS o MISC distinto de los espacios tras un token, que otras palabras perderían, como en un documento leído de CoNLL-U; ese token recibe el análisis del token entero. Un número con una unidad queda como una sola palabra, como en los treebanks: <code>48km</code>. Las palabras de un token multipalabra se analizan por el token: <code>dime</code> dividido en <code>di</code> + <code>me</code> es el imperativo de <code>decir</code> con el pronombre <code>me</code>, y los clíticos tras un verbo son pronombres. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría <code>X</code>. El método libera el GIL. esMorph no depende de anySeg: el documento es un <code>anyseg.Document</code> o un objeto con los mismos <code>column("form")</code>, <code>multiword_tokens</code> (un token tiene <code>text</code> y <code>words</code>, una palabra tiene <code>index</code>), <code>sentences</code> (una oración tiene <code>words</code>) y <code>set_columns</code>; un objeto sin <code>sentences</code> es una sola oración, y con <code>context=False</code> no se leen; un objeto sin <code>with_words</code> conserva sus palabras.</p>
+<p>Rellena las columnas <code>lemma</code>, <code>upos</code> y <code>feats</code> de las palabras de un documento del segmentador <a href="https://sergeyshk.github.io/anySeg/">anySeg</a> con el análisis más probable de cada palabra en el contexto de su oración, en el orden en que <a href="#analyze_sentence"><code>analyze_sentence</code></a> ordena los análisis de sus tokens, y devuelve el documento; con <code>context=False</code>, en el orden de <code>analyze</code>, unas siete veces más rápido. Los valores anteriores de estas columnas se sustituyen. Un token que el segmentador deja como una sola palabra y cuyo análisis tiene varias recibe esas palabras: <code>pónganselo</code> se convierte en el token multipalabra <code>pongan</code> + <code>se</code> + <code>lo</code>, el imperativo de <code>poner</code> y dos pronombres. El método devuelve entonces un documento nuevo con esas palabras, mientras que el dado también se rellena, ese token con el análisis del token entero. Un documento cuyas palabras no pueden cambiar (tiene núcleos, dependencias mejoradas o nodos vacíos) conserva sus palabras, y también un token cuya palabra tiene XPOS o MISC distinto de los espacios tras un token, que otras palabras perderían, como en un documento leído de CoNLL-U; ese token recibe el análisis del token entero. Un número con una unidad queda como una sola palabra, como en los treebanks: <code>48km</code>. Las palabras de un token multipalabra se analizan por el token: <code>dime</code> dividido en <code>di</code> + <code>me</code> es el imperativo de <code>decir</code> con el pronombre <code>me</code>, y los clíticos tras un verbo son pronombres. Una palabra sin análisis recibe como lema su forma en minúsculas y la categoría <code>X</code>. El método libera el GIL. esMorph no depende de anySeg: el documento es un <code>anyseg.Document</code> o un objeto con los mismos <code>column("form")</code>, <code>multiword_tokens</code> (un token tiene <code>text</code> y <code>words</code>, una palabra tiene <code>index</code>), <code>sentences</code> (una oración tiene <code>words</code>) y <code>set_columns</code>; un objeto sin <code>sentences</code> es una sola oración, y con <code>context=False</code> no se leen; un objeto sin <code>with_words</code> conserva sus palabras.</p>
 <table>
 <thead>
 <tr>
@@ -1392,7 +1438,7 @@
 </div>
 <h2 id="dictionary">Diccionario<a class="headerlink" href="#dictionary" title="Permanent link">&para;</a></h2>
 <p>El diccionario del paquete se crea a partir del <a href="https://en.wiktionary.org">Wiktionary</a> en inglés de octubre de 2026 con las palabras y las formas que solo tiene el <a href="https://es.wiktionary.org">Wikcionario</a> en español de noviembre de 2026: 717 mil formas de palabra de 136 mil lexemas. La edición en español aporta sustantivos, adjetivos, adverbios e interjecciones y formas nuevas de las palabras de la inglesa, pero no nombres propios ni verbos nuevos; su palabra cede ante una grafía coloquial o antigua de una palabra de la edición inglesa (<code>juera</code> es <code>fuera</code>, <code>espectativa</code> es <code>expectativa</code>) y ante un verbo con clíticos (<code>abrázala</code> es <code>abraza</code> + <code>la</code>), y con mayúscula es sobre todo un nombre propio (<code>Navas</code>). Los símbolos de unidades (<code>km</code>, <code>kg</code>) vienen de una tabla propia, y los determinantes, los pronombres, las preposiciones, las conjunciones y los numerales en letras, de una tabla según el treebank <a href="https://github.com/UniversalDependencies/UD_Spanish-AnCora">UD Spanish AnCora</a>, cuyas convenciones siguen los lemas y los rasgos (<a href="../analysis/#ud">Análisis de palabras</a>). Las probabilidades de los análisis vienen de las partes de entrenamiento de UD Spanish AnCora y <a href="https://github.com/UniversalDependencies/UD_Spanish-GSD">UD Spanish GSD</a>; las formas que estas no tienen se ordenan por su terminación y los rasgos más comunes. El diccionario se distribuye bajo la licencia <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
-<p>La propiedad <code>dictionary_info</code> describe el diccionario del analizador: la fuente y su instantánea principal con su SHA-256, las instantáneas de todas sus fuentes con las suyas (<code>snapshots</code>), la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, para un diccionario con modelo de contexto la versión y los treebanks de su entrenamiento (<code>context</code>), el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es <code>esmorph.DictionaryInfo</code>, y el de <code>context</code>, <code>esmorph.ContextInfo</code>.</p>
+<p>La propiedad <code>dictionary_info</code> describe el diccionario del analizador: la fuente y su instantánea principal con su SHA-256, las instantáneas de todas sus fuentes con las suyas (<code>snapshots</code>), la licencia, la versión de Universal Dependencies y los treebanks de las probabilidades con sus licencias, para un diccionario con modelo de contexto la versión y los treebanks de su entrenamiento (<code>context</code>), para un diccionario con modelo de <a href="../analysis/#guess">palabras desconocidas</a> las instantáneas y el número de palabras del diccionario de las que aprendió (<code>paradigms</code>), el número de formas de palabra y la suma de verificación del archivo. Cada acceso devuelve un dict nuevo; su tipo para los verificadores de tipos es <code>esmorph.DictionaryInfo</code>, el de <code>context</code>, <code>esmorph.ContextInfo</code>, y el de <code>paradigms</code>, <code>esmorph.ParadigmsInfo</code>.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="8:2"><input checked="checked" id="__tabbed_8_1" name="__tabbed_8" type="radio" /><input id="__tabbed_8_2" name="__tabbed_8" type="radio" /><div class="tabbed-labels"><label for="__tabbed_8_1">Código</label><label for="__tabbed_8_2">Resultado</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">

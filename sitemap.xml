@@ -64,6 +64,13 @@
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/installation/"/>
     </url>
     <url>
+        <loc>https://sergeyshk.github.io/esMorph/models/</loc>
+        <lastmod>2026-11-21</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/models/"/>
+        <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/models/"/>
+    </url>
+    <url>
         <loc>https://sergeyshk.github.io/esMorph/es/</loc>
         <lastmod>2026-11-21</lastmod>
         <changefreq>daily</changefreq>
@@ -125,5 +132,12 @@
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/installation/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/installation/"/>
+    </url>
+    <url>
+        <loc>https://sergeyshk.github.io/esMorph/es/models/</loc>
+        <lastmod>2026-11-21</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="es" href="https://sergeyshk.github.io/esMorph/es/models/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://sergeyshk.github.io/esMorph/models/"/>
     </url>
 </urlset>
