@@ -963,6 +963,28 @@ def test_analyze_sentence(morph):
         # A finite form with an enclitic opens a sentence, a name stays elsewhere
         ("Volviose la señora .", 0, ("volver", "VERB")),
         ("La casa de Vila .", 3, ("Vila", "PROPN")),
+        # A verb with clitics opening a sentence is no name, unless a finite verb follows; inside a
+        # sentence a word without the accent its clitics need is a name
+        ("Dime , ¿ no te parece ?", 0, ("decir", "VERB")),
+        ("Mandela dijo algo .", 0, ("Mandela", "PROPN")),
+        ("Trabajó en Mirandola , Módena .", 2, ("Mirandola", "PROPN")),
+        # A reflexive clitic that agrees with the form takes ir before `de`, a dative does not;
+        # `al` before an infinitive and the adverb `fuera` have no goal
+        ("Se fue de casa .", 1, ("ir", "VERB")),
+        ("Me fue de gran ayuda .", 1, ("ser", "AUX")),
+        ("Su satisfacción fue al ver a su hijo .", 2, ("ser", "AUX")),
+        ("Echó fuera a los intrusos .", 1, ("fuera", "ADV")),
+        # A name after `no` and a noun after `tú` that follows a verb stay
+        ("Ganó Madrid y no Lima .", 4, ("Lima", "PROPN")),
+        ("¿ Has visto tú cosa igual ?", 4, ("cosa", "NOUN")),
+        # The frequent verb may be an auxiliary, and no form of `tú` follows `se`
+        ("No pudimos hablar más .", 1, ("poder", "AUX")),
+        ("Ella se viste de negro .", 2, ("vestir", "VERB")),
+        # No clitic goes before a word whose finite forms are imperatives
+        ("¡ Viva la libertá !", 2, ("el", "DET")),
+        # The adverb `solo` of the spelling of 2010, and `ex` before a noun
+        ("No solo eso , sino más .", 1, ("solo", "ADV")),
+        ("El ex presidente habló ayer .", 1, ("ex", "ADJ")),
         # A word after a clitic, the negation or tú is a verb, of the frequent one of its form;
         # after a preposition no makes a noun negative
         ("¿ Te figuras lo que dijo ?", 2, ("figurar", "VERB")),
@@ -1974,9 +1996,10 @@ def test_names_of_the_dictionary(morph):
 
 
 def test_plurals_of_letters_that_are_verbs_of_tu(morph):
-    # `ves` and `des` are `ver` and `dar`, while other plurals of letters stay
+    # `ves`, `des` and `eres` are `ver`, `dar` and `ser`, while other plurals of letters stay
     assert {(a.lemma, a.pos) for a in morph.analyze("ves")} == {("ver", "VERB")}
     assert {(a.lemma, a.pos) for a in morph.analyze("des")} == {("dar", "VERB")}
+    assert {a.lemma for a in morph.analyze("eres")} == {"ser"}
     assert ("erre", "NOUN") in {(a.lemma, a.pos) for a in morph.analyze("erres")}
     letter = next(a for a in morph.analyze("ve") if a.pos == "NOUN")
     assert [form.word for form in letter.forms()] == ["ve"]
