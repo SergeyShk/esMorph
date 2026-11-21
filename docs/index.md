@@ -51,6 +51,14 @@
 
     [:octicons-arrow-right-24: Comparison](comparison.md)
 
+-   :material-graph-outline:{ .lg .middle } __Models__
+
+    ---
+
+    The context model that chooses the analysis by the sentence and the paradigm model that guesses unknown words
+
+    [:octicons-arrow-right-24: Models](models.md)
+
 -   :material-alert-circle-outline:{ .lg .middle } __Exceptions__
 
     ---
@@ -60,6 +68,12 @@
     [:octicons-arrow-right-24: Exceptions](exceptions.md)
 
 </div>
+
+## How it works
+
+The dictionary gives every analysis of every word with its frequency, and a small context model chooses the analysis by the neighboring words; an unknown word is guessed by another small model ([Models](models.md)):
+
+![The analyses of the dictionary for «Ella vino ayer.» and the choice of the context model](img/pipeline.svg)
 
 ## Installation
 

@@ -12,12 +12,14 @@ nav:
       - Authors: authors.md
     - Analyzer: analyzer.md
     - Word analysis: analysis.md
+    - Models: models.md
     - Inflection: inflection.md
     - The esmorph command: cli.md
 
 theme:
   name: material
   language: en
+  favicon: img/favicon.png
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -74,6 +76,7 @@ plugins:
             Exceptions: Excepciones
             Analyzer: Analizador
             Word analysis: Análisis de palabras
+            Models: Modelos
             Inflection: Flexión
             The esmorph command: El comando esmorph
 

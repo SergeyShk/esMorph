@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 558" width="880" height="558" font-family="Roboto, Source Sans Pro, Arial, sans-serif" role="img">
+<rect width="880" height="558" rx="12" fill="white"/>
+<rect x="40.0" y="20.0" width="380.0" height="54.0" rx="8" fill="white" stroke="#c62828" stroke-width="1.5"/>
+<text x="230.0" y="52.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="230.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">the letters of the word from the end</text>
+<text x="230.0" y="63.0" font-size="13" fill="#6b6b6b" text-anchor="middle">16 × 32</text>
+<path d="M230.0 74.0L230.0 95.0" stroke="#c62828" stroke-width="2"/>
+<path d="M224.0 94.4L236.0 94.4L230.0 104.0Z" fill="#c62828"/>
+<rect x="460.0" y="20.0" width="380.0" height="54.0" rx="8" fill="white" stroke="#c62828" stroke-width="1.5"/>
+<text x="650.0" y="52.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="650.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">candidates: forms of the lists of endings 1-5</text>
+<text x="650.0" y="63.0" font-size="13" fill="#6b6b6b" text-anchor="middle">up to 30 forms per ending</text>
+<path d="M650.0 74.0L650.0 95.0" stroke="#c62828" stroke-width="2"/>
+<path d="M644.0 94.4L656.0 94.4L650.0 104.0Z" fill="#c62828"/>
+<rect x="40.0" y="104.0" width="380.0" height="44.0" rx="8" fill="#c62828" stroke="#c62828" stroke-width="1.5"/>
+<text x="230.0" y="131.6" font-size="16" fill="white" text-anchor="middle">LSTM 32</text>
+<rect x="460.0" y="104.0" width="92.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="506.0" y="131.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="506.0" y="122.0" font-size="13" fill="#212121" text-anchor="middle">UD</text>
+<text x="506.0" y="139.0" font-size="12" fill="#212121" text-anchor="middle">tag</text>
+<path d="M506.0 148.0L506.0 165.0" stroke="#c62828" stroke-width="2"/>
+<path d="M500.0 164.4L512.0 164.4L506.0 174.0Z" fill="#c62828"/>
+<rect x="556.0" y="104.0" width="92.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="602.0" y="131.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="602.0" y="122.0" font-size="13" fill="#212121" text-anchor="middle">lemma</text>
+<text x="602.0" y="139.0" font-size="12" fill="#212121" text-anchor="middle">suffix</text>
+<path d="M602.0 148.0L602.0 165.0" stroke="#c62828" stroke-width="2"/>
+<path d="M596.0 164.4L608.0 164.4L602.0 174.0Z" fill="#c62828"/>
+<rect x="652.0" y="104.0" width="92.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="698.0" y="131.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="698.0" y="122.0" font-size="13" fill="#212121" text-anchor="middle">form</text>
+<text x="698.0" y="139.0" font-size="12" fill="#212121" text-anchor="middle">suffix</text>
+<path d="M698.0 148.0L698.0 165.0" stroke="#c62828" stroke-width="2"/>
+<path d="M692.0 164.4L704.0 164.4L698.0 174.0Z" fill="#c62828"/>
+<rect x="748.0" y="104.0" width="92.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="794.0" y="131.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="794.0" y="122.0" font-size="13" fill="#212121" text-anchor="middle">ending</text>
+<text x="794.0" y="139.0" font-size="12" fill="#212121" text-anchor="middle">length</text>
+<path d="M794.0 148.0L794.0 165.0" stroke="#c62828" stroke-width="2"/>
+<path d="M788.0 164.4L800.0 164.4L794.0 174.0Z" fill="#c62828"/>
+<path d="M230.0 148.0L230.0 165.0" stroke="#c62828" stroke-width="2"/>
+<path d="M224.0 164.4L236.0 164.4L230.0 174.0Z" fill="#c62828"/>
+<rect x="40.0" y="174.0" width="380.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="230.0" y="201.2" font-size="15" fill="#212121" text-anchor="middle">word vector: 64</text>
+<rect x="460.0" y="174.0" width="380.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="650.0" y="201.2" font-size="15" fill="#212121" text-anchor="middle">candidate vector: 64</text>
+<path d="M230.0 218.0L230.0 235.0" stroke="#c62828" stroke-width="2"/>
+<path d="M224.0 234.4L236.0 234.4L230.0 244.0Z" fill="#c62828"/>
+<path d="M650.0 218.0L650.0 235.0" stroke="#c62828" stroke-width="2"/>
+<path d="M644.0 234.4L656.0 234.4L650.0 244.0Z" fill="#c62828"/>
+<rect x="40.0" y="244.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="270.9" font-size="14" fill="#212121" text-anchor="middle">score: word vector · candidate vector + count and share of the form in the list</text>
+<path d="M440.0 288.0L440.0 305.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 304.4L446.0 304.4L440.0 314.0Z" fill="#c62828"/>
+<rect x="40.0" y="314.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="340.9" font-size="14" fill="#212121" text-anchor="middle">softmax over the candidates: P(form | word)</text>
+<path d="M440.0 358.0L440.0 375.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 374.4L446.0 374.4L440.0 384.0Z" fill="#c62828"/>
+<rect x="40.0" y="384.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="410.9" font-size="14" fill="#212121" text-anchor="middle">the weight of a lexeme goes to its equal forms by their counts</text>
+<path d="M440.0 428.0L440.0 445.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 444.4L446.0 444.4L440.0 454.0Z" fill="#c62828"/>
+<rect x="40.0" y="454.0" width="800.0" height="44.0" rx="8" fill="#c62828" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="480.9" font-size="14" fill="white" text-anchor="middle">up to 10 analyses with at least 1 % of the probability of the first</text>
+<text x="440.0" y="538.0" font-size="13" fill="#6b6b6b" text-anchor="middle">0.37 million parameters, int8 by rows · 75 tag features, 2,731 suffixes</text>
+</svg>

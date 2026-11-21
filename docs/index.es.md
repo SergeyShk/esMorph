@@ -51,6 +51,14 @@
 
     [:octicons-arrow-right-24: Comparación](comparison.md)
 
+-   :material-graph-outline:{ .lg .middle } __Modelos__
+
+    ---
+
+    El modelo de contexto que elige el análisis según la oración y el modelo de paradigmas que estima las palabras desconocidas
+
+    [:octicons-arrow-right-24: Modelos](models.md)
+
 -   :material-alert-circle-outline:{ .lg .middle } __Excepciones__
 
     ---
@@ -60,6 +68,12 @@
     [:octicons-arrow-right-24: Excepciones](exceptions.md)
 
 </div>
+
+## Cómo funciona
+
+El diccionario da todos los análisis de cada palabra con su frecuencia, y un pequeño modelo de contexto elige el análisis por las palabras vecinas; una palabra desconocida se estima con otro pequeño modelo ([Modelos](models.md)):
+
+![Los análisis del diccionario para «Ella vino ayer.» y la elección del modelo de contexto](img/pipeline.es.svg)
 
 ## Instalación
 
