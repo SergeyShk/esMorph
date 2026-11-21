@@ -44,10 +44,10 @@ pub use anyseg;
 #[cfg_attr(docsrs, doc(cfg(feature = "build")))]
 pub use builder::Builder;
 #[doc(hidden)]
-pub use dictionary::Fields;
-#[doc(hidden)]
 pub use dictionary::space_entry;
 pub use dictionary::{Analysis, Dictionary, Entry, SENTENCE_CHUNK, Sample, Source, sentence_parts};
+#[doc(hidden)]
+pub use dictionary::{Fields, Split};
 pub use error::Error;
 #[doc(hidden)]
 pub use format::other_version;

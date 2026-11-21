@@ -25,9 +25,10 @@ def test_annotate(morph, segmenter):
     document = segmenter.segment("Devuélvenos, dime la verdad del caso.\n\nDámelo.")
     annotated = morph.annotate(document, context=False)
     # The segmenter leaves the token one word: a new document has the words of the verb with
-    # clitics, and the given one stays as it was
+    # clitics, and the given one gets the analysis of the whole token
     assert annotated is not document
-    assert document.column("lemma") == [None] * 14
+    assert columns(document)[0] == ("Devuélvenos", "devolver", "VERB")
+    assert columns(document)[1:] == columns(annotated)[2:]
     assert columns(annotated) == [
         ("Devuelve", "devolver", "VERB"),
         ("nos", "yo", "PRON"),
@@ -65,17 +66,32 @@ def test_words_that_cannot_change(morph):
     )[0]
     assert morph.annotate(parsed) is parsed
     assert columns(parsed) == [("Devuélvenos", "devolver", "VERB"), (".", ".", "PUNCT")]
-    # So does one whose words have XPOS or MISC beyond the spaces, which other words lose
+    # So does a token whose word has XPOS or MISC beyond the spaces, which other words lose
     for xpos, misc in [("VMM02S0", "_"), ("_", "SpaceAfter=No|start_char=0")]:
         read = anyseg.read_conllu(
             f"1\tDevuélvenos\t_\t_\t{xpos}\t_\t_\t_\t_\t{misc}\n2\t.\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
         )[0]
         assert morph.annotate(read) is read
         assert read.column("lemma") == ["devolver", "."]
+    # while the other tokens take the words of their analysis
+    mixed = anyseg.read_conllu(
+        "1\tDevuélvenos\t_\t_\tVMM02S0\t_\t_\t_\t_\t_\n2\t,\t_\t_\t_\t_\t_\t_\t_\t_\n"
+        "3\tdímelo\t_\t_\t_\t_\t_\t_\t_\t_\n\n"
+    )[0]
+    annotated = morph.annotate(mixed)
+    assert [word.form for word in annotated.words] == ["Devuélvenos", ",", "di", "me", "lo"]
+    assert mixed.column("lemma") == ["devolver", ",", "decir"]
     # A document without with_words keeps its words too
     document = Document(["Devuélvenos", "."])
     assert morph.annotate(document) is document
     assert document.columns["lemma"] == ["devolver", "."]
+
+
+def test_number_with_a_unit_stays_one_word(morph, segmenter):
+    # As in the treebanks, though the analysis has the words `48` and `km`
+    document = segmenter.segment("Llegó a 48km.")
+    assert morph.annotate(document) is document
+    assert columns(document)[2] == ("48km", "48", "NUM")
 
 
 def test_clitics_after_verb(morph, segmenter):
