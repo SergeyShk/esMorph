@@ -9,11 +9,15 @@ from ._esmorph import Analysis, Analyzer, FormNotFoundError, __version__
 # typing takes longer to import than the package: the types are imported on first use
 TYPE_CHECKING = False
 if TYPE_CHECKING:
-    from ._types import ContextInfo as ContextInfo, DictionaryInfo as DictionaryInfo
+    from ._types import (
+        ContextInfo as ContextInfo,
+        DictionaryInfo as DictionaryInfo,
+        ParadigmsInfo as ParadigmsInfo,
+    )
 else:
 
     def __getattr__(name: str) -> object:
-        if name in ("ContextInfo", "DictionaryInfo"):
+        if name in ("ContextInfo", "DictionaryInfo", "ParadigmsInfo"):
             from . import _types
 
             return getattr(_types, name)
@@ -31,5 +35,6 @@ __all__ = [
     "ContextInfo",
     "DictionaryInfo",
     "FormNotFoundError",
+    "ParadigmsInfo",
     "__version__",
 ]

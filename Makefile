@@ -10,6 +10,7 @@ EXPORT_STAMP := $(EXPORT_PATH)/.exported
 UD_PATH := target/ud
 UD_STAMP := $(UD_PATH)/.exported
 CONTEXT := data/es-context.bin
+PARADIGMS := data/es-paradigms.bin
 
 help: ## Show the list of commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-20s %s\n", $$1, $$2}'
@@ -31,7 +32,7 @@ else
 	uv sync --all-groups
 endif
 
-dictionary: $(DICTIONARY) ## Build the dictionary from the snapshot of Wiktionary, the counts of treebanks and the context model
+dictionary: $(DICTIONARY) ## Build the dictionary from the snapshot of Wiktionary, the counts of treebanks and the models
 
 $(EXPORT_STAMP): $(SCRIPTS_PATH)/export_wiktionary.py $(SCRIPTS_PATH)/eswiktionary.py $(SCRIPTS_PATH)/conventions.py data/closed-classes.tsv data/units.tsv data/spellings.tsv | deps
 	uv run python $(SCRIPTS_PATH)/export_wiktionary.py $(EXPORT_PATH)
@@ -41,8 +42,8 @@ $(UD_STAMP): $(SCRIPTS_PATH)/export_ud.py | deps
 	uv run python $(SCRIPTS_PATH)/export_ud.py $(UD_PATH)
 	touch $@
 
-$(DICTIONARY): $(EXPORT_STAMP) $(UD_STAMP) $(CONTEXT) $(wildcard crates/esmorph/src/*.rs crates/esmorph/src/dictionary/*.rs crates/esmorph-build/src/*.rs)
-	cargo run --release --locked -p esmorph-build -- $(EXPORT_PATH) $(UD_PATH) $(DICTIONARY) $(CONTEXT)
+$(DICTIONARY): $(EXPORT_STAMP) $(UD_STAMP) $(CONTEXT) $(PARADIGMS) $(wildcard crates/esmorph/src/*.rs crates/esmorph/src/dictionary/*.rs crates/esmorph-build/src/*.rs)
+	cargo run --release --locked -p esmorph-build -- $(EXPORT_PATH) $(UD_PATH) $(DICTIONARY) $(CONTEXT) $(PARADIGMS)
 
 lock: uv ## Update the lock files to the latest versions of the dependencies
 	uv lock --upgrade

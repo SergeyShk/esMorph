@@ -1,12 +1,12 @@
 //! Builder of the dictionary of esMorph: `esmorph-build <export directory> <counts directory>
-//! <dictionary file> [<context model>]`. The export is `lexemes.tsv` (lemma, part of speech, form,
+//! <dictionary file> [<context model> [<paradigm model>]]`, `-` for no context model. The export is `lexemes.tsv` (lemma, part of speech, form,
 //! features, `variant`, `old` for an old or nonstandard variant, `spoken:` with the form a spoken
 //! spelling stands for, `extra`, `extra-variant` or `extra-old` for a form of the extra source or
 //! `_`, the place in the table of the source or `_`), `diminutives.tsv` (lemma, part of speech
 //! and the word it is a diminutive of) and `meta.json`, written by
 //! `scripts/export_wiktionary.py`; the counts are `analyses.tsv`, `pos.tsv` and `sources.json`,
 //! written by `scripts/export_ud.py`; the context model is the file of weights of
-//! `scripts/train_context.py`. A form of the extra source that the treebanks have only as a name
+//! `scripts/train_context.py`, the paradigm model - of `scripts/train_paradigms.py`. A form of the extra source that the treebanks have only as a name
 //! is left out, but an interjection: `ciu` is `CiU`; so is a lexeme of only the extra source with
 //! such a lemma (`cius`)
 
@@ -212,28 +212,40 @@ fn build(
     counts: &Path,
     output: &Path,
     context: Option<&Path>,
+    paradigms: Option<&Path>,
 ) -> Result<usize, Error> {
     let mut builder = Builder::new();
     let mut meta = joined(
         &read(&export.join("meta.json"))?,
         &read(&counts.join("sources.json"))?,
     )?;
-    if let Some(context) = context {
-        let weights = fs::read(context)
-            .map_err(|err| Error::Build(format!("{}: {err}", context.display())))?;
-        let sources = Builder::context_sources(&weights).map_err(|err| within(context, err))?;
+    // The weights of a model and the data it was trained on, which the description of the
+    // dictionary gets under `key`
+    let mut model = |path: &Path,
+                     key: &str,
+                     sources: fn(&[u8]) -> Result<String, Error>|
+     -> Result<Vec<u8>, Error> {
+        let weights =
+            fs::read(path).map_err(|err| Error::Build(format!("{}: {err}", path.display())))?;
+        let sources = sources(&weights).map_err(|err| within(path, err))?;
         if !json_object(&sources) {
             return Err(within(
-                context,
+                path,
                 Error::Build("the sources of the model are not an object of JSON".into()),
             ));
         }
         // The description ends with the object of the counts that `joined` closed
         meta.truncate(meta.len() - 1);
-        meta.push_str(&format!(", \"context\": {sources}}}"));
-        builder
-            .context(weights)
-            .map_err(|err| within(context, err))?;
+        meta.push_str(&format!(", \"{key}\": {sources}}}"));
+        Ok(weights)
+    };
+    if let Some(context) = context {
+        let weights = model(context, "context", Builder::context_sources)?;
+        (builder.context(weights)).map_err(|err| within(context, err))?;
+    }
+    if let Some(paradigms) = paradigms {
+        let weights = model(paradigms, "paradigms", Builder::paradigm_sources)?;
+        (builder.paradigm_model(weights)).map_err(|err| within(paradigms, err))?;
     }
     builder.meta(meta);
     let analyses = counts.join("analyses.tsv");
@@ -429,13 +441,19 @@ fn plain(feats: &str) -> &str {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let (export, counts, output, context) = match args.as_slice() {
-        [export, counts, output] => (export, counts, output, None),
-        [export, counts, output, context] => (export, counts, output, Some(Path::new(context))),
+    fn model(path: &str) -> Option<&Path> {
+        (path != "-").then(|| Path::new(path))
+    }
+    let (export, counts, output, context, paradigms) = match args.as_slice() {
+        [export, counts, output] => (export, counts, output, None, None),
+        [export, counts, output, context] => (export, counts, output, model(context), None),
+        [export, counts, output, context, paradigms] => {
+            (export, counts, output, model(context), model(paradigms))
+        }
         _ => {
             eprintln!(
                 "usage: esmorph-build <export directory> <counts directory> <dictionary file> \
-                 [<context model>]"
+                 [<context model> [<paradigm model>]], - for no context model"
             );
             return ExitCode::FAILURE;
         }
@@ -445,6 +463,7 @@ fn main() -> ExitCode {
         Path::new(counts),
         Path::new(output),
         context,
+        paradigms,
     ) {
         Ok(size) => {
             println!("{output}: {size} bytes");
@@ -522,7 +541,7 @@ mod tests {
         let output = dir.join("es.dict");
         let error = |lexemes: &str, output: &Path| {
             fs::write(export.join("lexemes.tsv"), lexemes).unwrap();
-            build(&export, &counts, output, None)
+            build(&export, &counts, output, None, None)
                 .unwrap_err()
                 .to_string()
         };
@@ -545,14 +564,14 @@ mod tests {
             ("a\tNOUN\ta\tGender\t1\n", "analyses.tsv: wrong UD features"),
         ] {
             fs::write(counts.join("analyses.tsv"), analyses).unwrap();
-            let message = build(&export, &counts, &output, None)
+            let message = build(&export, &counts, &output, None, None)
                 .unwrap_err()
                 .to_string();
             assert!(message.contains(wanted), "{message}");
             assert_eq!(message.matches("build error").count(), 1, "{message}");
         }
         fs::write(counts.join("analyses.tsv"), "").unwrap();
-        assert!(build(&export, &counts, &output, None).is_ok());
+        assert!(build(&export, &counts, &output, None, None).is_ok());
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -577,7 +596,7 @@ mod tests {
                        nobel\tNOUN\tnobel\t_\t_\t_\nnobel\tNOUN\tnobeles\tNumber=Plur\textra\t_\n";
         fs::write(export.join("lexemes.tsv"), lexemes).unwrap();
         let output = dir.join("es.dict");
-        build(&export, &counts, &output, None).unwrap();
+        build(&export, &counts, &output, None, None).unwrap();
         let dictionary = esmorph::Dictionary::open(&output).unwrap();
         // The treebanks have `ciu` only as the name `CiU`, so its lexeme is left out; an
         // interjection stays
@@ -617,7 +636,7 @@ mod tests {
         let lexemes = export.join("lexemes.tsv");
         fs::write(&lexemes, "casa\tNOUN\tcasa\t_\t_\t_\n").unwrap();
         let output = dir.join("es.dict");
-        build(&export, &counts, &output, Some(&weights)).unwrap();
+        build(&export, &counts, &output, Some(&weights), None).unwrap();
         let dictionary = esmorph::Dictionary::open(&output).unwrap();
         assert!(dictionary.has_context());
         assert!(json_object(dictionary.meta()), "{}", dictionary.meta());
@@ -631,18 +650,34 @@ mod tests {
         );
         let other = dir.join("other.dict");
         fs::write(&lexemes, "casa\tNOUN\tcasa\tTypo=Yes\t_\t_\n").unwrap();
-        let message = build(&export, &counts, &other, Some(&weights))
+        let message = build(&export, &counts, &other, Some(&weights), None)
             .unwrap_err()
             .to_string();
         assert!(message.contains("without the tags F=Typo=Yes"), "{message}");
         assert!(!other.exists());
         let truncated = dir.join("truncated.bin");
         fs::write(&truncated, &fs::read(&weights).unwrap()[..1000]).unwrap();
-        let message = build(&export, &counts, &other, Some(&truncated))
+        let message = build(&export, &counts, &other, Some(&truncated), None)
             .unwrap_err()
             .to_string();
         assert!(
             message.contains("truncated.bin: context model"),
+            "{message}"
+        );
+        // The paradigm model with no context model: the description names its data too
+        let paradigms = weights.with_file_name("es-paradigms.bin");
+        fs::write(&lexemes, "casa\tNOUN\tcasa\t_\t_\t_\n").unwrap();
+        build(&export, &counts, &output, None, Some(&paradigms)).unwrap();
+        let dictionary = esmorph::Dictionary::open(&output).unwrap();
+        assert!(dictionary.has_paradigm_model() && !dictionary.has_context());
+        assert!(json_object(dictionary.meta()), "{}", dictionary.meta());
+        assert!(dictionary.meta().contains(", \"paradigms\": {\""));
+        fs::write(&truncated, &fs::read(&paradigms).unwrap()[..1000]).unwrap();
+        let message = build(&export, &counts, &other, None, Some(&truncated))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            message.contains("truncated.bin: paradigm model"),
             "{message}"
         );
         fs::remove_dir_all(&dir).unwrap();

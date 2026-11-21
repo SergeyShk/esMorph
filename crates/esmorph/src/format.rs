@@ -43,12 +43,14 @@ pub(crate) const MAX_SPOKEN_FORM: usize = (1 << (32 - SPOKEN_FORM_SHIFT)) - 1;
 pub(crate) const UD_BITS: u32 = 0xFFFF;
 /// The longest ending in letters that guesses an unknown word
 pub(crate) const MAX_ENDING: usize = 5;
+/// An ending that fewer word forms of the dictionary have is a mark of a word, not a sample
+pub(crate) const MIN_ENDING_COUNT: u32 = 3;
 /// Largest dictionary file: offsets into records and variants are of 32 bits
 pub(crate) const MAX_FILE: u64 = 1 << 31;
-const VERSION: u32 = 10;
+const VERSION: u32 = 11;
 const HEADER: usize = 16;
 const ALIGN: usize = 8;
-const SECTIONS: usize = 16;
+const SECTIONS: usize = 18;
 
 /// Contents of a dictionary for writing into a file
 #[cfg(any(test, feature = "build"))]
@@ -85,9 +87,15 @@ pub(crate) struct Sections {
     /// Automaton "ending of a word form - start of its list in `guess_records`" for guessing
     /// unknown words
     pub guesses: Vec<u8>,
-    /// Lists of the forms of tables for an ending: the length, then `(table << 16) | form` and the
-    /// number of word forms of the dictionary with the ending of each
+    /// Lists of the forms of tables for an ending, the most frequent in texts first: the length,
+    /// then `(table << 16) | form` and the number of word forms of the dictionary with the ending
+    /// of each
     pub guess_records: Vec<u32>,
+    /// How often texts have every UD tag, plus one: the weight of a word form of the tag in
+    /// guessing without the paradigm model
+    pub tag_weights: Vec<u32>,
+    /// Weights of the paradigm model (`scripts/train_paradigms.py`); empty without a model
+    pub paradigm_model: Vec<u8>,
     /// Weights of the context model (`scripts/train_context.py`); empty without a model
     pub context: Vec<u8>,
     /// Diminutives: a line "lemma, part of speech, the word it is a diminutive of" with tabs for
@@ -190,6 +198,8 @@ pub(crate) struct Layout {
     pub variants: Range<usize>,
     pub guesses: Range<usize>,
     pub guess_records: Range<usize>,
+    pub tag_weights: Range<usize>,
+    pub paradigm_model: Range<usize>,
     pub context: Range<usize>,
     pub diminutives: Range<usize>,
     pub verbs: Range<usize>,
@@ -199,7 +209,7 @@ pub(crate) struct Layout {
 
 impl Layout {
     /// Sections of numbers read right from the file and the size of their numbers in bytes
-    pub fn numbers(&self) -> [(&Range<usize>, usize); 6] {
+    pub fn numbers(&self) -> [(&Range<usize>, usize); 7] {
         [
             (&self.paradigm_offsets, 4),
             (&self.paradigms, 4),
@@ -207,6 +217,7 @@ impl Layout {
             (&self.records, 4),
             (&self.variants, 4),
             (&self.guess_records, 4),
+            (&self.tag_weights, 4),
         ]
     }
 }
@@ -234,6 +245,8 @@ pub(crate) fn write(sections: &Sections) -> Vec<u8> {
     section(&u32_bytes(&sections.variants));
     section(&sections.guesses);
     section(&u32_bytes(&sections.guess_records));
+    section(&u32_bytes(&sections.tag_weights));
+    section(&sections.paradigm_model);
     section(&sections.context);
     section(sections.diminutives.as_bytes());
     section(sections.verbs.as_bytes());
@@ -310,6 +323,8 @@ pub(crate) fn layout(data: &[u8], checked: bool) -> Result<Layout, Error> {
         variants: section(4)?,
         guesses: section(1)?,
         guess_records: section(4)?,
+        tag_weights: section(4)?,
+        paradigm_model: section(1)?,
         context: section(1)?,
         diminutives: section(1)?,
         verbs: section(1)?,
@@ -697,13 +712,13 @@ pub(crate) mod tests {
             assert!(layout(broken, true).is_err());
         }
         let mut other = data.clone();
-        other[8] = 9;
+        other[8] = 10;
         assert!(
             layout(&other, true)
                 .err()
                 .unwrap()
                 .to_string()
-                .contains("format version 9, supported 10: build the dictionary again")
+                .contains("format version 10, supported 11: build the dictionary again")
         );
         let mut foreign = data.clone();
         foreign[0] = b'X';

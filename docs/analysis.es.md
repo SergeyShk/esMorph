@@ -182,7 +182,7 @@ Una palabra en minúsculas que ni el diccionario ni las reglas conocen recibe an
 - una palabra con guion se analiza por su última parte de una clase abierta o un numeral: `palestino-israelíes` es una forma de `palestino-israelí`;
 - una palabra con un prefijo conocido se analiza por la palabra del diccionario sin él, de cuatro letras al menos tras un prefijo de tres: `supergallos` es una forma de `supergallo`, `sobreandan` de `sobreandar`;
 - un verbo con clíticos se analiza por su gerundio estimado, o por su infinitivo estimado ante `se` o un clítico de tercera persona: `autogenerarse` es `autogenerar` + `se`;
-- cualquier otra palabra se analiza por las palabras del diccionario con la misma terminación de hasta cinco letras: sus categorías, rasgos y flexión, según cuántas palabras los tienen y con qué frecuencia AnCora train tiene sus rasgos; una palabra en `-ísimo` es un adjetivo de `Degree=Abs`: `esbeltísima` es una forma de `esbeltísimo`.
+- cualquier otra palabra se analiza por las formas y la flexión de las palabras del diccionario con las mismas terminaciones de hasta cinco letras, entre las que elige un modelo que lee las letras de la palabra: aprendió de las palabras del diccionario cómo termina una palabra de cada categoría y flexión, y prefiere los rasgos que los treebanks tienen con más frecuencia; una palabra en `-ísimo` es un adjetivo de `Degree=Abs`: `esbeltísima` es una forma de `esbeltísimo`.
 
 Una palabra estimada tiene sus formas, también estimadas: `forms()` e `inflect()` funcionan como con una palabra del diccionario. `is_known` sigue siendo falso para ella.
 
@@ -196,6 +196,6 @@ Una palabra estimada tiene sus formas, también estimadas: `forms()` e `inflect(
 === "Resultado"
 
     ```
-    [('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
+    [('zumbear', 'VERB', 1.0)]
     'zumbeo'
     ```

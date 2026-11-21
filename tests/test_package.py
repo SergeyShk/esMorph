@@ -27,6 +27,7 @@ def test_metadata():
     assert esmorph.__all__ == sorted(esmorph.__all__)
     # The type of the description of a dictionary is imported on first use
     assert esmorph.DictionaryInfo.__required_keys__ == {"word_forms", "checksum"}
+    assert esmorph.ParadigmsInfo.__optional_keys__ == {"snapshots", "words"}
     with pytest.raises(AttributeError, match="has no attribute 'Analyse'"):
         esmorph.Analyse  # noqa: B018
 

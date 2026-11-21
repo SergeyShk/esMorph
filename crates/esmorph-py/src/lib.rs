@@ -20,8 +20,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::{MutexExt, PyOnceLock};
 use pyo3::types::{
-    PyByteArray, PyBytes, PyDict, PyFloat, PyIterator, PyList, PyString, PyTuple, PyWeakrefMethods,
-    PyWeakrefReference,
+    PyByteArray, PyBytes, PyDict, PyFloat, PyInt, PyIterator, PyList, PyString, PyTuple,
+    PyWeakrefMethods, PyWeakrefReference,
 };
 
 /// Tokens of one word that take the words of their analysis, by their indices, and the words
@@ -1481,6 +1481,31 @@ impl Analyzer {
             .collect()
     }
 
+    /// How often texts have every UD tag of `_ud_tags`, plus one: the weights of the examples of
+    /// `scripts/train_paradigms.py`
+    fn _tag_weights(&self) -> Vec<u32> {
+        self.dictionary.tag_weights().to_vec()
+    }
+
+    /// Examples of the training of the paradigm model of `scripts/train_paradigms.py`: the
+    /// candidates of guessing of a lowercase word of the dictionary as if the dictionary had not
+    /// the word - lemma, number of the UD tag, suffixes of the lemma and the form, length of the
+    /// ending, number of word forms, share in the list of the ending and whether it is right
+    #[allow(clippy::type_complexity)]
+    fn _guess_examples(
+        &self,
+        word: &str,
+    ) -> Vec<(String, u16, String, String, usize, u32, f32, bool)> {
+        (self.dictionary.guess_examples(word).into_iter())
+            .map(|c| {
+                let fields = (c.lemma, c.ud, c.lemma_suffix, c.form_suffix, c.length);
+                (
+                    fields.0, fields.1, fields.2, fields.3, fields.4, c.count, c.share, c.gold,
+                )
+            })
+            .collect()
+    }
+
     /// Description of the dictionary
     ///
     /// Description:
@@ -1488,11 +1513,13 @@ impl Analyzer {
     ///     all its sources with theirs, the license, the release of Universal Dependencies and the
     ///     treebanks of the counts of analyses with their licenses, as far as the dictionary
     ///     describes them; for a dictionary with a context model, its release and treebanks in
-    ///     context; and always the number of word forms and the checksum of the file
+    ///     context; for a dictionary with a paradigm model, the snapshots and the number of the
+    ///     words it learned from in paradigms; and always the number of word forms and the
+    ///     checksum of the file
     ///
     /// Returns:
     ///     dict: The keys source, snapshot, sha256, snapshots, license, ud_release, treebanks,
-    ///     context, word_forms and checksum; every access returns a new dict
+    ///     context, paradigms, word_forms and checksum; every access returns a new dict
     ///
     /// Example:
     ///     >>> from esmorph import Analyzer
@@ -1527,7 +1554,7 @@ impl Analyzer {
             Ok(())
         };
         let context = PyDict::new(py);
-        if let Ok(meta) = meta
+        if let Ok(meta) = &meta
             && let Ok(meta) = meta.cast::<PyDict>()
         {
             for key in ["source", "snapshot", "sha256", "license"] {
@@ -1552,6 +1579,28 @@ impl Analyzer {
         }
         if self.dictionary.has_context() {
             info.set_item("context", context)?;
+        }
+        // The snapshots of the dictionary the paradigm model learned from and the number of its words
+        if self.dictionary.has_paradigm_model() {
+            let paradigms = PyDict::new(py);
+            if let Ok(meta) = &meta
+                && let Ok(meta) = meta.cast::<PyDict>()
+                && let Some(model) = meta.get_item("paradigms")?
+                && let Ok(model) = model.cast::<PyDict>()
+            {
+                if let Some(snapshots) = model.get_item("snapshots")?
+                    && let Ok(snapshots) = snapshots.cast::<PyDict>()
+                    && (snapshots.iter()).all(|(name, digest)| text(&name) && text(&digest))
+                {
+                    paradigms.set_item("snapshots", snapshots)?;
+                }
+                if let Some(words) = model.get_item("words")?
+                    && words.is_exact_instance_of::<PyInt>()
+                {
+                    paradigms.set_item("words", words)?;
+                }
+            }
+            info.set_item("paradigms", paradigms)?;
         }
         info.set_item("word_forms", self.dictionary.len())?;
         info.set_item("checksum", self.dictionary.checksum())?;
