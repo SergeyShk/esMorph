@@ -93,7 +93,7 @@ pub(crate) struct Sections {
     /// Diminutives: a line "lemma, part of speech, the word it is a diminutive of" with tabs for
     /// every lexeme of a diminutive, in the order of lemma and part of speech
     pub diminutives: String,
-    /// Verbs and how often texts have them in all their forms: a line "lemma, count" with tabs
+    /// Verbs and how often AnCora has them as verbs in all their forms: a line "lemma, count" with tabs
     /// for every verb of the counts, in the order of lemmas
     pub verbs: String,
 }

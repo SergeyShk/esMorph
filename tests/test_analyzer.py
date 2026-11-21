@@ -152,6 +152,8 @@ def test_colloquial_spelling_is_only_for_unknown_lowercase_words(morph):
     assert morph.analyze("cacao")[0].lemma == "cacao"
     assert morph.analyze("sentaos")[0].words == ("sentad", "os")
     assert morph.analyze("Julita")[0].pos == "PROPN"
+    # `ex` for `es` keeps the accents of the word: `estrás` is no `extras`
+    assert morph.analyze("estrás")[0].lemma == "estrás"
 
 
 @pytest.mark.parametrize(
@@ -458,15 +460,37 @@ def test_finite_forms_with_an_enclitic_without_an_accent(morph, word, lemma, wor
 
 
 def test_what_takes_no_enclitic_without_an_accent(morph):
-    # A form stressed before its last syllable takes the accent with an enclitic (`díjole`), an
-    # accented weak vowel is no diphthong, and a capital letter makes a name without context
+    # A form stressed before its last syllable takes the accent with an enclitic (`díjole`), and
+    # an accented weak vowel is no diphthong
     assert morph.analyze("dijole")[0].source == "guess"
     assert morph.analyze("atenianos")[0].lemma == "ateniano"
-    assert morph.analyze("Volviose")[0].pos == "PROPN"
-    # A lone `se` is of the third person, and an imperative stays itself
+    # `te`, `os` and `nos` after the first person end nouns more often
+    for word in ("anisete", "picote", "deos", "macarenos"):
+        assert morph.analyze(word)[0].source == "guess"
+    # With a capital letter a form with `se`, `me` or `le` is a verb, one with another clitic a name
+    assert morph.analyze("Volviose")[0].pos == "VERB"
+    assert morph.analyze("Vila")[0].pos == "PROPN"
+    # The guesses go after the verb, the most probable first
+    probabilities = [analysis.prob for analysis in morph.analyze("fuime")]
+    assert probabilities == sorted(probabilities, reverse=True)
+    # A lone `se` is of the third person, and `-nos` after a verb is `nos`
     assert {a.source for a in morph.analyze("finesse")} == {"guess"}
     assert {a.source for a in morph.analyze("dise")} == {"guess"}
-    assert morph.analyze("acerqueme")[0].feats["Mood"] == "Imp"
+    assert morph.analyze("parecíanos")[0].words == ("parecía", "nos")
+    # an imperative that would take an accent goes after the preterite, as in `levánteme`
+    assert [a.words for a in morph.analyze("acerqueme")] == [("acerqué", "me"), ("acerque", "me")]
+
+
+def test_imperative_before_usted(morph):
+    # The preterite without an accent goes first, but before `usted` the imperative does
+    assert (
+        morph.analyze_sentence(["Señora", ",", "perdoneme", "usted", "."])[2][0].feats["Mood"]
+        == "Imp"
+    )
+    assert (
+        morph.analyze_sentence(["Levanteme", "temprano", "y", "salí", "."])[0][0].feats["Mood"]
+        == "Ind"
+    )
 
 
 def test_words_of_the_dictionary_are_not_split(morph):
@@ -1916,10 +1940,8 @@ def test_known_roman_numerals_and_names_with_clitics(morph):
     # An acronym that looks like a numeral stays a name
     assert morph.analyze("CD")[0].pos == "PROPN"
     mandela = morph.analyze("Mandela")
-    assert [(a.lemma, a.pos, a.source) for a in mandela] == [
-        ("Mandela", "PROPN", "rule"),
-        ("mandar", "VERB", "clitics"),
-    ]
+    assert (mandela[0].lemma, mandela[0].pos, mandela[0].source) == ("Mandela", "PROPN", "rule")
+    assert {(a.lemma, a.pos, a.source) for a in mandela[1:]} == {("mandar", "VERB", "clitics")}
     assert morph.analyze("mandela")[0].source == "clitics"
     # An imperative with an accent is mostly a verb, and case does not matter for its words
     verb = morph.analyze("Dámelo")[0]
@@ -2178,5 +2200,8 @@ def test_verbs_of_a_form(morph):
         "dar",
         "venir",
     ]
+    # A form of a rare verb beside a frequent one is the frequent one, though a few mistakes of
+    # the treebanks have it as the rare one
+    assert morph.lemmatize(["vengan"]) == ["venir"]
     # In a sentence a rare verb gives way to a frequent one by the frequency of the verbs
     assert morph.analyze_sentence(["Aunque", "vengan", "tarde", "."])[1][0].lemma == "venir"

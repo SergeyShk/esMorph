@@ -120,7 +120,8 @@ impl Dictionary {
                 .or_else(|| self.ser_ir(&lower, sentence, at))
                 .or_else(|| self.verb_after(&lower, sentence, at))
                 .or_else(|| self.opening_word(words, sentence, at, start))
-                .or_else(|| self.question_verb(words, sentence, at));
+                .or_else(|| self.question_verb(words, sentence, at))
+                .or_else(|| self.imperative_of_usted(&lower, sentence, at));
             if let Some(index) = chosen {
                 promote(&mut sentence[at], index);
             }
@@ -398,7 +399,30 @@ impl Dictionary {
         })
     }
 
-    /// Shares of the verbs of a word by how often the treebanks have them in all their forms, among
+    /// A verb with clitics before `usted` is its imperative, though without an accent the preterite
+    /// goes first: `perdoneme usted`, `jureme usted`
+    fn imperative_of_usted(
+        &self,
+        lower: &[String],
+        sentence: &[Vec<Analysis>],
+        at: usize,
+    ) -> Option<usize> {
+        let list = &sentence[at];
+        let top = list.first()?;
+        if !matches!(
+            lower.get(at + 1).map(String::as_str),
+            Some("usted" | "ustedes")
+        ) || top.source != Source::Clitics
+            || self.has(top, "Mood", "Imp")
+        {
+            return None;
+        }
+        list.iter().position(|analysis| {
+            analysis.source == Source::Clitics && self.has(analysis, "Mood", "Imp")
+        })
+    }
+
+    /// Shares of the verbs of a word by how often AnCora has them as verbs in all their forms, among
     /// its verbs, if it is the form of several (`venga` of `venir` and `vengar`), empty otherwise;
     /// by the probabilities of its analyses if the treebanks have none of them
     pub(crate) fn verb_shares(&self, list: &[Analysis]) -> Vec<(String, f64)> {

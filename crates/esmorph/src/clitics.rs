@@ -34,10 +34,10 @@ const HOMONYMS: [&str; 13] = [
 /// Share of the verb with clitics among the analyses of such a word: the words of the dictionary
 /// keep one in 27
 pub(crate) const HOMONYM_SHARE: f64 = 26.0 / 27.0;
-/// Share of a finite form with an enclitic written without an accent among the analyses of an
-/// unknown word: of 60 such tokens of prose 59 are such verbs (`quedose`), one is another word
-/// (`deos`, `dedos`)
-pub(crate) const FINITE_ENCLITIC_SHARE: f64 = 59.0 / 60.0;
+/// Share of a finite form with an enclitic written without an accent among the analyses of a
+/// word: of the tokens of prose that the rule reads so, 95 % are such verbs (`quedose`, `fuime`),
+/// the others other words (`hase` for `hace`, Latin `esse`)
+pub(crate) const FINITE_ENCLITIC_SHARE: f64 = 0.95;
 
 /// Whether a word in lower case is a clitic: `la` after a verb is a pronoun, not an article
 pub(crate) fn is_clitic(word: &str) -> bool {
@@ -70,8 +70,24 @@ pub(crate) fn splits(token: &str) -> Vec<Split<'_>> {
     let mut found = Vec::new();
     let mut clitics = Vec::new();
     collect(token, &mut clitics, u8::MAX, &mut found);
-    found.sort_by_key(|split| std::cmp::Reverse(split.clitics.len()));
+    // The most clitics first, then the longest: `parecíanos` is `parecía` + `nos`, not `parecían`
+    // + `os`
+    found.sort_by_key(|split| {
+        let letters: usize = split.clitics.iter().map(|clitic| clitic.len()).sum();
+        std::cmp::Reverse((split.clitics.len(), letters))
+    });
     found
+}
+
+/// Splits of a token in lower case into a host and one clitic
+pub(crate) fn single_splits(token: &str) -> impl Iterator<Item = Split<'_>> {
+    CLITICS.iter().filter_map(move |&(clitic, _)| {
+        let host = token.strip_suffix(clitic)?;
+        (host.chars().count() >= MIN_HOST).then(|| Split {
+            host,
+            clitics: vec![clitic],
+        })
+    })
 }
 
 fn collect<'a>(

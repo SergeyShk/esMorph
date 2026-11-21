@@ -133,7 +133,7 @@ The analyses of the tokens of a sentence, as [`analyze`](#analyze) gives them, o
     - before `a` (`á` in older writing) and its goal, unless a prepositional or an adverbial phrase or an hour follows (`fue a casa`, but `fue a partir de 1990`, `fue al principio`, `fue a las cinco`);
     - before a gerund (`fue cayendo`);
 - a word after a clitic, the negation or `tú` is a verb (`que te vayas`, `no vayas`), though not after a preposition (`punto de no retorno`); after a clitic so is an adverb, an adjective or a participle (`se acerca`, `te quedas`, `me visto`), and after `le`, `les`, `la` and `lo` a plural noun that may be a verb (`le faltas`);
-- a capitalized imperative opening a sentence is no name (`Indique si desea`), unless the model ranks a noun of the dictionary above it (`Sangre de Abel`), and neither is a verb of `tú` after `¿` or `¡` before a lowercase word (`¿Quieres más?`, `¡Eres un ingrato!`);
+- a capitalized imperative opening a sentence is no name (`Indique si desea`), unless the model ranks a noun of the dictionary above it (`Sangre de Abel`), and neither is a verb of `tú` after `¿` or `¡` before a lowercase word (`¿Quieres más?`, `¡Eres un ingrato!`); a verb with clitics before `usted` is the imperative (`perdoneme usted`);
 - a word of the dictionary that is mostly a verb with clitics is one (`¡Cállate!`);
 - a rare verb gives way to a frequent one with the same form (`aunque vengan` is `venir`, not `vengar`), unless the model chose a participle (`había entrevisto`).
 
