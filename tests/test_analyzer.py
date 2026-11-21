@@ -1019,9 +1019,10 @@ def test_analyze_sentence(morph):
         ("Me fue de gran ayuda .", 1, ("ser", "AUX")),
         ("Su satisfacción fue al ver a su hijo .", 2, ("ser", "AUX")),
         ("Echó fuera a los intrusos .", 1, ("fuera", "ADV")),
-        # A noun after the subject `yo` is the verb of the first person
+        # A noun after the subject `yo` is the verb of the first person, a noun without one stays
         ("Yo bebo agua .", 1, ("beber", "VERB")),
         ("Yo canto bien .", 1, ("cantar", "VERB")),
+        ("Yo casa no tengo .", 1, ("casa", "NOUN")),
         # A name after `no` and a noun after `tú` or `yo` that follows a verb stay
         ("Ganó Madrid y no Lima .", 4, ("Lima", "PROPN")),
         ("¿ Has visto tú cosa igual ?", 4, ("cosa", "NOUN")),

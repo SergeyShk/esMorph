@@ -346,7 +346,8 @@ impl Dictionary {
     }
 
     /// A word the model reads as a noun after a reflexive or a dative clitic, the negation or
-    /// `tú` is a finite verb: `que te vayas`, `no vayas`, `adonde tú vayas`; so is one it reads as
+    /// `tú` is a finite verb, after `yo` a verb of the first person: `que te vayas`, `no vayas`,
+    /// `adonde tú vayas`, `yo bebo`; so is one it reads as
     /// an adverb, an adjective or a participle after such a clitic, which no participle follows:
     /// `se acerca`, `te quedas`, `me visto`, and a plural noun after another clitic: `le faltas`,
     /// `lo preguntas`
@@ -386,8 +387,12 @@ impl Dictionary {
         {
             return None;
         }
+        // After `yo` the verb agrees with it: `porque yo calle`, while `yo casa` stays a noun
+        let person = (negation && lower[before] == "yo").then_some("1");
         list.iter().position(|analysis| {
-            matches!(self.pos(analysis), "VERB" | "AUX") && self.has(analysis, "VerbForm", "Fin")
+            matches!(self.pos(analysis), "VERB" | "AUX")
+                && self.has(analysis, "VerbForm", "Fin")
+                && person.is_none_or(|person| self.has(analysis, "Person", person))
         })
     }
 
