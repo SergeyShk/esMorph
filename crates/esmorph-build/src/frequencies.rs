@@ -16,6 +16,11 @@ const PRIOR: f64 = 1.0;
 /// words: a form the treebanks saw keeps the order they give it (`sienta` is `sentar`), while the
 /// rule of the frequent verb reads the frequency itself (`Dictionary::verb_frequency`)
 const LEXEME_PRIOR: f64 = 3.0;
+/// Shares of verbs of a form among all its verbs: the counts of the form are not those of a rare
+/// verb beside a frequent one, as a few mistakes of the treebanks would make `vengan` `vengar`;
+/// as the rule of the frequent verb in context
+const RARE: f64 = 0.2;
+const FREQUENT: f64 = 0.6;
 
 /// An analysis of a form
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -199,7 +204,7 @@ impl Counts {
         f64::from(self.lemmas.get(&key).copied().unwrap_or(0))
     }
 
-    /// How often the treebanks have every verb as a verb in all its forms: `ser` is an auxiliary
+    /// How often AnCora has every verb as a verb in all its forms: `ser` is an auxiliary
     /// there, so it does not outweigh `ir` in `fue`
     pub fn verbs(&self) -> BTreeMap<&str, u32> {
         (self.lexemes.iter())
@@ -257,12 +262,19 @@ impl Counts {
             let prior = PRIOR * ending(pos) / endings;
             let p_pos = (self.part(form, pos) + prior) / (seen_pos + PRIOR);
             let lemmas = distinct(|row| row.lemma, &of_pos);
-            let seen_lemma: f64 = lemmas.iter().map(|l| self.lemma(form, pos, l)).sum();
             // The lemmas of a verb form are other verbs (`vengo` of `venir` and `vengar`), weighed by
             // their frequency; those of other words are mostly variants of one word (`consejera`
             // and `consejero`), equal
             let verb = pos == "VERB";
             let lexemes: f64 = lemmas.iter().map(|l| self.lexeme(pos, l)).sum();
+            let frequent = verb
+                && lemmas.len() > 1
+                && (lemmas.iter()).any(|l| self.lexeme(pos, l) > FREQUENT * lexemes);
+            let counted = |lemma: &str| match frequent && self.lexeme(pos, lemma) < RARE * lexemes {
+                true => 0.0,
+                false => self.lemma(form, pos, lemma),
+            };
+            let seen_lemma: f64 = lemmas.iter().map(|l| counted(l)).sum();
             seen_lexeme |= verb && lemmas.len() > 1 && lexemes > lemmas.len() as f64;
             let weight = if verb { LEXEME_PRIOR } else { PRIOR };
             for &lemma in &lemmas {
@@ -276,7 +288,7 @@ impl Counts {
                 } else {
                     weight / lemmas.len() as f64
                 };
-                let p_lemma = (self.lemma(form, pos, lemma) + prior) / (seen_lemma + weight);
+                let p_lemma = (counted(lemma) + prior) / (seen_lemma + weight);
                 let seen_tag: f64 = of_lemma.iter().map(|&r| self.analysis(form, r)).sum();
                 let tags: f64 = of_lemma.iter().map(|&r| self.tag(r)).sum();
                 for &row in &of_lemma {
