@@ -113,7 +113,7 @@ Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esM
 
 ### Análisis en contexto
 
-`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas ocho veces más rápido.
+`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas ocho y nueve veces más rápido.
 
 ```python
 >>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])
@@ -220,7 +220,7 @@ El porcentaje de palabras cuyo primer análisis tiene el lema correcto, y la cat
 | spaCy es_core_news_sm | 98.61 | 96.69 | 93.39 | 95.85 | 84.22 | 85.82 | 51 786 |
 | Stanza | 99.20 | **97.80** | 94.98 | **97.51** | 86.68 | 89.19 | 3136 |
 
-En contexto esMorph elige el análisis por la oración, como spaCy y Stanza; ellos están entrenados en AnCora y allí van por delante en los rasgos y en todo a la vez, mientras que en PUD y COSER, nuevos para todos, la categoría, los rasgos y el lema de esMorph aciertan a la vez más a menudo. Un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 97-99 % de las palabras. Da la forma de referencia del 99.66, el 93.29 y el 95.55 % de los verbos de AnCora, PUD y COSER, frente al 98.89, el 92.71 y el 93.61 % de ablaut. Un texto corto junto con la carga tarda 3.3 ms frente a 0.30-1.7 s, y cada proceso más con el mismo diccionario añade 4.3 MB de memoria. Medido en un Apple M3 Pro con Python 3.11.
+En contexto esMorph elige el análisis por la oración, como spaCy y Stanza; ellos están entrenados en AnCora y allí van por delante en los rasgos y en todo a la vez, mientras que en PUD y COSER, nuevos para todos, la categoría, los rasgos y el lema de esMorph aciertan a la vez más a menudo. Un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 97-99 % de las palabras. Da la forma de referencia del 99.66, el 93.29 y el 95.55 % de los verbos de AnCora, PUD y COSER, frente al 98.89, el 92.71 y el 93.61 % de ablaut. Un texto corto junto con la carga tarda 3.2 ms frente a 0.30-1.6 s, y cada proceso más con el mismo diccionario añade 4.3 MB de memoria. Medido en un Apple M3 Pro con Python 3.11.
 
 Más detalles en la [documentación](https://sergeyshk.github.io/esMorph/es/comparison/): todas las métricas, la flexión de los verbos, la gráfica de la velocidad según el tamaño del texto, la memoria y cómo se midió.
 
