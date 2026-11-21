@@ -308,8 +308,8 @@ The parameter `words` adds words that the dictionary does not have. Each word co
 
 - The word takes the forms of the lexemes of its sample with their features, order and shares: `{"tiktokear": "bloguear"}` gives `tiktokeo`, `tiktokeó` and `tiktokeando`.
 - A sample with lexemes of several parts of speech needs the part of speech, a UD tag in capitals, in a pair: `{"zajo": ("bajo", "NOUN")}`; the pair may be a list, and several parts of speech are separated by commas: `{"tiktokero": ("bloguero", "ADJ,NOUN")}`. An empty part of speech is none.
-- The word takes the endings of its sample, so the sample is a word of the same part of speech with the same ending: `{"guau": ("miau", "INTJ")}`, `{"Gotemburgo": ("Hamburgo", "PROPN")}`.
-- A sample may be an own word given before it: `{"tiktokear": "bloguear", "feisbuquear": "tiktokear"}`.
+- The word takes the endings of its sample, so the sample is a word of the same part of speech with the same ending: `{"marramiau": ("miau", "INTJ")}`, `{"Wolfsburgo": ("Hamburgo", "PROPN")}`.
+- A sample may be an own word given earlier: `{"tiktokear": "bloguear", "feisbuquear": "tiktokear"}`.
 - An own word may have letters that the dictionary has not.
 - A word of the dictionary given as an own word keeps its analyses, and the new ones join them.
 - The analyses of own words are those of words of the dictionary, with `source` equal to `"dictionary"`, and they are [inflected](inflection.md) like their samples.

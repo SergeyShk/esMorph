@@ -645,7 +645,7 @@ fn _analyzer(
     if let Some(analyzer) = known_own(py, &path, verify, words)? {
         return Ok(analyzer);
     }
-    let words = own_words(words)?;
+    let words = saved_words(words)?;
     if words.is_empty() {
         return shared(py, path, verify);
     }
@@ -766,7 +766,7 @@ fn _analyses_analyzer(
     if let Some(analyzer) = known_own(py, &path, verify, words)? {
         return Ok(analyzer);
     }
-    let words = own_words(words)?;
+    let words = saved_words(words)?;
     let restore = |path: Option<PathBuf>| match words.is_empty() {
         true => shared(py, path, verify),
         false => with_own_words(py, path, verify, words.clone()),
@@ -864,8 +864,8 @@ fn verified(analyzer: &Bound<'_, Analyzer>, verify: bool) -> PyResult<()> {
 ///         lemma (`{"tiktokear": "bloguear"}` gives `tiktokeo`, `tiktokeó`), with the part of
 ///         speech in a pair, a tuple or a list, if the sample has lexemes of several
 ///         (`{"zajo": ("bajo", "NOUN")}`; several are separated by commas: `"ADJ,NOUN"`; an empty
-///         one is none). A sample may be an own word given before it. The analyses of own words
-///         are those of words of the dictionary; pickle keeps the words
+///         one is none). A sample may be an own word given earlier. The analyses of own words are
+///         those of words of the dictionary; pickle keeps the words
 ///
 /// Raises:
 ///     FileNotFoundError: If there is no dictionary file
@@ -1003,16 +1003,20 @@ impl OwnWordList {
     }
 }
 
+/// Own words of pickle: its text, or a mapping in a pickle of an earlier version
+fn saved_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<OwnWordList> {
+    match words.map(|words| words.cast::<PyString>()) {
+        Some(Ok(text)) => OwnWordList::from_text(&text.to_cow()?),
+        _ => own_words(words),
+    }
+}
+
 /// Own words of a mapping "word - sample or (sample, part of speech)"; the pair is a tuple or a list,
 /// as JSON gives it
 fn own_words(words: Option<&Bound<'_, PyAny>>) -> PyResult<OwnWordList> {
     let Some(words) = words.filter(|words| !words.is_none()) else {
         return Ok(OwnWordList::default());
     };
-    // Pickle keeps them as text; one of an earlier version, as a mapping
-    if let Ok(text) = words.cast::<PyString>() {
-        return OwnWordList::from_text(&text.to_cow()?);
-    }
     let wrong = || PyTypeError::new_err("words must map strings to strings or pairs of strings");
     let items = words
         .call_method0(intern!(words.py(), "items"))

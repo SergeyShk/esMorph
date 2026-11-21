@@ -330,6 +330,7 @@ def test_pickle_keeps_own_words():
     # A part of speech is kept without the spaces around it
     pair = Analyzer(words={"tiktokero": ("bloguero", "ADJ, NOUN")})
     assert pair.__reduce__()[1][2] == "tiktokero\tbloguero\tADJ,NOUN\n"
+    assert pickle.loads(pickle.dumps(pair)) is pair
     assert pickle.loads(pickle.dumps(pair.analyze("tiktokeros"))) == pair.analyze("tiktokeros")
     # A new process makes the analyzer once, for the analyzer and the analyses of every pickle
     result = subprocess.run(
@@ -362,6 +363,7 @@ def test_own_words_keep_the_forms_of_other_words():
         ({"zajo": ("bajo", "NOUN,")}, ValueError, "have an empty one"),
         ({"guau": ("ay", "INTJ")}, ValueError, "the same part of speech with the same ending"),
         ({"tiktokear": 1}, TypeError, "words must map"),
+        ("tiktokear\tbloguear\n", TypeError, "words must map"),
         (["tiktokear"], TypeError, "words must map"),
     ],
 )

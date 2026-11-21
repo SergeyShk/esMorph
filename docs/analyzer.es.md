@@ -308,8 +308,8 @@ El parámetro `words` añade palabras que el diccionario no tiene. Cada palabra 
 
 - La palabra toma las formas de los lexemas de su modelo con sus rasgos, su orden y sus proporciones: `{"tiktokear": "bloguear"}` da `tiktokeo`, `tiktokeó` y `tiktokeando`.
 - Un modelo con lexemas de varias categorías necesita la categoría, una etiqueta de UD en mayúsculas, en un par: `{"zajo": ("bajo", "NOUN")}`; el par puede ser una lista, y varias categorías se separan con comas: `{"tiktokero": ("bloguero", "ADJ,NOUN")}`. Una categoría vacía es ninguna.
-- La palabra toma las terminaciones de su modelo, así que el modelo es una palabra de la misma categoría con la misma terminación: `{"guau": ("miau", "INTJ")}`, `{"Gotemburgo": ("Hamburgo", "PROPN")}`.
-- Un modelo puede ser una palabra propia dada antes que él: `{"tiktokear": "bloguear", "feisbuquear": "tiktokear"}`.
+- La palabra toma las terminaciones de su modelo, así que el modelo es una palabra de la misma categoría con la misma terminación: `{"marramiau": ("miau", "INTJ")}`, `{"Wolfsburgo": ("Hamburgo", "PROPN")}`.
+- Un modelo puede ser una palabra propia dada antes que la palabra: `{"tiktokear": "bloguear", "feisbuquear": "tiktokear"}`.
 - Una palabra propia puede tener letras que el diccionario no tiene.
 - Una palabra del diccionario dada como palabra propia conserva sus análisis, y los nuevos se suman a ellos.
 - Los análisis de las palabras propias son los de las palabras del diccionario, con `source` igual a `"dictionary"`, y se [flexionan](inflection.md) como sus modelos.
