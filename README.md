@@ -36,7 +36,7 @@ It chooses the analysis of a word by its sentence with a small context model, al
 * **[Verbs with clitics](https://sergeyshk.github.io/esMorph/analysis/#clitics)** - a verb with enclitic pronouns and its words: `dámelo` is `da` + `me` + `lo`
 * **[Diminutives](https://sergeyshk.github.io/esMorph/analysis/#diminutives)** - the word a diminutive comes from: `casitas` is of `casa`
 * **[Tokens out of the dictionary](https://sergeyshk.github.io/esMorph/analysis/#rules)** - punctuation, numbers, ordinals, Roman numerals, names, addresses and abbreviations by rules
-* **[Unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess)** - analyses by the ending, a hyphen or a prefix, and the forms of guessed words
+* **[Unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess)** - analyses by the ending, chosen by a small [model](https://sergeyshk.github.io/esMorph/models/), a hyphen or a prefix, and the forms of guessed words
 * **[Inflection](https://sergeyshk.github.io/esMorph/inflection/)** - the forms of a lexeme and the form with given UD features
 * **[The esmorph command](https://sergeyshk.github.io/esMorph/cli/)** - lemmas, CoNLL-U, TSV or JSON Lines of text, tokens or CoNLL-U from files and the standard input
 * **[Comparison](https://sergeyshk.github.io/esMorph/comparison/)** - accuracy, inflection and speed compared with simplemma, spaCy, Stanza, ablaut and verbecc
@@ -152,7 +152,7 @@ See the [documentation](https://sergeyshk.github.io/esMorph/analysis/#ud).
 
 <br>
 
-Tokens that the dictionary does not have get the analyses of rules, with `source` equal to `"rule"`: punctuation, symbols, numbers in digits, ordinals (`2.ª`), Roman numerals, names, addresses and abbreviations. A lowercase word that neither the dictionary nor the rules know is guessed, with `source` equal to `"guess"`: by its last part after a hyphen, by the word without a known prefix, as a verb with clitics or by the dictionary words with its ending. A guessed word has its forms too.
+Tokens that the dictionary does not have get the analyses of rules, with `source` equal to `"rule"`: punctuation, symbols, numbers in digits, ordinals (`2.ª`), Roman numerals, names, addresses and abbreviations. A lowercase word that neither the dictionary nor the rules know is guessed, with `source` equal to `"guess"`: by its last part after a hyphen, by the word without a known prefix, as a verb with clitics or by the dictionary words with its endings, among which a small model trained on the words of the dictionary chooses. A guessed word has its forms too.
 
 ```python
 >>> [(a.lemma, a.pos, a.source) for w in ["2.ª", "10.000", "xii"] for a in morph.analyze(w)]

@@ -51,7 +51,7 @@ The object keeps the absolute dictionary path in `path` of type `Path`, read-onl
 analyze(word)
 ```
 
-Analyses of the word form, the most probable first; the probabilities sum to 1. Case does not matter for finding the word in the dictionary, though a token with a capital letter may also be a name, and a word absent as written is looked for without its accents and with a lost diaeresis ([spelling](analysis.md#spelling)). A verb with enclitic pronouns is analyzed as its verb ([clitics](analysis.md#clitics)), a token that the dictionary does not have - a sign, a number, a name - [by rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). A token that nothing analyzes - with a space or a control character, a lowercase word without a sample such as `qzxw` - has no analyses.
+Analyses of the word form, the most probable first; the probabilities sum to 1. Case does not matter for finding the word in the dictionary, though a token with a capital letter may also be a name, and a word absent as written is looked for without its accents and with a lost diaeresis ([spelling](analysis.md#spelling)). A verb with enclitic pronouns is analyzed as its verb ([clitics](analysis.md#clitics)), a token that the dictionary does not have - a sign, a number, a name - [by rules](analysis.md#rules), and an unknown lowercase word is [guessed](analysis.md#guess). A token that nothing analyzes - with a space or a control character, a lowercase word without a sample such as `qzxw` - has no analyses. The model of unknown words is read on the first guessed word, in about a millisecond and a half.
 
 | Parameter | Type | Default | Description |
 | :-------- | :--- | :------ | :---------- |

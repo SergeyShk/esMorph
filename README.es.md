@@ -36,7 +36,7 @@ Elige el análisis de una palabra según su oración con un pequeño modelo de c
 * **[Verbos con clíticos](https://sergeyshk.github.io/esMorph/es/analysis/#clitics)** - un verbo con pronombres enclíticos y sus palabras: `dámelo` es `da` + `me` + `lo`
 * **[Diminutivos](https://sergeyshk.github.io/esMorph/es/analysis/#diminutives)** - la palabra de la que viene un diminutivo: `casitas` es de `casa`
 * **[Tokens fuera del diccionario](https://sergeyshk.github.io/esMorph/es/analysis/#rules)** - puntuación, números, ordinales, números romanos, nombres, direcciones y abreviaturas por reglas
-* **[Palabras desconocidas](https://sergeyshk.github.io/esMorph/es/analysis/#guess)** - análisis por la terminación, un guion o un prefijo, y las formas de las palabras adivinadas
+* **[Palabras desconocidas](https://sergeyshk.github.io/esMorph/es/analysis/#guess)** - análisis por la terminación, elegidos por un pequeño [modelo](https://sergeyshk.github.io/esMorph/es/models/), un guion o un prefijo, y las formas de las palabras adivinadas
 * **[Flexión](https://sergeyshk.github.io/esMorph/es/inflection/)** - las formas de un lexema y la forma con los rasgos de UD dados
 * **[El comando esmorph](https://sergeyshk.github.io/esMorph/es/cli/)** - lemas, CoNLL-U, TSV o JSON Lines de texto, tokens o CoNLL-U de archivos y de la entrada estándar
 * **[Comparación](https://sergeyshk.github.io/esMorph/es/comparison/)** - precisión, flexión y velocidad frente a simplemma, spaCy, Stanza, ablaut y verbecc
@@ -152,7 +152,7 @@ Más detalles en la [documentación](https://sergeyshk.github.io/esMorph/es/anal
 
 <br>
 
-Los tokens que el diccionario no tiene reciben los análisis de unas reglas, con `source` igual a `"rule"`: la puntuación, los símbolos, los números con cifras, los ordinales (`2.ª`), los números romanos, los nombres, las direcciones y las abreviaturas. Una palabra en minúsculas que no conocen ni el diccionario ni las reglas se adivina, con `source` igual a `"guess"`: por su última parte tras un guion, por la palabra sin un prefijo conocido, como un verbo con clíticos o por las palabras del diccionario con su terminación. Una palabra adivinada también tiene sus formas.
+Los tokens que el diccionario no tiene reciben los análisis de unas reglas, con `source` igual a `"rule"`: la puntuación, los símbolos, los números con cifras, los ordinales (`2.ª`), los números romanos, los nombres, las direcciones y las abreviaturas. Una palabra en minúsculas que no conocen ni el diccionario ni las reglas se adivina, con `source` igual a `"guess"`: por su última parte tras un guion, por la palabra sin un prefijo conocido, como un verbo con clíticos o por las palabras del diccionario con sus terminaciones, entre las que elige un pequeño modelo entrenado con las palabras del diccionario. Una palabra adivinada también tiene sus formas.
 
 ```python
 >>> [(a.lemma, a.pos, a.source) for w in ["2.ª", "10.000", "xii"] for a in morph.analyze(w)]

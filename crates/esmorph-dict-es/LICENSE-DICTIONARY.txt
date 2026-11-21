@@ -16,7 +16,9 @@ The dictionary of esMorph (es.dict) is built from:
   (https://github.com/UniversalDependencies/UD_Spanish-GSD), release 2.19, licensed under the Creative
   Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0);
 - the context model (data/es-context.bin), trained on the training parts of UD Spanish AnCora and
-  UD Spanish GSD, release 2.19, and chosen by their development parts.
+  UD Spanish GSD, release 2.19, and chosen by the development part of UD Spanish AnCora;
+- the paradigm model of unknown words (data/es-paradigms.bin), trained on the words of the
+  dictionary itself with the frequencies of the tags of these treebanks.
 
 The esMorph dictionary is an adaptation of these data and is distributed under the Creative Commons
 Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0):
