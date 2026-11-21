@@ -7,7 +7,7 @@
 use super::paradigm::{Features, Paradigms};
 use super::{Analysis, Dictionary, Entry, Host, Source, guess_list, with_host_source};
 use crate::clitics;
-use crate::format::{EXTRA, MAX_ENDING, MIN_ENDING_COUNT};
+use crate::format::{EXTRA, LEMMA_ONLY, MAX_ENDING, MIN_ENDING_COUNT, SPOKEN, VARIANT};
 
 /// Prefixes after which an unknown word is analyzed as the dictionary word without them, the
 /// longest first; prefixes of two letters (`re`, `co`, `ex`) start too many other words
@@ -401,18 +401,33 @@ impl Dictionary {
     #[doc(hidden)]
     pub fn guess_examples(&self, word: &str) -> Vec<GuessCandidate> {
         let own = self.found(word);
-        let entries: Vec<Entry> = own.iter().filter_map(|analysis| analysis.entry).collect();
-        let extra = |entry: &Entry| {
-            (self.lexeme(*entry, word))
-                .is_some_and(|lexeme| lexeme.cells.iter().any(|&cell| cell & EXTRA != 0))
+        let all: Vec<Entry> = own.iter().filter_map(|analysis| analysis.entry).collect();
+        // The forms whose word forms the lists count: a variant, a spoken spelling and a form of
+        // the extra source guess nothing
+        let cell = |entry: &Entry| {
+            let lexeme = self.lexeme(*entry, word)?;
+            Some((
+                lexeme.cells.get(usize::from(entry.form)).copied()?,
+                lexeme.cells,
+            ))
         };
-        if entries.iter().any(extra) {
-            return Vec::new();
+        let mut entries = Vec::with_capacity(all.len());
+        for entry in &all {
+            let Some((flags, cells)) = cell(entry) else {
+                continue;
+            };
+            if flags & (EXTRA | VARIANT | SPOKEN | LEMMA_ONLY) != 0 {
+                continue;
+            }
+            if cells.iter().any(|&cell| cell & EXTRA != 0) {
+                return Vec::new();
+            }
+            entries.push(*entry);
         }
         (self.guess_candidates(word, &entries).into_iter())
             .filter_map(|candidate| {
                 let cell = self.guess_cell(candidate.entry, word)?;
-                let gold = entries.contains(&candidate.entry)
+                let gold = all.contains(&candidate.entry)
                     || (own.iter()).any(|known| known.ud == cell.ud && known.lemma == cell.lemma);
                 Some(GuessCandidate {
                     lemma_suffix: self.suffixes.get(cell.lemma_suffix)?.to_owned(),
