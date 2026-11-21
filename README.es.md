@@ -29,11 +29,12 @@
 
 **esMorph** es un analizador morfológico del español: un núcleo en Rust con API para Python. Para una forma de palabra busca los análisis en un diccionario creado a partir de [Wiktionary](https://en.wiktionary.org) - el lema, la categoría gramatical y los rasgos de [Universal Dependencies](https://universaldependencies.org/) -, los ordena por probabilidad y construye las formas de la palabra: conjugación, género y número.
 
-Elige el análisis de una palabra según su oración con un pequeño modelo de contexto, casi con la misma precisión que spaCy en AnCora y con más precisión que spaCy y Stanza en PUD y COSER, y analiza 176 mil tokens por segundo en contexto y 1.8 millones sin él, 4.0 y 40 veces más rápido que spaCy; lematiza casi tan rápido como simplemma, cuyos lemas aciertan menos en los conjuntos de prueba de UD de AnCora, PUD y COSER. Las categorías, los rasgos y los lemas siguen la guía de UD y las convenciones del treebank AnCora, así que los resultados se pueden comparar con spaCy, Stanza y otras herramientas de UD.
+Elige el análisis de una palabra según su oración con un pequeño modelo de contexto, casi con la misma precisión que spaCy en AnCora y con más precisión que spaCy y Stanza en PUD y COSER, y analiza 176 mil tokens por segundo en contexto y 1.9 millones sin él, 3.4 y 36 veces más rápido que spaCy; lematiza casi tan rápido como simplemma, cuyos lemas aciertan menos en los conjuntos de prueba de UD de AnCora, PUD y COSER. Las categorías, los rasgos y los lemas siguen la guía de UD y las convenciones del treebank AnCora, así que los resultados se pueden comparar con spaCy, Stanza y otras herramientas de UD.
 
 * **[Analizador](https://sergeyshk.github.io/esMorph/es/analyzer/)** - los análisis de una forma de palabra por probabilidad, los análisis de una oración en contexto, listas de palabras y lematización, documentos del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), comprobación de una forma de palabra en el diccionario
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/es/analysis/#ud)** - categorías, rasgos y lemas según la guía de UD y las convenciones de AnCora
 * **[Verbos con clíticos](https://sergeyshk.github.io/esMorph/es/analysis/#clitics)** - un verbo con pronombres enclíticos y sus palabras: `dámelo` es `da` + `me` + `lo`
+* **[Diminutivos](https://sergeyshk.github.io/esMorph/es/analysis/#diminutives)** - la palabra de la que viene un diminutivo: `casitas` es de `casa`
 * **[Tokens fuera del diccionario](https://sergeyshk.github.io/esMorph/es/analysis/#rules)** - puntuación, números, ordinales, números romanos, nombres, direcciones y abreviaturas por reglas
 * **[Palabras desconocidas](https://sergeyshk.github.io/esMorph/es/analysis/#guess)** - análisis por la terminación, un guion o un prefijo, y las formas de las palabras adivinadas
 * **[Flexión](https://sergeyshk.github.io/esMorph/es/inflection/)** - las formas de un lexema y la forma con los rasgos de UD dados
@@ -112,7 +113,7 @@ Más detalles en la documentación: [analizador](https://sergeyshk.github.io/esM
 
 ### Análisis en contexto
 
-`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas nueve veces más rápido.
+`analyze_sentence` ordena los análisis de los tokens de una oración con una pequeña red neuronal entrenada con los treebanks UD Spanish AnCora y GSD: el primero es el análisis que elige el contexto, y su probabilidad es la puntuación del modelo. `annotate` y el comando analizan en contexto por defecto; `context=False` y `--no-context` ordenan los análisis como `analyze`, unas ocho y nueve veces más rápido.
 
 ```python
 >>> sentence = morph.analyze_sentence(["Ella", "la", "vio"])
@@ -209,17 +210,17 @@ Más detalles en la [documentación](https://sergeyshk.github.io/esMorph/es/infl
 
 <br>
 
-El porcentaje de palabras cuyo primer análisis tiene el lema correcto, y la categoría, los rasgos y el lema correctos a la vez (partes de prueba de los treebanks de UD 2.18), y la velocidad del análisis de un texto:
+El porcentaje de palabras cuyo primer análisis tiene el lema correcto, y la categoría, los rasgos y el lema correctos a la vez (partes de prueba de los treebanks de UD 2.19), y la velocidad del análisis de un texto:
 
 | Sistema | Lema, AnCora | Lema, PUD | Lema, COSER | Todo a la vez, AnCora | Todo a la vez, PUD | Todo a la vez, COSER | Tokens por segundo |
 | :------ | :----------- | :-------- | :---------- | :-------------------- | :----------------- | :------------------- | :----------------- |
-| esMorph | 97.79 | 97.73 | 94.94 | 90.05 | **87.90** | 87.26 | 1 775 707 |
-| esMorph en contexto | **99.29** | 97.72 | **96.83** | 95.66 | 87.54 | **90.88** | 175 705 |
-| simplemma | 96.94 | 96.96 | 93.50 | - | - | - | **2 587 487** |
-| spaCy es_core_news_sm | 98.66 | 96.69 | 93.39 | 95.92 | 83.59 | 85.79 | 44 413 |
-| Stanza | 99.16 | **97.80** | 94.98 | **97.50** | 86.34 | 89.16 | 3097 |
+| esMorph | 97.83 | 97.69 | 94.92 | 90.32 | 87.71 | 84.73 | 1 870 173 |
+| esMorph en contexto | **99.32** | 97.71 | **96.83** | 95.84 | **88.22** | **90.26** | 176 332 |
+| simplemma | 96.96 | 96.96 | 93.50 | - | - | - | **2 989 005** |
+| spaCy es_core_news_sm | 98.61 | 96.69 | 93.39 | 95.85 | 84.22 | 85.82 | 51 786 |
+| Stanza | 99.20 | **97.80** | 94.98 | **97.51** | 86.68 | 89.19 | 3136 |
 
-En contexto esMorph elige el análisis por la oración, como spaCy y Stanza; ellos están entrenados en AnCora y allí van por delante en los rasgos y en todo a la vez, mientras que en PUD y COSER, nuevos para todos, la categoría, los rasgos y el lema de esMorph aciertan a la vez más a menudo. Un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 97-99 % de las palabras. Da la forma de referencia del 99.65, el 93.29 y el 95.55 % de los verbos de AnCora, PUD y COSER, frente al 98.87, el 92.71 y el 93.61 % de ablaut. Un texto corto junto con la carga tarda 3.2 ms frente a 0.32-1.7 s, y cada proceso más con el mismo diccionario añade 3.6 MB de memoria. Medido en un Apple M3 Pro con Python 3.11.
+En contexto esMorph elige el análisis por la oración, como spaCy y Stanza; ellos están entrenados en AnCora y allí van por delante en los rasgos y en todo a la vez, mientras que en PUD y COSER, nuevos para todos, la categoría, los rasgos y el lema de esMorph aciertan a la vez más a menudo. Un análisis con la categoría y el lema correctos está entre los análisis de esMorph para el 97-99 % de las palabras. Da la forma de referencia del 99.66, el 93.29 y el 95.55 % de los verbos de AnCora, PUD y COSER, frente al 98.89, el 92.71 y el 93.61 % de ablaut. Un texto corto junto con la carga tarda 3.2 ms frente a 0.30-1.6 s, y cada proceso más con el mismo diccionario añade 4.3 MB de memoria. Medido en un Apple M3 Pro con Python 3.11.
 
 Más detalles en la [documentación](https://sergeyshk.github.io/esMorph/es/comparison/): todas las métricas, la flexión de los verbos, la gráfica de la velocidad según el tamaño del texto, la memoria y cómo se midió.
 

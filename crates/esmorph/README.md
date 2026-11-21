@@ -15,6 +15,7 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 - Colloquial spellings of words of the dictionary analyzed as the standard words: `trabajao` is `trabajado`, `caridá`
   is `caridad`, `na` is `nada`.
 - Own words with the forms of a sample word of the dictionary: `Dictionary::with_words`.
+- The word a diminutive comes from: `Dictionary::diminutive_of` gives `casa` for `casitas`.
 - The dictionary is mapped into memory or read from the data of the program without copies.
 - Documents of the [anySeg](https://crates.io/crates/anyseg) segmenter get the lemma, the part of speech and the features of every word in one call.
 
@@ -22,7 +23,7 @@ Fast Spanish morphological analyzer written in Rust, the core of the
 
 ```toml
 [dependencies]
-esmorph = "0.4"
+esmorph = "0.5"
 ```
 
 The dictionary is in the crate [`esmorph-dict-es`](https://crates.io/crates/esmorph-dict-es), used through the feature `bundled` (on by default). Without it the dictionary is read from a file:
@@ -80,7 +81,7 @@ With the feature `anyseg` the dictionary fills the columns of the words of a doc
 
 ```toml
 [dependencies]
-esmorph = { version = "0.4", features = ["anyseg"] }
+esmorph = { version = "0.5", features = ["anyseg"] }
 ```
 
 ```rust
