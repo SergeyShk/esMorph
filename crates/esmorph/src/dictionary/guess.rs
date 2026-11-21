@@ -4,9 +4,10 @@
 //! (`autogenerarse`) and any other by the forms of the dictionary words with the same ending and
 //! their inflection tables. The lemma and the forms are those of the whole word
 
+use super::paradigm::{Features, Paradigms};
 use super::{Analysis, Dictionary, Entry, Host, Source, guess_list, with_host_source};
 use crate::clitics;
-use crate::format::MAX_ENDING;
+use crate::format::{MAX_ENDING, MIN_ENDING_COUNT};
 
 /// Prefixes after which an unknown word is analyzed as the dictionary word without them, the
 /// longest first; prefixes of two letters (`re`, `co`, `ex`) start too many other words
@@ -32,6 +33,50 @@ const MAX_GUESSED: usize = 64;
 /// The shortest word after a prefix of three letters: shorter rests are mostly other words,
 /// `destos` is no `des` + `tos`, `presona` no `pre` + `sona`
 const MIN_AFTER_SHORT_PREFIX: usize = 4;
+
+/// How many forms of the list of the longest ending guess a word without the paradigm model
+const MAX_COUNTED: usize = 10;
+
+/// The most analyses of a word that the paradigm model gives, and the least weight of one against
+/// the first
+const MAX_MODEL_GUESSES: usize = 10;
+const MIN_MODEL_SHARE: f64 = 0.01;
+
+/// A form of a table from the lists of the endings of an unknown word
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Candidate {
+    entry: Entry,
+    /// Length of the longest ending of the word whose list has the form
+    length: usize,
+    /// Number of word forms of the dictionary with this ending and form
+    count: u32,
+    /// Share of the form in the list of this ending
+    share: f32,
+}
+
+/// The UD tag, the lemma and the numbers of the suffixes of the lemma and the form of a candidate
+#[derive(Clone, Debug)]
+struct Cell {
+    ud: u16,
+    lemma: String,
+    lemma_suffix: usize,
+    form_suffix: usize,
+}
+
+/// A candidate of an example of the training of the paradigm model: its lemma and UD tag, its
+/// features and whether it is right
+#[doc(hidden)]
+#[derive(Clone, Debug)]
+pub struct GuessCandidate {
+    pub lemma: String,
+    pub ud: u16,
+    pub lemma_suffix: String,
+    pub form_suffix: String,
+    pub length: usize,
+    pub count: u32,
+    pub share: f32,
+    pub gold: bool,
+}
 
 /// Endings of an adjective of the absolute degree: `esbeltísima` is one, though the nouns and
 /// adverbs of the ending are more frequent words
@@ -173,13 +218,49 @@ impl Dictionary {
         Vec::new()
     }
 
-    /// Analyses by the longest ending of the word that the index has forms for: the forms of the
-    /// tables of dictionary words with this ending, by their numbers of word forms
+    /// Analyses by the endings of the word: with the paradigm model the forms of the lists of all
+    /// its endings chosen by the model, without it the forms of the longest ending that the index
+    /// has forms for, by their numbers of word forms and how often texts have their tags
     fn by_ending(&self, word: &str) -> Vec<Analysis> {
-        let starts: Vec<usize> = word.char_indices().map(|(at, _)| at).collect();
-        if starts.len() < MIN_GUESSED {
+        if word.chars().count() < MIN_GUESSED {
             return Vec::new();
         }
+        let found = match self.paradigm_model() {
+            Ok(Some(model)) => self.by_model(model, word),
+            // The model was checked when the dictionary was read
+            _ => self.by_counts(word),
+        };
+        // Forms of one lemma and tag in several tables are one analysis
+        let mut analyses: Vec<Analysis> = Vec::with_capacity(found.len());
+        for (cell, entry, weight) in found {
+            match (analyses.iter_mut())
+                .find(|known| known.lemma == cell.lemma && known.ud == cell.ud)
+            {
+                Some(known) => known.prob += weight,
+                None => analyses.push(Analysis {
+                    word: word.to_owned(),
+                    lemma: cell.lemma,
+                    ud: cell.ud,
+                    prob: weight,
+                    source: Source::Guess,
+                    entry: Some(entry),
+                    words: Vec::new(),
+                }),
+            }
+        }
+        let total: f64 = analyses.iter().map(|analysis| analysis.prob).sum();
+        for analysis in &mut analyses {
+            analysis.prob /= total;
+        }
+        analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
+        analyses
+    }
+
+    /// The forms of the longest ending of the word that has forms for it, with their weights: the
+    /// number of word forms times how often texts have the tag
+    fn by_counts(&self, word: &str) -> Vec<(Cell, Entry, f64)> {
+        let starts: Vec<usize> = word.char_indices().map(|(at, _)| at).collect();
+        let weights = self.tag_weights();
         for length in (1..=MAX_ENDING.min(starts.len() - 1)).rev() {
             let ending = &word[starts[starts.len() - length]..];
             let Some(forms) = (self.guesses.get(ending.as_bytes()))
@@ -187,59 +268,163 @@ impl Dictionary {
             else {
                 continue;
             };
-            let mut found: Vec<(Analysis, u64)> = Vec::new();
-            for &[record, count] in forms {
-                let entry = Entry {
-                    table: (record >> 16) as u16,
-                    form: record as u16,
-                };
-                let Some(lexeme) = self.lexeme(entry, word) else {
-                    continue;
-                };
-                let (Some(lemma), Some(ud)) = (
-                    lexeme.spell(&self.suffixes, 0),
-                    lexeme.ud(usize::from(entry.form)),
-                ) else {
-                    continue;
-                };
-                // A stem without a vowel is a coincidence, not a sample
-                if !lexeme.stem.chars().any(vowel) {
-                    continue;
-                }
-                match found
-                    .iter_mut()
-                    .find(|(known, _)| known.lemma == lemma && known.ud == ud)
-                {
-                    Some((_, total)) => *total += u64::from(count),
-                    None => found.push((
-                        Analysis {
-                            word: word.to_owned(),
-                            lemma,
-                            ud,
-                            prob: 0.0,
-                            source: Source::Guess,
-                            entry: Some(entry),
-                            words: Vec::new(),
-                        },
-                        u64::from(count),
-                    )),
-                }
-            }
-            if found.is_empty() {
-                continue;
-            }
-            let total: f64 = found.iter().map(|&(_, count)| count as f64).sum();
-            let mut analyses: Vec<Analysis> = found
-                .into_iter()
-                .map(|(analysis, count)| Analysis {
-                    prob: count as f64 / total,
-                    ..analysis
+            let found: Vec<(Cell, Entry, f64)> = (forms.iter().take(MAX_COUNTED))
+                .filter_map(|&[record, count]| {
+                    let entry = unpack(record);
+                    let cell = self.guess_cell(entry, word)?;
+                    let weight = weights.get(usize::from(cell.ud)).copied().unwrap_or(1);
+                    Some((cell, entry, f64::from(count) * f64::from(weight)))
                 })
                 .collect();
-            analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
-            return analyses;
+            if !found.is_empty() {
+                return found;
+            }
         }
         Vec::new()
+    }
+
+    /// The forms of the lists of all endings of the word chosen by the paradigm model: no more
+    /// than `MAX_MODEL_GUESSES` of the most probable, with their weights
+    fn by_model(&self, model: &Paradigms, word: &str) -> Vec<(Cell, Entry, f64)> {
+        let found: Vec<(Candidate, Cell)> = (self.guess_candidates(word, &[]).into_iter())
+            .filter_map(|candidate| Some((candidate, self.guess_cell(candidate.entry, word)?)))
+            .collect();
+        let Some(longest) = found.iter().map(|(candidate, _)| candidate.length).max() else {
+            return Vec::new();
+        };
+        let vector = model.word(word);
+        let scores: Vec<f64> = (found.iter())
+            .map(|(candidate, cell)| {
+                let features = Features {
+                    ud: cell.ud,
+                    lemma_suffix: cell.lemma_suffix,
+                    form_suffix: cell.form_suffix,
+                    length: candidate.length,
+                    count: candidate.count,
+                    share: candidate.share,
+                    longest: candidate.length == longest,
+                };
+                f64::from(model.score(&vector, &features))
+            })
+            .collect();
+        let top = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        // Forms of one table with one suffix are one lexeme with one stem. The model chooses the
+        // lexeme, and its equal forms (`verde` masculine or feminine) it tells apart at random: in
+        // training all of them are right. The weight of a lexeme goes to its forms by their numbers
+        // of word forms, as without the model
+        let lexeme = |at: usize| (found[at].0.entry.table, found[at].1.form_suffix);
+        let mut order: Vec<usize> = (0..found.len()).collect();
+        order.sort_by_key(|&at| lexeme(at));
+        let mut weights = vec![0.0; found.len()];
+        for group in order.chunk_by(|&a, &b| lexeme(a) == lexeme(b)) {
+            let mass: f64 = group.iter().map(|&at| (scores[at] - top).exp()).sum();
+            let count: f64 = group.iter().map(|&at| f64::from(found[at].0.count)).sum();
+            for &at in group {
+                weights[at] = mass * f64::from(found[at].0.count) / count;
+            }
+        }
+        // Equal weights keep the order of the lists
+        order.sort_unstable();
+        order.sort_by(|&a, &b| weights[b].total_cmp(&weights[a]));
+        let least = weights[order[0]] * MIN_MODEL_SHARE;
+        let mut found: Vec<Option<(Candidate, Cell)>> = found.into_iter().map(Some).collect();
+        (order.into_iter())
+            .take(MAX_MODEL_GUESSES)
+            .take_while(|&at| weights[at] >= least)
+            .filter_map(|at| {
+                let (candidate, cell) = found[at].take()?;
+                Some((cell, candidate.entry, weights[at]))
+            })
+            .collect()
+    }
+
+    /// The UD tag, the lemma and the suffixes of the form `entry` for the unknown word `word`;
+    /// `None` if the word does not end with the suffix of the form or its stem has no vowel: such
+    /// a stem is a coincidence, not a sample
+    fn guess_cell(&self, entry: Entry, word: &str) -> Option<Cell> {
+        let lexeme = self.lexeme(entry, word)?;
+        if !lexeme.stem.chars().any(vowel) {
+            return None;
+        }
+        Some(Cell {
+            ud: lexeme.ud(usize::from(entry.form))?,
+            lemma: lexeme.spell(&self.suffixes, 0)?,
+            lemma_suffix: *lexeme.paradigm.first()? as usize,
+            form_suffix: *lexeme.paradigm.get(usize::from(entry.form))? as usize,
+        })
+    }
+
+    /// The forms of tables of the lists of all endings of the word, from the longest ending; a
+    /// form comes from the longest ending whose list has it. The forms `exclude` are the analyses
+    /// of a word of the dictionary: the word form added one to its form at each of its endings, and
+    /// without these ones the lists are as if the dictionary had not the word
+    fn guess_candidates(&self, word: &str, exclude: &[Entry]) -> Vec<Candidate> {
+        let starts: Vec<usize> = word.char_indices().map(|(at, _)| at).collect();
+        let mut candidates: Vec<Candidate> = Vec::new();
+        let mut list: Vec<(Entry, u32)> = Vec::new();
+        for length in (1..=MAX_ENDING.min(starts.len().saturating_sub(1))).rev() {
+            let ending = &word[starts[starts.len() - length]..];
+            let Some(forms) = (self.guesses.get(ending.as_bytes()))
+                .and_then(|offset| guess_list(self.guess_records(), offset))
+            else {
+                continue;
+            };
+            list.clear();
+            list.extend(forms.iter().filter_map(|&[record, count]| {
+                let entry = unpack(record);
+                let count = count - u32::from(exclude.contains(&entry)).min(count);
+                (count > 0).then_some((entry, count))
+            }));
+            let total: u32 = list.iter().map(|&(_, count)| count).sum();
+            if total < MIN_ENDING_COUNT {
+                continue;
+            }
+            for &(entry, count) in &list {
+                if !candidates.iter().any(|known| known.entry == entry) {
+                    candidates.push(Candidate {
+                        entry,
+                        length,
+                        count,
+                        share: count as f32 / total as f32,
+                    });
+                }
+            }
+        }
+        candidates
+    }
+
+    /// Examples of the training of the paradigm model: the candidates of a lowercase word of the
+    /// dictionary as if the dictionary had not the word, and whether each is right - the form of
+    /// a table of an analysis of the dictionary, or its lemma and UD tag
+    #[doc(hidden)]
+    pub fn guess_examples(&self, word: &str) -> Vec<GuessCandidate> {
+        let own = self.found(word);
+        let entries: Vec<Entry> = own.iter().filter_map(|analysis| analysis.entry).collect();
+        (self.guess_candidates(word, &entries).into_iter())
+            .filter_map(|candidate| {
+                let cell = self.guess_cell(candidate.entry, word)?;
+                let gold = entries.contains(&candidate.entry)
+                    || (own.iter()).any(|known| known.ud == cell.ud && known.lemma == cell.lemma);
+                Some(GuessCandidate {
+                    lemma_suffix: self.suffixes.get(cell.lemma_suffix)?.to_owned(),
+                    form_suffix: self.suffixes.get(cell.form_suffix)?.to_owned(),
+                    lemma: cell.lemma,
+                    ud: cell.ud,
+                    length: candidate.length,
+                    count: candidate.count,
+                    share: candidate.share,
+                    gold,
+                })
+            })
+            .collect()
+    }
+}
+
+/// The form of a table of a record of a list of guesses, `(table << 16) | form`
+fn unpack(record: u32) -> Entry {
+    Entry {
+        table: (record >> 16) as u16,
+        form: record as u16,
     }
 }
 

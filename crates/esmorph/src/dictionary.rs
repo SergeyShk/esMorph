@@ -25,17 +25,24 @@ mod constraints;
 mod context;
 mod guess;
 mod own;
+mod paradigm;
 mod weights;
 
 #[cfg(any(test, feature = "build"))]
 pub(crate) use context::Model;
 #[cfg(any(test, feature = "build"))]
 pub(crate) use context::sources as context_sources;
+#[cfg(any(test, feature = "build"))]
+pub(crate) use paradigm::Model as ParadigmModel;
+#[cfg(any(test, feature = "build"))]
+pub(crate) use paradigm::sources as paradigm_sources;
 
 #[doc(hidden)]
 pub use annotate::{Fields, Split, space_entry};
 #[cfg(feature = "cli")]
 pub(crate) use annotate::{PART_GROUP, one_line, set_fields};
+#[doc(hidden)]
+pub use guess::GuessCandidate;
 pub use own::Sample;
 
 /// Where an analysis comes from
@@ -183,6 +190,8 @@ pub struct Dictionary {
     feats: Arc<OnceLock<TagFeats>>,
     /// The context model, read on the first analysis of a sentence and shared by the copies
     context: Arc<OnceLock<Result<context::Context, String>>>,
+    /// The paradigm model, read on the first guess and shared by the copies
+    paradigms: Arc<OnceLock<Result<paradigm::Paradigms, String>>>,
     /// Own words of the copy (`Dictionary::with_words`)
     own_words: Arc<own::OwnWords>,
     /// Places of the fields of every line of the section of diminutives: the starts of the lemma,
@@ -357,6 +366,7 @@ impl Dictionary {
             rule_tags: None,
             feats: Arc::default(),
             context: Arc::default(),
+            paradigms: Arc::default(),
             own_words: Arc::default(),
             diminutives: diminutive_fields(text(&layout.diminutives)?)?,
             verbs: verb_fields(text(&layout.verbs)?)?,
@@ -368,6 +378,11 @@ impl Dictionary {
         let forms = dictionary.table_forms();
         dictionary.check_records(&forms)?;
         dictionary.check_guesses(&forms)?;
+        if dictionary.tag_weights().len() != dictionary.ud.len() {
+            return Err(Error::Format(
+                "the weights of the tags do not match the tags".into(),
+            ));
+        }
         drop(forms);
         // The number of keys is in the footer of the automaton, which `verify` checks
         dictionary.word_count = (dictionary.words.len())
@@ -465,6 +480,7 @@ impl Dictionary {
         if self.has_context() {
             self.context()?;
         }
+        self.paradigm_model()?;
         Ok(())
     }
 
@@ -1078,6 +1094,37 @@ impl Dictionary {
         })
     }
 
+    /// The paradigm model of the dictionary, `None` without it: read once for the dictionary and
+    /// its copies, outside the cell, as the context model
+    fn paradigm_model(&self) -> Result<Option<&paradigm::Paradigms>, Error> {
+        let bytes = &self.storage.bytes()[self.layout.paradigm_model.clone()];
+        if bytes.is_empty() {
+            return Ok(None);
+        }
+        let model = match self.paradigms.get() {
+            Some(model) => model,
+            None => {
+                let built = paradigm::Model::parse(bytes)
+                    .map(|model| paradigm::Paradigms::new(model, &self.ud, &self.suffixes))
+                    .map_err(|err| match err {
+                        Error::Format(message) => message,
+                        err => err.to_string(),
+                    });
+                self.paradigms.get_or_init(move || built)
+            }
+        };
+        model
+            .as_ref()
+            .map(Some)
+            .map_err(|message| Error::Format(message.clone()))
+    }
+
+    /// Whether the dictionary has a paradigm model for guessing unknown words
+    #[doc(hidden)]
+    pub fn has_paradigm_model(&self) -> bool {
+        !self.layout.paradigm_model.is_empty()
+    }
+
     /// Tags of the parts of speech and features of the dictionary that the dictionary of the
     /// training of its context model had not: with them the model must be trained again
     #[cfg(feature = "build")]
@@ -1661,6 +1708,12 @@ impl Dictionary {
 
     fn guess_records(&self) -> &[u32] {
         self.numbers(&self.layout.guess_records)
+    }
+
+    /// How often texts have every UD tag, plus one, by the number of the tag
+    #[doc(hidden)]
+    pub fn tag_weights(&self) -> &[u32] {
+        self.numbers(&self.layout.tag_weights)
     }
 
     /// Paradigms refer only to existing suffixes

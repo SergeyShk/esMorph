@@ -490,7 +490,7 @@ def test_finite_forms_with_an_enclitic_without_an_accent(morph, word, lemma, wor
     assert (first.lemma, first.pos, first.words, first.source) == (lemma, "VERB", words, "clitics")
     assert first.prob > 0.5
     # The token stays unknown, with guesses after the verb
-    assert analyses[-1].source == "guess"
+    assert any(analysis.source == "guess" for analysis in analyses[1:])
     assert not morph.is_known(word)
 
 
@@ -1290,10 +1290,11 @@ def test_an_ended_input_is_not_asked_again(morph, method):
 
 
 def test_pickled_analyses_keep_their_tables(morph):
-    forms = morph.analyze("zumbeábamos")[0].forms()
+    analysis = morph.analyze("zumbeábamos")[0]
+    forms = analysis.forms()
     assert all(pickle.loads(pickle.dumps(form)).forms() == forms for form in forms)
     # A pickle without the table, or with the table of another dictionary, finds it on first use
-    state = forms[0].__reduce__()[1]
+    state = analysis.__reduce__()[1]
     other = state[8] ^ (1 << 32)
     for restored in [state[:8], (*state[:8], other)]:
         assert esmorph._esmorph._analysis(*restored).forms() == forms
@@ -1402,6 +1403,7 @@ def test_dictionary_description(morph):
         "ud_release",
         "treebanks",
         "context",
+        "paradigms",
         "word_forms",
         "checksum",
     }
@@ -1412,6 +1414,9 @@ def test_dictionary_description(morph):
         "UD_Spanish-GSD": "CC BY-SA 4.0",
     }
     assert info["context"] == {"ud_release": "r2.19", "treebanks": info["treebanks"]}
+    # The paradigm model learned from the words of the dictionary of these snapshots
+    assert info["paradigms"]["snapshots"] == info["snapshots"]
+    assert info["paradigms"]["words"] > 300_000
     assert info["license"] == "CC BY-SA 4.0"
     assert info["snapshot"].endswith(".jsonl.xz") and len(info["sha256"]) == 64
     # The English edition and the Spanish one
@@ -1434,17 +1439,19 @@ def test_dictionary_description_of_another_builder(morph, tmp_path):
         path.write_bytes(data[:12] + zlib.crc32(body).to_bytes(4, "little") + body)
         return Analyzer(path)
 
-    meta = b'{"source": 1, "license": ["a"], "sha256": "x", "snapshots": {"a": 1}, "counts": {"release": 2, "treebanks": {"a": 1}}, "context": []}'
+    meta = b'{"source": 1, "license": ["a"], "sha256": "x", "snapshots": {"a": 1}, "counts": {"release": 2, "treebanks": {"a": 1}}, "context": [], "paradigms": {"words": true, "snapshots": {"a": 1}}}'
     info = described(meta).dictionary_info
-    assert set(info) == {"sha256", "context", "word_forms", "checksum"}
-    assert info["context"] == {}
-    assert set(described(b"not json").dictionary_info) == {"context", "word_forms", "checksum"}
+    assert set(info) == {"sha256", "context", "paradigms", "word_forms", "checksum"}
+    assert info["context"] == {} and info["paradigms"] == {}
+    keys = {"context", "paradigms", "word_forms", "checksum"}
+    assert set(described(b"not json").dictionary_info) == keys
 
 
-def without_model(data: bytes) -> bytes:
-    """A dictionary file with an empty section of the context model, the 14th"""
+def without_model(data: bytes, section: int = 15) -> bytes:
+    """A dictionary file with an empty section of a model: the context model is the 16th, the
+    paradigm model the 15th"""
     at = 16
-    for _ in range(13):
+    for _ in range(section):
         at += 8 + (int.from_bytes(data[at : at + 8], "little") + 7) // 8 * 8
     after = at + 8 + (int.from_bytes(data[at : at + 8], "little") + 7) // 8 * 8
     body = data[16:at] + bytes(8) + data[after:]
@@ -1460,6 +1467,16 @@ def test_dictionary_without_model(morph, tmp_path):
     for words in (["la", "casa"], []):
         with pytest.raises(ValueError, match="no context model"):
             plain.analyze_sentence(words)
+
+
+def test_dictionary_without_paradigm_model(morph, tmp_path):
+    path = tmp_path / "es.dict"
+    path.write_bytes(without_model(morph.path.read_bytes(), 14))
+    plain = Analyzer(path, verify=True)
+    assert "paradigms" not in plain.dictionary_info
+    # Unknown words are guessed by the forms of the longest ending
+    assert plain.analyze("zumbeábamos")[0].lemma == "zumbear"
+    assert plain.analyze("casa") == morph.analyze("casa")
 
 
 def test_dictionary_paths(morph, tmp_path, monkeypatch):

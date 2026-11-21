@@ -15,13 +15,15 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps                   # create the environment, install all dependencies and build the Rust module
-make dictionary             # build the dictionary from the snapshot of Wiktionary, the counts of treebanks and the context model
+make dictionary             # build the dictionary from the snapshot of Wiktionary, the counts of treebanks and the models
 uv run pre-commit install   # hooks: linters on commit, tests on push
 ```
 
-The Rust module is built when the package is installed into the environment; `uv run` rebuilds it when the files of `crates/` or `Cargo.toml` change. The dictionary `python/esmorph/data/es.dict` is not in git: `make dictionary` downloads the snapshots of the Spanish entries of the English Wiktionary and of the Spanish Wiktionary (a dataset on Hugging Face, checked by SHA-256), turns it into a table with `scripts/export_wiktionary.py` and builds the file with `crates/esmorph-build`, which adds the weights of the context model `data/es-context.bin`. The full list of commands is in `make help`.
+The Rust module is built when the package is installed into the environment; `uv run` rebuilds it when the files of `crates/` or `Cargo.toml` change. The dictionary `python/esmorph/data/es.dict` is not in git: `make dictionary` downloads the snapshots of the Spanish entries of the English Wiktionary and of the Spanish Wiktionary (a dataset on Hugging Face, checked by SHA-256), turns it into a table with `scripts/export_wiktionary.py` and builds the file with `crates/esmorph-build`, which adds the weights of the context model `data/es-context.bin` and of the paradigm model of unknown words `data/es-paradigms.bin`. The full list of commands is in `make help`.
 
 The context model is trained by `scripts/train_context.py` (`uv run --with-editable . scripts/train_context.py`, a few minutes on the CPU): it writes `data/es-context.bin` and `data/es-context-check.tsv`, the analyses of sentences of AnCora dev that a test compares with the analyzer. A change of the analyses of the dictionary (new parts of speech or features, other candidates) needs a new model: the builder refuses a dictionary with tags the model was not trained with, so the dictionary is built without the model (`esmorph-build` with three arguments), the model is trained with it (`--dictionary`), and the dictionary is built again.
+
+The paradigm model, which chooses the analyses of an unknown lowercase word among the forms of the dictionary words with its endings, is trained by `scripts/train_paradigms.py` (`uv run --with-editable . scripts/train_paradigms.py`, a few minutes on the CPU) on the words of the dictionary itself: it writes `data/es-paradigms.bin`. A change of the dictionary words, tables or counts needs new models in order: the dictionary is built without models (three arguments), the paradigm model is trained with it, the dictionary is built with the paradigm model only (`-` for the context model), the context model is trained with that dictionary, whose guesses it sees, and the dictionary is built with both.
 
 ## Checks
 
@@ -57,7 +59,7 @@ The pull request description answers two questions: what was done and why. If it
 - `python/esmorph/` - the Python package.
 - `tests/` - tests of the Python package; `tests/test_docs.py` keeps the two documentation languages in sync.
 - `docs/` - MkDocs (Material) documentation, `mkdocs.yml` - navigation and its Spanish translation.
-- `scripts/` - `wiktionary_snapshot.py` makes the snapshot of Wiktionary, `export_wiktionary.py` turns it into the table of the builder, `eswiktionary.py` brings the entries of the Spanish Wiktionary to the shape of the English ones, `conventions.py` brings the table to the conventions of the treebanks with `data/closed-classes.tsv` and the spoken spellings of `data/spellings.tsv`, `export_ud.py` counts analyses in the treebanks, `train_context.py` trains the context model (`data/es-context.bin`), `smoke.py` checks the installed package before publishing, `notices.py` writes the licenses of the crates.
+- `scripts/` - `wiktionary_snapshot.py` makes the snapshot of Wiktionary, `export_wiktionary.py` turns it into the table of the builder, `eswiktionary.py` brings the entries of the Spanish Wiktionary to the shape of the English ones, `conventions.py` brings the table to the conventions of the treebanks with `data/closed-classes.tsv` and the spoken spellings of `data/spellings.tsv`, `export_ud.py` counts analyses in the treebanks, `train_context.py` trains the context model (`data/es-context.bin`), `train_paradigms.py` the paradigm model (`data/es-paradigms.bin`), `smoke.py` checks the installed package before publishing, `notices.py` writes the licenses of the crates.
 - `.github/workflows/` - CI (`ci.yml`), publishing (`publish.yml`), documentation (`docs.yml`).
 
 The sdist is made of the files tracked by git (`sdist-generator = "git"`), so that `maturin build --locked` works on it with all the members of the workspace in place. It can only be made inside a git checkout: `uv build` and `python -m build` fail on an unpacked source archive, while `pip install` and `maturin build` of the sdist work anywhere.

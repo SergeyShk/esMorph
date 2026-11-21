@@ -7,16 +7,14 @@ use crate::Error;
 use crate::alphabet::{Alphabet, MAX_KEY, mark_order};
 use crate::format::{
     self, EXTRA, HAS_PROBABILITIES, LEMMA_ONLY, MAX_ENDING, MAX_LIST, MAX_SPELLINGS,
-    MAX_SPOKEN_FORM, OLD, PROBABILITY_SCALE, SPOKEN, SPOKEN_FORM_SHIFT, Sections, VARIANT,
-    WIDE_SPELLINGS, WordValue, pack_spelling,
+    MAX_SPOKEN_FORM, MIN_ENDING_COUNT, OLD, PROBABILITY_SCALE, SPOKEN, SPOKEN_FORM_SHIFT, Sections,
+    VARIANT, WIDE_SPELLINGS, WordValue, pack_spelling,
 };
 
 /// Parts of speech whose forms guess unknown words: the closed classes are in the dictionary
 const GUESSED: [&str; 4] = ["NOUN", "ADJ", "VERB", "ADV"];
 /// A table of fewer lexemes is more an exception than a sample for guessing
 const MIN_TABLE_LEXEMES: usize = 3;
-/// An ending that fewer word forms of the dictionary have is a mark of a word, not a sample
-const MIN_ENDING_COUNT: u32 = 3;
 /// Names of the features of Universal Dependencies: the universal ones and those of the Spanish
 /// treebanks; a layered feature has one of them before its layer (`Number[psor]`)
 const UD_FEATURES: [&str; 32] = [
@@ -54,8 +52,9 @@ const UD_FEATURES: [&str; 32] = [
     "Voice",
 ];
 
-/// How many of the most frequent forms of tables an ending keeps for guessing
-const MAX_GUESSES: usize = 10;
+/// How many of the most frequent forms of tables an ending keeps for guessing: the paradigm model
+/// chooses among them, guessing without it takes the first `MAX_COUNTED`
+const MAX_GUESSES: usize = 30;
 
 /// Builder of a dictionary from the forms of lexemes
 ///
@@ -77,6 +76,8 @@ pub struct Builder {
     tag_frequencies: HashMap<(String, String), u32>,
     /// Weights of the context model
     context: Vec<u8>,
+    /// Weights of the paradigm model
+    paradigm_model: Vec<u8>,
     /// The words of the diminutives by their lemma and part of speech
     diminutives: BTreeMap<(String, String), String>,
     /// How often texts have a verb in all its forms
@@ -425,6 +426,20 @@ impl Builder {
         crate::dictionary::context_sources(weights)
     }
 
+    /// Sets the weights of the paradigm model, a file of `scripts/train_paradigms.py`, that
+    /// chooses the analyses of an unknown lowercase word among the forms of the dictionary words
+    /// with its endings
+    pub fn paradigm_model(&mut self, weights: Vec<u8>) -> Result<&mut Self, Error> {
+        crate::dictionary::ParadigmModel::parse(&weights)?;
+        self.paradigm_model = weights;
+        Ok(self)
+    }
+
+    /// The data a paradigm model was trained on, a JSON object of `scripts/train_paradigms.py`
+    pub fn paradigm_sources(weights: &[u8]) -> Result<String, Error> {
+        crate::dictionary::paradigm_sources(weights)
+    }
+
     /// Builds the dictionary in the binary format
     pub fn build(&self) -> Result<Vec<u8>, Error> {
         let mut tags = Interned::default();
@@ -601,6 +616,15 @@ impl Builder {
             .flat_map(|(paradigm, cells)| std::iter::once(*paradigm).chain(cells.iter().copied()))
             .collect();
         let (ud_strings, ud_tags) = ud_tables(&tags.items)?;
+        let tag_weights = (tags.items.iter())
+            .map(|key| {
+                self.tag_frequencies
+                    .get(key)
+                    .copied()
+                    .unwrap_or(0)
+                    .saturating_add(1)
+            })
+            .collect();
         Ok(format::write(&Sections {
             meta: self.meta.clone(),
             ud_strings,
@@ -615,6 +639,8 @@ impl Builder {
             variants,
             guesses,
             guess_records,
+            tag_weights,
+            paradigm_model: self.paradigm_model.clone(),
             context: self.context.clone(),
             diminutives: self.diminutives_text(),
             verbs: (self.verbs.iter())
@@ -732,21 +758,11 @@ fn guess_index(
             forms.values().map(|&(count, _)| count).sum::<u32>() >= MIN_ENDING_COUNT
         })
         .map(|(ending, forms)| {
-            let mut forms: Vec<(u32, u64)> = forms
-                .into_iter()
-                .map(|(record, (_, weight))| (record, weight))
-                .collect();
-            forms.sort_by_key(|&(record, weight)| (Reverse(weight), record));
+            let mut forms: Vec<(u32, (u32, u64))> = forms.into_iter().collect();
+            forms.sort_by_key(|&(record, (_, weight))| (Reverse(weight), record));
             forms.truncate(MAX_GUESSES);
-            // Weights above the numbers of the section go down together: the order stays
-            let largest = forms.first().map_or(0, |&(_, weight)| weight);
-            let scale = largest / u64::from(u32::MAX) + 1;
-            let forms: Vec<(u32, u32)> = forms
-                .into_iter()
-                .map(|(record, weight)| {
-                    let weight = u32::try_from(weight / scale).unwrap_or(u32::MAX);
-                    (record, weight.max(1))
-                })
+            let forms = (forms.into_iter())
+                .map(|(record, (count, _))| (record, count))
                 .collect();
             (ending, forms)
         })

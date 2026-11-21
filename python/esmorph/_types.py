@@ -16,6 +16,13 @@ class ContextInfo(TypedDict, total=False):
     treebanks: dict[str, str]
 
 
+class ParadigmsInfo(TypedDict, total=False):
+    """Data of the training of the paradigm model of a dictionary"""
+
+    snapshots: dict[str, str]
+    words: int
+
+
 class DictionaryInfo(TypedDict, total=False):
     """Description of a dictionary, as Analyzer.dictionary_info gives it"""
 
@@ -27,5 +34,6 @@ class DictionaryInfo(TypedDict, total=False):
     ud_release: str
     treebanks: dict[str, str]
     context: ContextInfo
+    paradigms: ParadigmsInfo
     word_forms: Required[int]
     checksum: Required[int]

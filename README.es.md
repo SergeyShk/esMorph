@@ -235,7 +235,7 @@ git clone https://github.com/SergeyShk/esMorph.git
 cd esMorph
 
 make deps        # crear el entorno, instalar las dependencias y compilar el módulo de Rust
-make dictionary  # crear el diccionario a partir de la instantánea de Wiktionary, los recuentos de treebanks y el modelo de contexto
+make dictionary  # crear el diccionario a partir de la instantánea de Wiktionary, los recuentos de treebanks y los modelos
 make test        # ejecutar las pruebas de Python, los ejemplos de los docstrings (doctest) y las pruebas de Rust
 make lint        # ruff, mypy, rustfmt y clippy
 ```
@@ -262,8 +262,8 @@ Los informes de errores, las ideas y los pull requests son bienvenidos, en ingl�
 *   **crates/esmorph-dict-es** - el diccionario como crate
 *   **crates/esmorph-py** - el módulo de Python `esmorph._esmorph`, compilado con PyO3
 *   **python/esmorph** - el paquete de Python
-*   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario, el entrenamiento del modelo de contexto, la comprobación del paquete instalado antes de publicar y la comparación con otras herramientas
-*   **data** - las tablas de clases cerradas según UD Spanish AnCora, de los símbolos de unidades y de las grafías coloquiales, los pesos del modelo de contexto
+*   **scripts** - la exportación de Wiktionary y de los recuentos de los treebanks, las convenciones del diccionario, el entrenamiento del modelo de contexto y del modelo de palabras desconocidas, la comprobación del paquete instalado antes de publicar y la comparación con otras herramientas
+*   **data** - las tablas de clases cerradas según UD Spanish AnCora, de los símbolos de unidades y de las grafías coloquiales, los pesos del modelo de contexto y del modelo de palabras desconocidas
 *   **docs** - la documentación de MkDocs en inglés y en español
 *   **tests** - las pruebas del paquete de Python
 

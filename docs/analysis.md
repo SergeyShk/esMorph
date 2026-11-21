@@ -182,7 +182,7 @@ A lowercase word that neither the dictionary nor the rules know gets guessed ana
 - a word with a hyphen is analyzed by its last part of an open class or a numeral: `palestino-israelíes` is a form of `palestino-israelí`;
 - a word with a known prefix is analyzed by the dictionary word without it, of four letters at least after a prefix of three: `supergallos` is a form of `supergallo`, `sobreandan` of `sobreandar`;
 - a verb with clitics is analyzed by its guessed gerund, or by its guessed infinitive before `se` or a clitic of the third person: `autogenerarse` is `autogenerar` + `se`;
-- any other word is analyzed by the dictionary words with the same ending of up to five letters: their parts of speech, features and inflection, by how many words have them and how often AnCora train has their features; a word in `-ísimo` is an adjective of `Degree=Abs`: `esbeltísima` is a form of `esbeltísimo`.
+- any other word is analyzed by the forms and inflection of the dictionary words with the same endings of up to five letters, which a model that reads the letters of the word chooses among: it learned from the words of the dictionary how a word of every part of speech and inflection ends, and prefers the features that the treebanks have more often; a word in `-ísimo` is an adjective of `Degree=Abs`: `esbeltísima` is a form of `esbeltísimo`.
 
 A guessed word has its forms, guessed too: `forms()` and `inflect()` work as for a word of the dictionary. `is_known` stays false for it.
 
@@ -196,6 +196,6 @@ A guessed word has its forms, guessed too: `forms()` and `inflect()` work as for
 === "Result"
 
     ```
-    [('zumbear', 'VERB', 0.9), ('zumbeábar', 'VERB', 0.09), ('zumbeábar', 'VERB', 0.01)]
+    [('zumbear', 'VERB', 1.0)]
     'zumbeo'
     ```
