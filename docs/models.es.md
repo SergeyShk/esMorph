@@ -8,7 +8,7 @@ Una palabra como `vino` es un sustantivo o un verbo, `la` un artículo o un pron
 
 ![Las probabilidades de los análisis de «vino» sin contexto y en dos oraciones](img/choice.es.svg)
 
-Para cada token el modelo lee su forma (mayúsculas, cifras, el comienzo de la oración), la palabra, sus terminaciones y los análisis que le da el diccionario; una LSTM bidireccional lee los tokens de la oración en ambos sentidos, y cada análisis de un token recibe una puntuación según el vector de su token, sus etiquetas y su fuente. Las probabilidades de los análisis de un token son el softmax de las puntuaciones. Después, unas pocas reglas del español ponen primero otro análisis donde solo él cabe ([`analyze_sentence`](analyzer.md#analyze_sentence)).
+Para cada token el modelo lee su aspecto (mayúsculas, cifras, el comienzo de la oración), la palabra, sus terminaciones y los análisis que le da el diccionario; una LSTM bidireccional lee los tokens de la oración en ambos sentidos, y cada análisis de un token recibe una puntuación según el vector de su token, sus etiquetas y su fuente. Las probabilidades de los análisis de un token son el softmax de las puntuaciones. Después, unas pocas reglas del español ponen primero otro análisis donde solo él cabe ([`analyze_sentence`](analyzer.md#analyze_sentence)).
 
 ![El modelo de contexto: de los rasgos de un token a las probabilidades de sus análisis](img/context.es.svg)
 

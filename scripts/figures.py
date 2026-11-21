@@ -144,7 +144,7 @@ TEXTS = {
             "3. El modelo de contexto elige el análisis por las palabras vecinas",
         ),
         "context": (
-            ("forma", "palabra", "terminaciones 1-{suffix_max}", "análisis de la palabra"),
+            ("aspecto", "palabra", "terminaciones 1-{suffix_max}", "análisis de la palabra"),
             "vector del token: {din}",
             "capa lineal y ReLU: {d}",
             "BiLSTM {layers} {x} {half}, en ambos sentidos: {d} por token",
@@ -164,13 +164,13 @@ TEXTS = {
                 ("etiqueta", "UD"),
                 ("sufijo", "del lema"),
                 ("sufijo", "de la forma"),
-                ("longitud", "terminación"),
+                ("longitud", "de la terminación"),
             ),
             "vector de la palabra: {dim}",
             "vector del candidato: {dim}",
-            "puntuación: vector de la palabra · vector del candidato + cuenta y cuota en la lista",
+            "puntuación: vector de la palabra · vector del candidato + recuento y parte de la forma en la lista",
             "softmax sobre los candidatos: P(forma | palabra)",
-            "el peso de un lexema se reparte entre sus formas iguales según sus cuentas",
+            "el peso de un lexema se reparte entre sus formas iguales según sus recuentos",
             "hasta 10 análisis con al menos el 1 % de la probabilidad del primero",
             "{params} millones de parámetros, int8 por filas · {keys} rasgos de etiquetas, "
             "{suffixes} sufijos",
@@ -180,7 +180,7 @@ TEXTS = {
             "por la terminación",
             "modelo",
             (
-                "Cuotas de los análisis con el mismo lema y categoría: por la terminación - las formas",
+                "Partes de los análisis con el mismo lema y categoría: por la terminación - las formas",
                 "de la terminación más larga sin el modelo, modelo - las probabilidades de analyze",
             ),
         ),
@@ -448,7 +448,7 @@ def draw_paradigm(config: list[int], strings: dict[str, int], params: float, lan
     for k, (first, second) in enumerate(t[3]):
         x = right + k * 96
         body += box(x, 104, 92, 44, "")
-        body += [text(x + 46, 122, first, 13), text(x + 46, 139, second, 12)]
+        body += [text(x + 46, 122, first, 13), text(x + 46, 139, second, 11)]
         body += down(x + 46, 148, 174)
     body += down(left + half / 2, 148, 174)
     body += box(left, 174, half, 44, t[4].format(**fmt))

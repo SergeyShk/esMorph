@@ -2,7 +2,7 @@
 <rect width="880" height="558" rx="12" fill="white"/>
 <rect x="40.0" y="20.0" width="185.0" height="54.0" rx="8" fill="white" stroke="#c62828" stroke-width="1.5"/>
 <text x="132.5" y="52.2" font-size="15" fill="#212121" text-anchor="middle"></text>
-<text x="132.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">forma</text>
+<text x="132.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">aspecto</text>
 <text x="132.0" y="63.0" font-size="13" fill="#6b6b6b" text-anchor="middle">16</text>
 <path d="M132.0 74.0L132.0 95.0" stroke="#c62828" stroke-width="2"/>
 <path d="M126.0 94.4L138.0 94.4L132.0 104.0Z" fill="#c62828"/>
