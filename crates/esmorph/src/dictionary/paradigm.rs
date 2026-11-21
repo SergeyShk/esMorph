@@ -224,8 +224,9 @@ impl Paradigms {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Dictionary;
+    use crate::builder::Builder;
     use crate::dictionary::weights::tests::{entry, matrix, strings};
-    use crate::{Builder, Dictionary};
 
     /// Weights of a small model (dim = 1): all weights are zeros but the biases of the suffixes
     /// of the lemma `lemma_bias`, so they order the candidates
@@ -364,7 +365,7 @@ mod tests {
         assert!(builder().paradigm_model(b"ESMPAR".to_vec()).is_err());
         let data = weights(&[("o", 1.0)]);
         assert!(Model::parse(&data).is_ok());
-        assert_eq!(sources(&data).unwrap(), r#"{"words": 7}"#);
+        assert_eq!(Builder::paradigm_sources(&data).unwrap(), r#"{"words": 7}"#);
         // Any cut of good weights is an error, not a panic
         for end in 0..data.len() {
             assert!(Model::parse(&data[..end]).is_err(), "{end}");
