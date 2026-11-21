@@ -149,9 +149,10 @@ APOCOPE = "before a noun "
 MAX_WORD = 64
 # More rows than a table of an entry has: the places of the rows of further etymologies follow
 TABLE_ROWS = 10_000
-# Plurals of the names of letters `ve` and `de` that are almost always the forms of `tú` of `ver`
-# and `dar`: the treebanks have few forms of `tú`, so the context would choose the letters
-LETTER_PLURALS = {("ve", "ves"), ("de", "des")}
+# Plurals of the names of letters `ve`, `de` and `ere` that are almost always the forms of `tú` of
+# `ver`, `dar` and `ser`: the treebanks have few forms of `tú`, so the context would choose the
+# letters
+LETTER_PLURALS = {("ve", "ves"), ("de", "des"), ("ere", "eres")}
 
 
 def sha256(path: Path) -> str:

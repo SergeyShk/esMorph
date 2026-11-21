@@ -109,6 +109,22 @@ METRICS = {
 INT8 = {"word", "suffix", "tag_in", "tag_out", "input.weight", "query.weight"}
 MAGIC = b"ESMCTX\0\0"
 FORMAT = 1
+# Words whose accent the spelling of 2010 dropped, which AnCora still writes
+SPELLING_2010 = {
+    "sólo": "solo",
+    "éste": "este",
+    "ésta": "esta",
+    "éstos": "estos",
+    "éstas": "estas",
+    "ése": "ese",
+    "ésa": "esa",
+    "ésos": "esos",
+    "ésas": "esas",
+    "aquél": "aquel",
+    "aquélla": "aquella",
+    "aquéllos": "aquellos",
+    "aquéllas": "aquellas",
+}
 # Sentences of AnCora dev in the file `--check`: the first ones and the first that start with a sign
 CHECK_SENTENCES, CHECK_SIGNED = 20, 5
 
@@ -275,7 +291,9 @@ def divergent(ancora: list[list[Token]], gsd: list[list[Token]], gsd_upos: list[
     """
     Forms in lower case whose parts of speech the training parts of AnCora and GSD (in the
     conventions of AnCora) share differently: the total variation distance is at least 0.3, and
-    both have the form at least 20 times; forms with digits are left out
+    both have the form at least 20 times; forms with digits are left out. A form with an accent
+    that the spelling of 2010 dropped counts as the form without it: AnCora writes the adverb
+    `sólo`, GSD `solo`
 
     Arguments:
         ancora (list[list[Token]]): Sentences of AnCora
@@ -292,7 +310,9 @@ def divergent(ancora: list[list[Token]], gsd: list[list[Token]], gsd_upos: list[
         count: dict[str, Counter[str]] = defaultdict(Counter)
         for token, pos in zip(texts, parts, strict=True):
             if token.text == token.text.lower():
-                count[normal(token.text)][pos] += 1
+                # AnCora writes the accents that the spelling of 2010 dropped and GSD does not
+                form = normal(token.text)
+                count[SPELLING_2010.get(form, form)][pos] += 1
         counts.append(count)
     first, second = counts
     result = set()
@@ -466,8 +486,14 @@ class Part:
                 for p, lemma, feats, _, _ in found
             ]
             bits.extend(found_bits)
-            # AnCora: all features of the gold word if an analysis has them, else the core ones
-            want = MAPPED if gsd else FULL if any(b & FULL for b in found_bits) else ALL
+            # AnCora: all features of the gold word if an analysis has them, else the core ones,
+            # else the part of speech and the lemma: the gold `ex` has no features
+            fitting = (
+                want
+                for want in (FULL, ALL, UPOS | LEMMA)
+                if any(b & want == want for b in found_bits)
+            )
+            want = MAPPED if gsd else next(fitting, ALL)
             right.extend(b & want == want and not skip for b in found_bits)
             off.append(len(bits))
         self.bits = np.array(bits, dtype=np.int64)
