@@ -18,20 +18,23 @@ const ENDINGS: [(&str, &str); 7] = [
 /// `hu` (`juera` is `fuera`, not `huera`; `juyendo` is `huyendo`)
 const STARTS: [(&str, &str); 3] = [("ju", "fu"), ("aju", "afu"), ("ju", "hu")];
 
-/// Standard spellings that a lowercase word may stand for, the likelier first; the word itself
-/// is no spelling of a standard word unless the dictionary has one of them
-pub(crate) fn standard(word: &str) -> impl Iterator<Item = String> + '_ {
+/// Standard spellings that a lowercase word may stand for, the likelier first, and whether the
+/// dictionary must have the spelling with its accents: `ex` for `es` keeps an accent the word
+/// has (`estrás` is no `extras`). The word itself is no spelling of a standard word unless the
+/// dictionary has one of them
+pub(crate) fn standard(word: &str) -> impl Iterator<Item = (String, bool)> + '_ {
     let endings = ENDINGS.iter().filter_map(move |&(ending, standard)| {
         let stem = word.strip_suffix(ending).filter(|stem| !stem.is_empty())?;
-        Some(format!("{stem}{standard}"))
+        Some((format!("{stem}{standard}"), false))
     });
     let starts = STARTS.iter().filter_map(move |&(start, standard)| {
         let rest = word.strip_prefix(start).filter(|rest| !rest.is_empty())?;
-        Some(format!("{standard}{rest}"))
+        Some((format!("{standard}{rest}"), false))
     });
+    let accented = word.chars().any(|c| "áéíóú".contains(c));
     endings
         .chain(starts)
-        .chain(ex_rest(word).map(|rest| format!("ex{rest}")))
+        .chain(ex_rest(word).map(move |rest| (format!("ex{rest}"), accented)))
 }
 
 /// The rest of a word that starts with `es` and a consonant, which older writing has for `ex`
@@ -64,7 +67,7 @@ mod tests {
     use super::*;
 
     fn spellings(word: &str) -> Vec<String> {
-        standard(word).collect()
+        standard(word).map(|(spelling, _)| spelling).collect()
     }
 
     #[test]
@@ -82,6 +85,11 @@ mod tests {
         assert_eq!(spellings("ajuera"), ["afuera"]);
         assert_eq!(spellings("jugao"), ["jugado", "fugao", "hugao"]);
         assert_eq!(spellings("estranjero"), ["extranjero"]);
+        // `ex` keeps an accent of the word
+        assert_eq!(
+            standard("estrás").collect::<Vec<_>>(),
+            [("extrás".into(), true)]
+        );
         assert_eq!(spellings("esamen"), Vec::<String>::new());
     }
 

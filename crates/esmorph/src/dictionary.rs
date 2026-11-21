@@ -423,7 +423,7 @@ impl Dictionary {
         std::str::from_utf8(field(base_at, end)).ok()
     }
 
-    /// How often the treebanks have a verb in all its forms
+    /// How often AnCora has a verb as a verb in all its forms
     pub(crate) fn verb_frequency(&self, lemma: &str) -> u32 {
         let text = &self.storage.bytes()[self.layout.verbs.clone()];
         let field = |start: u32, end: u32| &text[start as usize..end as usize];
@@ -529,6 +529,28 @@ impl Dictionary {
                 // A word the dictionary has is a name as rarely as any other: `Vete`, `Trátase`;
                 // a word of only the extra source is none of them
                 let known = !found.is_empty() && !extra;
+                // An imperative stressed before its last syllable takes an accent with a clitic
+                // (`levánteme`), while the spelling of 2010 writes a preterite with one without it:
+                // `levanteme` is first of all `levanté` + `me`
+                let accented_imperative = (analyses.iter()).all(|analysis| {
+                    self.hosts.get(usize::from(analysis.ud)) == Some(&Host::Imperative)
+                        && (analysis.words.first())
+                            .is_some_and(|host| !clitics::stressed_last(host))
+                });
+                let finite = match accented_imperative && !homonym && !extra {
+                    true => self.finite_with_enclitic(&word),
+                    false => Vec::new(),
+                };
+                if !finite.is_empty() {
+                    for analysis in &mut analyses {
+                        analysis.prob *= 1.0 - clitics::FINITE_ENCLITIC_SHARE;
+                    }
+                    analyses.extend(finite.into_iter().map(|analysis| Analysis {
+                        prob: analysis.prob * clitics::FINITE_ENCLITIC_SHARE,
+                        ..analysis
+                    }));
+                    analyses.sort_by(|a, b| b.prob.total_cmp(&a.prob));
+                }
                 if homonym || extra {
                     for analysis in &mut analyses {
                         analysis.prob *= clitics::HOMONYM_SHARE;
@@ -608,6 +630,7 @@ impl Dictionary {
                             prob: analysis.prob * (1.0 - clitics::FINITE_ENCLITIC_SHARE),
                             ..analysis
                         }));
+                        enclitic.sort_by(|a, b| b.prob.total_cmp(&a.prob));
                     }
                 }
                 return enclitic;
@@ -650,7 +673,10 @@ impl Dictionary {
     /// mostly a name: `Julita` is no `fulita`
     fn colloquial(&self, word: &str) -> Vec<Analysis> {
         colloquial::standard(word)
-            .map(|standard| self.found(&standard))
+            .map(|(standard, accents)| match self.spelled(&standard) {
+                (found, exact) if exact || !accents => found,
+                _ => Vec::new(),
+            })
             .find(|analyses| {
                 analyses.iter().any(|analysis| {
                     (analysis.entry)
@@ -700,9 +726,13 @@ impl Dictionary {
             .and_then(|analysis| self.hosts.get(usize::from(analysis.ud)));
         let accented =
             (token.chars().flat_map(char::to_lowercase)).any(|c| clitics::without_acute(c) != c);
+        // A finite form with `se`, `me` or `le` is a verb, mostly a stage direction (`Vase`)
+        let reflexive = (analyses.first())
+            .and_then(|analysis| analysis.words.last())
+            .is_some_and(|clitic| matches!(clitic.as_str(), "se" | "me" | "le"));
         match host {
             Some(Host::Imperative) if !accented => CLITICS_NAME[0],
-            Some(Host::Finite) if !accented => CLITICS_NAME[2],
+            Some(Host::Finite) if !accented && !reflexive => CLITICS_NAME[2],
             _ => CLITICS_NAME[1],
         }
     }
@@ -1065,19 +1095,29 @@ impl Dictionary {
     /// (`quedose` is `quedó` + `se`, `vase` is `va` + `se`); a host stressed elsewhere would need
     /// the accent (`díjole`)
     fn finite_with_enclitic(&self, word: &str) -> Vec<Analysis> {
+        // Most tokens have no clitic at their end
+        if !clitics::may_split(word) {
+            return Vec::new();
+        }
         let token = word.to_lowercase();
         if token.chars().any(|c| clitics::without_acute(c) != c) {
             return Vec::new();
         }
-        for split in clitics::splits(&token) {
-            if split.clitics.len() != 1 {
+        for split in clitics::single_splits(&token) {
+            // `-ete`, `-ote` and `-eos` end nouns and adjectives (`anisete`, `picote`, `deos`), and
+            // so does `-nos` after the first person (`macarenos`)
+            if matches!(split.clitics[0], "te" | "os") {
                 continue;
             }
             for host in self.host_analyses(&split, None, true) {
+                let first = |analysis: &Analysis| {
+                    (self.ud.get(analysis.ud)).and_then(|tag| tag.feat("Person")) == Some("1")
+                };
                 let finite: Vec<Analysis> = (host.found.into_iter())
                     .filter(|analysis| {
                         self.hosts.get(usize::from(analysis.ud)) == Some(&Host::Finite)
                             && clitics::stressed_last(&analysis.word)
+                            && !(split.clitics[0] == "nos" && first(analysis))
                     })
                     .collect();
                 if !finite.is_empty() {
