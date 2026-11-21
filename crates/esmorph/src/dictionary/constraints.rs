@@ -118,10 +118,12 @@ impl Dictionary {
                 .or_else(|| self.infinitive(sentence, at))
                 .or_else(|| self.locution_verb(&lower, sentence, at))
                 .or_else(|| self.ser_ir(&lower, sentence, at))
-                .or_else(|| self.verb_after(&lower, sentence, at))
+                .or_else(|| self.verb_after(words, &lower, sentence, at))
                 .or_else(|| self.opening_word(words, sentence, at, start))
                 .or_else(|| self.question_verb(words, sentence, at))
-                .or_else(|| self.imperative_of_usted(&lower, sentence, at));
+                .or_else(|| self.imperative_of_usted(&lower, sentence, at))
+                .or_else(|| self.opening_clitic(words, &lower, sentence, at, start))
+                .or_else(|| self.name_without_accent(words, sentence, at, start));
             if let Some(index) = chosen {
                 promote(&mut sentence[at], index);
             }
@@ -129,7 +131,15 @@ impl Dictionary {
             let after_clitic = at > 0
                 && PROCLITICS.contains(&lower[at - 1].as_str())
                 && self.top_pos(sentence, at - 1) == "PRON";
-            if let Some(index) = self.frequent_lemma(&sentence[at], &shares[at], after_clitic) {
+            let after_se = at > 0 && lower[at - 1] == "se";
+            let before_infinitive = self.top_verb_form(sentence, at + 1, "Inf");
+            if let Some(index) = self.frequent_lemma(
+                &sentence[at],
+                &shares[at],
+                after_clitic,
+                after_se,
+                before_infinitive,
+            ) {
                 promote(&mut sentence[at], index);
             }
         }
@@ -188,7 +198,20 @@ impl Dictionary {
         {
             return list.iter().position(|analysis| self.pos(analysis) == "DET");
         }
-        let verb = self.top_verb_form(sentence, at + 1, "Fin")
+        // No clitic goes before an imperative: `¡viva la libertá!`, where `libertá` is a word
+        let imperative = sentence.get(at + 1).is_some_and(|next| {
+            let finite: Vec<&Analysis> = (next.iter())
+                .filter(|analysis| {
+                    matches!(self.pos(analysis), "VERB" | "AUX")
+                        && self.has(analysis, "VerbForm", "Fin")
+                })
+                .collect();
+            !finite.is_empty()
+                && finite
+                    .iter()
+                    .all(|analysis| self.has(analysis, "Mood", "Imp"))
+        });
+        let verb = (self.top_verb_form(sentence, at + 1, "Fin") && !imperative)
             || (matches!(form, "la" | "lo") && self.plural_verb(sentence, at + 1));
         if !ARTICLE_CLITICS.contains(&form)
             || self.pos(list.first()?) != "DET"
@@ -257,21 +280,50 @@ impl Dictionary {
         let predicate = (at + 1..sentence.len())
             .find(|&next| self.top_pos(sentence, next) != "ADV")
             .unwrap_or(sentence.len());
+        // `de` after a reflexive clitic that agrees with the form is where it goes from: `se fue
+        // de casa`, `me fui de casa`, while a dative takes `ser`: `me fue de gran ayuda`
+        let clitic = match enclitic {
+            true => top.words.get(1).map_or("", String::as_str),
+            false => at
+                .checked_sub(1)
+                .map_or("", |before| lower[before].as_str()),
+        };
+        let person = |person: &str, number: Option<&str>| {
+            self.has(top, "Person", person)
+                && number.is_none_or(|number| self.has(top, "Number", number))
+        };
+        let reflexive = match clitic {
+            "se" => person("3", None),
+            "me" => person("1", Some("Sing")),
+            "te" => person("2", Some("Sing")),
+            "nos" => person("1", Some("Plur")),
+            "os" => person("2", Some("Plur")),
+            _ => false,
+        };
         let after_clitic = (enclitic || at > 0 && PROCLITICS.contains(&lower[at - 1].as_str()))
-            && next != "de"
+            && (!matches!(next, "de" | "del") || reflexive)
             && self.top_pos(sentence, predicate) != "ADJ"
             && !self.top_verb_form(sentence, predicate, "Part");
         let locution = (LOCUTIONS.contains(&word(at + 2)) && matches!(word(at + 3), "de" | "del"))
             || (next == "al" && AL_PHRASES.contains(&word(at + 2)))
             || (matches!(next, "a" | "á") && word(at + 2) == "la" && word(at + 3) == "vez");
         let hour = matches!(word(at + 2), "la" | "las") && self.top_pos(sentence, at + 3) == "NUM";
-        // `á` is the preposition in older writing: `fué á ocultarse`
+        // `á` is the preposition in older writing: `fué á ocultarse`; `al` before an infinitive
+        // is when, not where: `fue al ver a su hijo`
         let goal = matches!(next, "a" | "á" | "al")
             && !locution
             && !hour
+            && !(next == "al" && self.top_verb_form(sentence, at + 2, "Inf"))
             && (next == "al" || GOAL.contains(&self.top_pos(sentence, at + 2)));
         let gerund = self.top_verb_form(sentence, at + 1, "Ger");
-        if !(after_clitic || goal || gerund) {
+        // The adverb `fuera` after a verb, a preposition or an adverb has no goal: `echó fuera a`
+        let adverb = self.pos(top) == "ADV"
+            && at > 0
+            && matches!(
+                self.top_pos(sentence, at - 1),
+                "VERB" | "AUX" | "ADP" | "ADV"
+            );
+        if !(after_clitic || ((goal || gerund) && !adverb)) {
             return None;
         }
         list.iter().position(|analysis| analysis.lemma == "ir")
@@ -297,14 +349,24 @@ impl Dictionary {
     /// an adverb, an adjective or a participle after such a clitic, which no participle follows:
     /// `se acerca`, `te quedas`, `me visto`, and a plural noun after another clitic: `le faltas`,
     /// `lo preguntas`
-    fn verb_after(&self, lower: &[String], sentence: &[Vec<Analysis>], at: usize) -> Option<usize> {
+    fn verb_after(
+        &self,
+        words: &[&str],
+        lower: &[String],
+        sentence: &[Vec<Analysis>],
+        at: usize,
+    ) -> Option<usize> {
         let list = &sentence[at];
         let before = at.checked_sub(1)?;
         let clitic = PROCLITICS.contains(&lower[before].as_str())
             && self.top_pos(sentence, before) == "PRON";
-        // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`
+        // `no` after a preposition or a determiner makes a noun negative: `punto de no retorno`;
+        // `tú` after a verb is its subject: `¿has visto tú cosa igual?`
         let negation = BEFORE_VERB.contains(&lower[before].as_str())
-            && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"));
+            && !(before > 0 && matches!(self.top_pos(sentence, before - 1), "ADP" | "DET"))
+            && !(lower[before] == "tú"
+                && before > 0
+                && matches!(self.top_pos(sentence, before - 1), "VERB" | "AUX"));
         // No clitic follows a preposition (`por lo duras que eran`), while a determiner may come
         // before one: `por qué lo preguntas`
         let object = matches!(lower[before].as_str(), "la" | "lo" | "le" | "les")
@@ -313,7 +375,9 @@ impl Dictionary {
             && self.plural_verb(sentence, at);
         let top = list.first()?;
         let read = self.pos(top);
-        let noun = matches!(read, "NOUN" | "PROPN");
+        // A capitalized name inside a sentence after `no` stays: `ganó Madrid y no Lima`
+        let capital = words[at].chars().next().is_some_and(char::is_uppercase);
+        let noun = read == "NOUN" || (read == "PROPN" && (clitic || !capital));
         let participle = matches!(read, "VERB" | "AUX") && self.has(top, "VerbForm", "Part");
         if !(((clitic || negation) && noun)
             || object
@@ -422,6 +486,90 @@ impl Dictionary {
         })
     }
 
+    /// A capitalized verb with clitics opening a sentence that a rule reads as a name is the verb
+    /// when the dictionary has no such word and no finite verb follows, past the negation and
+    /// clitics: `Dime, ¿no te parece?`, `Déjame, no me atormentes`, not `Mandela dijo`, `Lucila se
+    /// había puesto`
+    fn opening_clitic(
+        &self,
+        words: &[&str],
+        lower: &[String],
+        sentence: &[Vec<Analysis>],
+        at: usize,
+        start: bool,
+    ) -> Option<usize> {
+        let list = &sentence[at];
+        let top = list.first()?;
+        let opening = start
+            && sentence[..at].iter().all(|list| {
+                list.first()
+                    .is_some_and(|analysis| self.pos(analysis) == "PUNCT")
+            });
+        // A finite verb past the negation and clitics is the verb of a name: `Lucila se había`
+        let verb_after = (at + 1..sentence.len())
+            .find(|&next| {
+                !matches!(
+                    lower[next].as_str(),
+                    "no" | "me"
+                        | "te"
+                        | "se"
+                        | "nos"
+                        | "os"
+                        | "lo"
+                        | "la"
+                        | "le"
+                        | "los"
+                        | "las"
+                        | "les"
+                )
+            })
+            .is_some_and(|next| self.top_verb_form(sentence, next, "Fin"));
+        if !opening
+            || top.source != Source::Rule
+            || self.pos(top) != "PROPN"
+            || !words[at].chars().next().is_some_and(char::is_uppercase)
+            || list
+                .iter()
+                .any(|analysis| analysis.source == Source::Dictionary)
+            || verb_after
+        {
+            return None;
+        }
+        list.iter()
+            .position(|analysis| analysis.source == Source::Clitics)
+    }
+
+    /// A capitalized word inside a sentence that the model reads as a verb with clitics is a name
+    /// when the clitics would give its host an accent it has not: `Mirandola` is no `mirándola`
+    fn name_without_accent(
+        &self,
+        words: &[&str],
+        sentence: &[Vec<Analysis>],
+        at: usize,
+        start: bool,
+    ) -> Option<usize> {
+        let list = &sentence[at];
+        let top = list.first()?;
+        let inside = !(start
+            && sentence[..at].iter().all(|list| {
+                list.first()
+                    .is_some_and(|analysis| self.pos(analysis) == "PUNCT")
+            }));
+        let word = words[at];
+        if !inside
+            || top.source != Source::Clitics
+            || !word.chars().next().is_some_and(char::is_uppercase)
+            || (word.chars())
+                .flat_map(char::to_lowercase)
+                .any(|c| clitics::without_acute(c) != c)
+            || (top.words.first()).is_none_or(|host| clitics::stressed_last(host))
+        {
+            return None;
+        }
+        list.iter()
+            .position(|analysis| analysis.source == Source::Rule && self.pos(analysis) == "PROPN")
+    }
+
     /// Shares of the verbs of a word by how often AnCora has them as verbs in all their forms, among
     /// its verbs, if it is the form of several (`venga` of `venir` and `vengar`), empty otherwise;
     /// by the probabilities of its analyses if the treebanks have none of them
@@ -475,6 +623,8 @@ impl Dictionary {
         list: &[Analysis],
         shares: &[(String, f64)],
         after_clitic: bool,
+        after_se: bool,
+        before_infinitive: bool,
     ) -> Option<usize> {
         let top = list.first()?;
         let share = |lemma: &str| {
@@ -493,10 +643,14 @@ impl Dictionary {
                 .and_then(|tag| tag.feats().find(|&(name, _)| name == "VerbForm"))
                 .map(|(_, value)| value)
         };
+        // The frequent verb before an infinitive may be an auxiliary (`pudimos hablar`), and no
+        // form of `tú` follows `se`: `se viste` is `vestir`, not `ver`
         list.iter().position(|analysis| {
             analysis.lemma != top.lemma
-                && self.pos(analysis) == "VERB"
+                && (self.pos(analysis) == "VERB"
+                    || (before_infinitive && self.pos(analysis) == "AUX"))
                 && (!after_clitic || form(analysis) == form(top))
+                && !(after_se && self.has(analysis, "Person", "2"))
                 && share(&analysis.lemma) > FREQUENT
         })
     }
