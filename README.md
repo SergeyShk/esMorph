@@ -34,6 +34,7 @@ It chooses the analysis of a word by its sentence with a small context model, al
 * **[Analyzer](https://sergeyshk.github.io/esMorph/analyzer/)** - the analyses of a word form by probability, the analyses of a sentence in context, lists of words and lemmatization, documents of the [anySeg](https://sergeyshk.github.io/anySeg/) segmenter, checking a word form against the dictionary
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/analysis/#ud)** - parts of speech, features and lemmas by the UD guidelines and the AnCora conventions
 * **[Verbs with clitics](https://sergeyshk.github.io/esMorph/analysis/#clitics)** - a verb with enclitic pronouns and its words: `dámelo` is `da` + `me` + `lo`
+* **[Diminutives](https://sergeyshk.github.io/esMorph/analysis/#diminutives)** - the word a diminutive comes from: `casitas` is of `casa`
 * **[Tokens out of the dictionary](https://sergeyshk.github.io/esMorph/analysis/#rules)** - punctuation, numbers, ordinals, Roman numerals, names, addresses and abbreviations by rules
 * **[Unknown words](https://sergeyshk.github.io/esMorph/analysis/#guess)** - analyses by the ending, a hyphen or a prefix, and the forms of guessed words
 * **[Inflection](https://sergeyshk.github.io/esMorph/inflection/)** - the forms of a lexeme and the form with given UD features

@@ -34,6 +34,7 @@ Elige el análisis de una palabra según su oración con un pequeño modelo de c
 * **[Analizador](https://sergeyshk.github.io/esMorph/es/analyzer/)** - los análisis de una forma de palabra por probabilidad, los análisis de una oración en contexto, listas de palabras y lematización, documentos del segmentador [anySeg](https://sergeyshk.github.io/anySeg/), comprobación de una forma de palabra en el diccionario
 * **[Universal Dependencies](https://sergeyshk.github.io/esMorph/es/analysis/#ud)** - categorías, rasgos y lemas según la guía de UD y las convenciones de AnCora
 * **[Verbos con clíticos](https://sergeyshk.github.io/esMorph/es/analysis/#clitics)** - un verbo con pronombres enclíticos y sus palabras: `dámelo` es `da` + `me` + `lo`
+* **[Diminutivos](https://sergeyshk.github.io/esMorph/es/analysis/#diminutives)** - la palabra de la que viene un diminutivo: `casitas` es de `casa`
 * **[Tokens fuera del diccionario](https://sergeyshk.github.io/esMorph/es/analysis/#rules)** - puntuación, números, ordinales, números romanos, nombres, direcciones y abreviaturas por reglas
 * **[Palabras desconocidas](https://sergeyshk.github.io/esMorph/es/analysis/#guess)** - análisis por la terminación, un guion o un prefijo, y las formas de las palabras adivinadas
 * **[Flexión](https://sergeyshk.github.io/esMorph/es/inflection/)** - las formas de un lexema y la forma con los rasgos de UD dados
