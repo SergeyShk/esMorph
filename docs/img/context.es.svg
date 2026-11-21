@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 558" width="880" height="558" font-family="Roboto, Source Sans Pro, Arial, sans-serif" role="img">
+<rect width="880" height="558" rx="12" fill="white"/>
+<rect x="40.0" y="20.0" width="185.0" height="54.0" rx="8" fill="white" stroke="#c62828" stroke-width="1.5"/>
+<text x="132.5" y="52.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="132.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">aspecto</text>
+<text x="132.0" y="63.0" font-size="13" fill="#6b6b6b" text-anchor="middle">16</text>
+<path d="M132.0 74.0L132.0 95.0" stroke="#c62828" stroke-width="2"/>
+<path d="M126.0 94.4L138.0 94.4L132.0 104.0Z" fill="#c62828"/>
+<rect x="245.0" y="20.0" width="185.0" height="54.0" rx="8" fill="white" stroke="#c62828" stroke-width="1.5"/>
+<text x="337.5" y="52.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="337.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">palabra</text>
+<text x="337.0" y="63.0" font-size="13" fill="#6b6b6b" text-anchor="middle">32</text>
+<path d="M337.0 74.0L337.0 95.0" stroke="#c62828" stroke-width="2"/>
+<path d="M331.0 94.4L343.0 94.4L337.0 104.0Z" fill="#c62828"/>
+<rect x="450.0" y="20.0" width="185.0" height="54.0" rx="8" fill="white" stroke="#c62828" stroke-width="1.5"/>
+<text x="542.5" y="52.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="542.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">terminaciones 1-4</text>
+<text x="542.0" y="63.0" font-size="13" fill="#6b6b6b" text-anchor="middle">4 × 16</text>
+<path d="M542.0 74.0L542.0 95.0" stroke="#c62828" stroke-width="2"/>
+<path d="M536.0 94.4L548.0 94.4L542.0 104.0Z" fill="#c62828"/>
+<rect x="655.0" y="20.0" width="185.0" height="54.0" rx="8" fill="white" stroke="#c62828" stroke-width="1.5"/>
+<text x="747.5" y="52.2" font-size="15" fill="#212121" text-anchor="middle"></text>
+<text x="747.0" y="43.0" font-size="15" fill="#212121" text-anchor="middle">análisis de la palabra</text>
+<text x="747.0" y="63.0" font-size="13" fill="#6b6b6b" text-anchor="middle">32</text>
+<path d="M747.0 74.0L747.0 95.0" stroke="#c62828" stroke-width="2"/>
+<path d="M741.0 94.4L753.0 94.4L747.0 104.0Z" fill="#c62828"/>
+<rect x="40.0" y="104.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="131.2" font-size="15" fill="#212121" text-anchor="middle">vector del token: 144</text>
+<path d="M440.0 148.0L440.0 165.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 164.4L446.0 164.4L440.0 174.0Z" fill="#c62828"/>
+<rect x="40.0" y="174.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="201.2" font-size="15" fill="#212121" text-anchor="middle">capa lineal y ReLU: 128</text>
+<path d="M440.0 218.0L440.0 235.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 234.4L446.0 234.4L440.0 244.0Z" fill="#c62828"/>
+<rect x="40.0" y="244.0" width="800.0" height="44.0" rx="8" fill="#c62828" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="271.2" font-size="15" fill="white" text-anchor="middle">BiLSTM 1 × 64, en ambos sentidos: 128 por token</text>
+<path d="M440.0 288.0L440.0 305.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 304.4L446.0 304.4L440.0 314.0Z" fill="#c62828"/>
+<rect x="40.0" y="314.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="341.2" font-size="15" fill="#212121" text-anchor="middle">normalización y vector de consulta: 32</text>
+<path d="M440.0 358.0L440.0 375.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 374.4L446.0 374.4L440.0 384.0Z" fill="#c62828"/>
+<rect x="40.0" y="384.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="411.2" font-size="15" fill="#212121" text-anchor="middle">puntuación del análisis: consulta · (etiqueta + fuente) + sesgo</text>
+<path d="M440.0 428.0L440.0 445.0" stroke="#c62828" stroke-width="2"/>
+<path d="M434.0 444.4L446.0 444.4L440.0 454.0Z" fill="#c62828"/>
+<rect x="40.0" y="454.0" width="800.0" height="44.0" rx="8" fill="#fdecea" stroke="#c62828" stroke-width="1.5"/>
+<text x="440.0" y="481.2" font-size="15" fill="#212121" text-anchor="middle">softmax sobre los análisis del token: P(análisis | oración)</text>
+<text x="440.0" y="538.0" font-size="13" fill="#6b6b6b" text-anchor="middle">los primeros 32 análisis de un token · 0,47 millones de parámetros, int8 por filas</text>
+</svg>
